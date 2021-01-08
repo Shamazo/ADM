@@ -1,5 +1,6 @@
 if (NOT PROTEUS_PLATFORM_ONLY)
   add_subdirectory(cli-server)
+  add_subdirectory(gds)
   add_subdirectory(multiib)
   add_subdirectory(olap/flags)
   add_subdirectory(olap/prepared-queries)
