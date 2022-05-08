@@ -1,5 +1,6 @@
 project(storage VERSION 0.1 LANGUAGES CXX)
 
+find_package(GDS REQUIRED)
 
 # Pure, regular C++ files
 set(storage_cxx
@@ -28,6 +29,7 @@ target_compile_features(storage PUBLIC cxx_std_20)
 target_link_libraries(storage
   PUBLIC
   proteus::platform
+  NVIDIA::GDS
   PRIVATE
   magic_enum::magic_enum
   )
@@ -41,17 +43,17 @@ add_library(proteus::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 #-----------------------------------------------------------------------------
 # Unit tests
-
 if (PROTEUS_BUILD_UNIT_TESTS)
-  # FIXME move into the proper tests/
-  add_proteus_unit_test(unit-tests-storage proteus::storage
-    test/storage-test-main.cpp
-    test/test-mmap-file.cpp
-    )
-  target_link_libraries(unit-tests-storage
-    PUBLIC
-    proteus::storage
-    )
+add_proteus_unit_test(unit-tests-storage proteus::storage
+  test/storage-test-main.cpp
+  test/test-mmap-file.cpp
+  test/test-cufile.cpp
+  )
+
+target_link_libraries(unit-tests-storage
+  PUBLIC
+  proteus::storage
+  )
 
   add_subdirectory(tests)
   add_subdirectory(perftests)

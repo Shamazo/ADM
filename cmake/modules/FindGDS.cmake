@@ -1,14 +1,26 @@
 find_package(PkgConfig)
 pkg_check_modules(PC_GDS QUIET gds)
 
+# TODO hardcoded
+# Proteus currently only works with cuda 11
+# cuda 12 currently fails because it adds a static assert:
+# '#error "libc++ is not supported on x86 system"'
+# and we use libc++ (the LLVM version) instead of libstdc++ (the gcc version) because our LLVM links to it
+# until we change to libc++ we are stuck on cuda 11
+# however we want GDS >= v1.7 as it adds support for cuda streams
+# cuda 12.2.1 has v1.7.1 https://docs.nvidia.com/cuda/archive/12.2.1/cuda-toolkit-release-notes/index.html
+# cuda 12.3.1 has v1.8.1
+# cuda 11.7.1 has v1.3.1
+# cufile.so does not link to any other nvidia toolkit libraries and I think just depends on the kernel driver / nvidia-fs modules
+# it does link to libstdc++.so.6, but this is fine because none of std:: is used in the header/interface
 find_path(GDS_INCLUDE_DIRS
     NAMES cufile.h
-    HINTS ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+    HINTS /usr/local/cuda-12.3/include
     )
 
 find_library(GDS_LIBRARIES
     NAMES cufile
-    HINTS ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+    HINTS /usr/local/cuda-12.3/lib64
     )
 
 set(GDS_VERSION ${PC_GDS_VERSION})

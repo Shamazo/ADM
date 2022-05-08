@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
   srand(time(nullptr));
   google::InstallFailureSignalHandler();
   // for debugging:
-  set_trace_allocations(true);
+  set_trace_allocations(false);
 
   ::testing::AddGlobalTestEnvironment(new StorageTestEnvironment);
 

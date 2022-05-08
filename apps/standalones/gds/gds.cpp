@@ -21,7 +21,11 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdocumentation"
 #include <cufile.h>
+#pragma clang diagnostic pop
+
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -36,7 +40,10 @@
 __host__ __device__ inline void gpuAssert(CUfileError_t code, const char *file,
                                           int line) {
   if (code.err != CU_FILE_SUCCESS) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wabsolute-value"
     if (IS_CUFILE_ERR(code.err)) {
+#pragma clang diagnostic pop
 #ifndef __CUDA_ARCH__
       gpuAssert(cufileop_status_error((CUfileOpError)(code.err)), file, line);
 #else
