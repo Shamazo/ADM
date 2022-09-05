@@ -28,6 +28,7 @@ set(platform_cxx
   lib/util/time-registry.cpp
   lib/util/radix/aggregations/radix-aggr.cpp
   lib/util/radix/joins/radix-join.cpp
+  lib/util/linux-exec.cpp
   )
 
 # C++ files requiring CUDA headers
