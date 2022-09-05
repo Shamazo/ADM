@@ -956,6 +956,25 @@ topology::nvmeStorage::nvmeStorage(const std::string &devPath,
       link_width(nvmeDevPathToLinkWidth(devPath)),
       model_name(nvmeDevPathToModelName(devPath)){};
 
+const topology::nvmeStorage &topology::devPathToNvme(
+    std::string devPath) const {
+  auto maybeFound =
+      std::find_if(nvmeStorage_info.begin(), nvmeStorage_info.end(),
+                   [devPath](const topology::nvmeStorage &x) {
+                     return (x.devPath == devPath);
+                   });
+  if (maybeFound != nvmeStorage_info.end()) {
+    return *maybeFound;
+  } else {
+    LOG(FATAL) << "Tried to find nvme device with bad dev path: " << devPath;
+  }
+}
+
+const topology::cpunumanode &topology::findLocalCPUNumaNode(
+    const nvmeStorage &nvme) const {
+  return getCpuNumaNodeById(nvme.local_cpu_id);
+}
+
 nvmlDevice_t topology::gpunode::getGPUHandle(unsigned int id) {
 #ifndef NCUDA
   cudaDeviceProp prop;

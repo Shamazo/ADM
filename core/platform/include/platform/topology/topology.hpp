@@ -76,6 +76,14 @@ class topology {
         // do not remove argument!!!
         topologyonly_construction = {}) {}
 
+    /**
+     *
+     * @return The id of the cpuNumaNode to which this numanode is associated
+     * with. For example, the cpuNumaNode a GPU or NVMe is physically attached
+     * to.
+     */
+    virtual uint32_t getLocalCpuId() const = 0;
+
     // Do not allow copies
     numanode(const numanode &) = delete;
     numanode &operator=(const numanode &) = delete;
@@ -131,6 +139,8 @@ class topology {
      */
     const cpunumanode &getLocalCPUNumaNode() const;
 
+    uint32_t getLocalCpuId() const override { return local_cpu_id; }
+
     /**
      * Calling this function is undefined. See
      * https://gitlab.epfl.ch/DIAS/PROJECTS/caldera/proteus/-/issues/79 Calling
@@ -174,6 +184,8 @@ class topology {
     void *alloc(size_t bytes) const;
     static void free(void *mem, size_t bytes);
     size_t getMemorySize() const;
+
+    uint32_t getLocalCpuId() const override { return id; }
 
     const core &getCore(size_t i) const {
       assert(i < local_cores.size());
@@ -268,6 +280,8 @@ class topology {
      */
     const cpunumanode &getLocalCPUNumaNode() const;
 
+    uint32_t getLocalCpuId() const override { return local_cpu_id; }
+
     /**
      * Moves execution of this scope to this gpunode
      * @return a set_exec_location_on_scope, code within the containing scope
@@ -331,6 +345,13 @@ class topology {
   [[nodiscard]] inline uint32_t getCpuNumaNodeCount() const {
     return cpu_info.size();
   }
+
+  /**
+   * @param devPath e.g /dev/nvme0n1. For NVMe this should include the
+   * namespace, but not the partition.
+   * @return nvmeStorage device that this file is physical located on
+   */
+  [[nodiscard]] const nvmeStorage &devPathToNvme(std::string devPath) const;
 
   [[nodiscard]] inline size_t getIBCount() const { return ib_info.size(); }
 
