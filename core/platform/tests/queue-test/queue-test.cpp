@@ -21,18 +21,37 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <platform/common/common.hpp>
+#include <platform/util/datastructures/threadsafe-set.hpp>
 
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging((argv)[0]);
+#include "tests/util/include/timeout.hpp"
 
-  FLAGS_colorlogtostderr = true;
+class QueueTest : public ::testing::Test {};
 
-  proteus::platform ctx{};
+using namespace std::chrono_literals;
 
-  return RUN_ALL_TESTS();
+TEST_F(QueueTest, emplace_completes) {
+  EXPECT_FINISHES(15s, {
+    threadsafe_set<int> q;
+
+    int val = 5;
+    q.emplace(val);
+
+    EXPECT_EQ(q.size_unsafe(), 1);
+    EXPECT_FALSE(q.empty_unsafe());
+  });
+}
+
+TEST_F(QueueTest, one_item_non_concurrent) {
+  EXPECT_FINISHES(15s, {
+    threadsafe_set<int> q;
+
+    int val = 5;
+    q.emplace(val);
+
+    EXPECT_FALSE(q.empty_unsafe());
+    EXPECT_EQ(q.pop(), val);
+    EXPECT_TRUE(q.empty_unsafe());
+  });
 }

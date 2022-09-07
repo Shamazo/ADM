@@ -25,7 +25,7 @@
 
 #include <platform/util/glog.hpp>
 
-#include "lib/util/datastructures/threadsafe-set.hpp"
+#include "platform/util/datastructures/threadsafe-set.hpp"
 
 class QueueBench : public ::benchmark::Fixture {};
 ///**
@@ -235,6 +235,8 @@ template <typename T>
 void BM_MultiThreaded_core(benchmark::State &state) {
   //  set_exec_location_on_scope
   //  eg(topology::getInstance().getCpuNumaNodes()[0]);
+  LOG(INFO)
+      << "Benchmarking AsyncQueueMPMC with multiple threads on a single core";
   set_exec_location_on_scope eg(topology::getInstance().getCores()[14]);
 
   auto origin_ptr = (AsyncQueueMPMC<size_t> *)MemoryManager::mallocPinned(
@@ -325,6 +327,8 @@ template <typename T>
 void BM_MultiThreaded_socket(benchmark::State &state) {
   //  set_exec_location_on_scope
   //  eg(topology::getInstance().getCpuNumaNodes()[1]);
+  LOG(INFO) << "Benchmarking AsyncQueueMPMC with multiple threads on a single "
+               "numa node";
   set_exec_location_on_scope eg(
       topology::getInstance().getCores()[14].getLocalCPUNumaNode());
 
@@ -385,6 +389,8 @@ void BM_MultiThreaded_socket(benchmark::State &state) {
 
 template <typename T>
 void BM_MultiThreaded_sym(benchmark::State &state) {
+  LOG(INFO)
+      << "Benchmarking something ... @periklis I will edit this in review";
   size_t totalcnt = 0;
 
   size_t vecs[4]{0, 0, 0, 0};
@@ -447,6 +453,9 @@ void atomiccnt_fighter_core(std::atomic<size_t> &counter, size_t limit,
 
 template <typename T>
 void BM_MultiThreaded_sym_atomiccntfight_core(benchmark::State &state) {
+  LOG(INFO)
+      << "Benchmarking atomic performance with two threads on a single core";
+
   size_t totalcnt = 0;
 
   size_t vecs[4]{0, 0, 0, 0};
@@ -485,6 +494,9 @@ void BM_MultiThreaded_sym_atomiccntfight_core(benchmark::State &state) {
 
 template <typename T>
 void BM_MultiThreaded_sym_atomiccntfight(benchmark::State &state) {
+  LOG(INFO) << "Benchmarking atomic performance with two threads without core "
+               "pinning";
+
   size_t totalcnt = 0;
 
   size_t vecs[4]{0, 0, 0, 0};
@@ -537,6 +549,8 @@ void atomiccnt_fighter_socket(std::atomic<size_t> &counter, size_t limit,
 
 template <typename T>
 void BM_MultiThreaded_sym_atomiccntfight_socket(benchmark::State &state) {
+  LOG(INFO) << "Benchmarking atomic performance with two threads on the same "
+               "numa node";
   size_t totalcnt = 0;
 
   size_t vecs[4]{0, 0, 0, 0};

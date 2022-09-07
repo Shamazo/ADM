@@ -21,37 +21,29 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <gtest/gtest.h>
+#include <benchmark/benchmark.h>
+#include <gflags/gflags.h>
 
-#include <olap/test/timeout.hpp>
+#include <platform/common/common.hpp>
+#include <platform/util/glog.hpp>
 
-#include "lib/util/datastructures/threadsafe-set.hpp"
+extern bool FLAGS_benchmark_counters_tabular;
+extern ::fLS::clstring FLAGS_benchmark_out;
+extern ::fLS::clstring FLAGS_benchmark_out_format;
 
-class QueueTest : public ::testing::Test {};
+int main(int argc, char** argv) {
+  gflags::AllowCommandLineReparsing();
+  auto ctx = proteus::platform(0.1, 0.1, 0);
+  LOG(INFO) << "Platform set up complete";
 
-using namespace std::chrono_literals;
+  FLAGS_benchmark_counters_tabular = true;
+  FLAGS_benchmark_out = "perf.json";
+  FLAGS_benchmark_out_format = "json";
+  benchmark::Initialize(&argc, argv);
+  if (benchmark::ReportUnrecognizedArguments(argc, argv)) return 1;
 
-TEST_F(QueueTest, emplace_completes) {
-  EXPECT_FINISHES(15s, {
-    threadsafe_set<int> q;
+  LOG(INFO) << "Starting benchmarks";
+  benchmark::RunSpecifiedBenchmarks();
 
-    int val = 5;
-    q.emplace(val);
-
-    EXPECT_EQ(q.size_unsafe(), 1);
-    EXPECT_FALSE(q.empty_unsafe());
-  });
-}
-
-TEST_F(QueueTest, one_item_non_concurrent) {
-  EXPECT_FINISHES(15s, {
-    threadsafe_set<int> q;
-
-    int val = 5;
-    q.emplace(val);
-
-    EXPECT_FALSE(q.empty_unsafe());
-    EXPECT_EQ(q.pop(), val);
-    EXPECT_TRUE(q.empty_unsafe());
-  });
+  return 0;
 }

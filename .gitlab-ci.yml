@@ -325,7 +325,16 @@ Test 13 - Platform:
     - report-memallocator-test.xml
     - report-platform-utils-test.xml
 
-Test 14 - Storage - File Request Interface:
+Test 14 - Platform - Queue:
+ <<: *test
+ script:
+  - cmake --build ${build_path} --target install -- -j`nproc --all`
+  - cd ${build_path}/opt/pelago && ./unit-queue-test --gtest_output="xml:$CWD/report-queue-test.xml"
+ artifacts:
+  reports:
+   junit: report-queue-test.xml
+
+Test 15 - Storage - File Request Interface:
  <<: *test
  script:
   - cmake --build ${build_path} --target install -- -j`nproc --all`

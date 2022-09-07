@@ -33,13 +33,13 @@
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/device-manager.hpp>
 #include <platform/util/async_containers.hpp>
+#include <platform/util/datastructures/threadsafe-set.hpp>
 #include <platform/util/logging.hpp>
 #include <queue>
 #include <stack>
 #include <utility>
 
 #include "lib/operators/operators.hpp"
-#include "lib/util/datastructures/threadsafe-set.hpp"
 
 class Router;
 
