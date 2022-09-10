@@ -27,12 +27,15 @@
 #include <platform/common/common.hpp>
 
 int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
   google::InitGoogleLogging((argv)[0]);
-
   FLAGS_colorlogtostderr = true;
+  google::LogToStderr();
+
+  ::testing::InitGoogleTest(&argc, argv);
 
   proteus::platform ctx{};
+  auto return_code = RUN_ALL_TESTS();
+  google::ShutdownGoogleLogging();
 
-  return RUN_ALL_TESTS();
+  return return_code;
 }
