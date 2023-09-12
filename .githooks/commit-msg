@@ -3,9 +3,8 @@
 import sys
 import re
 
-
-
-VALID_TAGS = ['fixup!', '[storage]', '[olap]', '[oltp]', '[platform]', '[cmake]', '[ci]', '[codegen]', '[tooling]', '[panorama]', "#DNM", "#WIP"]
+VALID_TAGS = ['fixup!', '[storage]', '[olap]', '[oltp]', '[platform]', '[cmake]', '[ci]', '[codegen]', '[tooling]',
+              '[panorama]', "#DNM", "#WIP"]
 # Escape for regex
 ESCAPED_VALID_TAGS = [x.replace('[', '\[') for x in VALID_TAGS]
 ESCAPED_VALID_TAGS = [x.replace(']', '\]') for x in ESCAPED_VALID_TAGS]
@@ -14,11 +13,21 @@ REGEX_VALID_TAGS = "|".join(ESCAPED_VALID_TAGS)
 # Commit title should start with a tag, or !fixup for commits to be squashed, or #DNM/#WIP for commits that will not merge to main
 REGEX_COMMIT_TITLE = '^({})'.format(REGEX_VALID_TAGS)
 
+# Do not take into account comment lines (lines which start with '#')
+REGEX_COMMENT_LINE = '^.*#.*$'
+
 
 def isCommitValid(message):
     isValid = True
 
-    message_lines = message.split("\n")
+    # Filter out comments and empty lines
+    comment_line_re = re.compile(REGEX_COMMENT_LINE)
+    message_lines = [line for line in message.split("\n") if not comment_line_re.match(line) and len(line) > 0]
+
+    # Empty commit message means aborting the commit that is valid
+    if len(message_lines) == 0:
+        return isValid
+
     title_line = message_lines[0]
     if not re.match(REGEX_COMMIT_TITLE, title_line):
         print(f"\nYour commit title does not contain a tag. Commit titles must start with one of: {VALID_TAGS}")
@@ -26,7 +35,8 @@ def isCommitValid(message):
 
     for line in message_lines:
         if len(line) > 72:
-            print(f"\nEach line of a commit message must be less than 72 characters. Line:\n{line}\n has length {len(line)}")
+            print(
+                f"\nEach line of a commit message must be less than 72 characters. Line:\n{line}\n has length {len(line)}")
             isValid = False
 
     return isValid
