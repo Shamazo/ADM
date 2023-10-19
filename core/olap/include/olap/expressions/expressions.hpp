@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,12 +24,12 @@
 #ifndef EXPRESSIONS_HPP_
 #define EXPRESSIONS_HPP_
 
+#include <codegen/expressions/expressionTypes.hpp>
+#include <olap/operators/monoids.hpp>
 #include <olap/plugins/plugins.hpp>
 #include <utility>
 
 #include "binary-operators.hpp"
-#include "olap/operators/monoids.hpp"
-#include "olap/values/expressionTypes.hpp"
 
 class ExprVisitor;  // Forward declaration
 template <typename T>

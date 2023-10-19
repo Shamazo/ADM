@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,6 +24,7 @@
 #include "gpu-hash-group-by-chained.hpp"
 
 #include <cmath>
+#include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/topology.hpp>
 
@@ -164,7 +165,7 @@ void GpuHashGroupByChained::generate_build(ParallelContext *context,
       new BoolType(), ProteusValue{init_cond, context->createFalse()}};
 
   auto activemask = gpu_intrinsic::activemask(context);
-  context->gen_if(initCondExpr, childState)([&]() {
+  gen_if(initCondExpr, childState, context)([&]() {
     // index
     Value *old_cnt = context->workerScopedAtomicAdd(
         out_cnt,
@@ -322,7 +323,7 @@ void GpuHashGroupByChained::generate_build(ParallelContext *context,
           Builder->CreateLoad(mem_written->getType()->getPointerElementType(),
                               mem_written),
           context->createFalse()}};
-  context->gen_if(writtenExpr, childState)([&] {
+  gen_if(writtenExpr, childState, context)([&] {
     Value *inv_ptr = Builder->CreateInBoundsGEP(
         context->getStateVar(out_param_ids[0])
             ->getType()
@@ -369,7 +370,7 @@ void GpuHashGroupByChained::generate_build(ParallelContext *context,
 
   activemask = gpu_intrinsic::activemask(context);
   // if (!written){
-  context->gen_if(condExpr, childState)([&]() {
+  gen_if(condExpr, childState, context)([&]() {
     // index
     Value *old_cnt = context->workerScopedAtomicAdd(
         out_cnt,

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,8 +23,8 @@
 
 #include "bloom-filter-build.hpp"
 
+#include <codegen/expressions/indexed-seq.hpp>
 #include <lib/expressions/expressions-generator.hpp>
-#include <olap/values/indexed-seq.hpp>
 
 void BloomFilterBuild::produce_(ParallelContext *context) {
   auto t = getFilterType(context);

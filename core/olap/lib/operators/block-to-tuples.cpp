@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,6 +23,7 @@
 #include "block-to-tuples.hpp"
 
 #include <olap/plugins/plugins.hpp>
+#include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/util/logging.hpp>
@@ -96,7 +97,7 @@ void BlockToTuples::consume(ParallelContext *context,
   // }
 
   // FIXME: assumes thread 0 gets to execute block2tuples
-  context->gen_if(is_leader, childState)([&]() {
+  gen_if(is_leader, childState, context)([&]() {
     Type *charPtrType = Type::getInt8PtrTy(llvmContext);
     size_t j = 0;
     for (const auto &wantedField : wantedFields) {

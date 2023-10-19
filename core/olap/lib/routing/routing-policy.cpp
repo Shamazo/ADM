@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,6 +23,7 @@
 
 #include "olap/routing/routing-policy.hpp"
 
+#include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/topology/topology.hpp>
 
@@ -122,26 +123,23 @@ routing_target PreferLocal::evaluate(ParallelContext *context,
   llvm::Value *p2;
   auto phi_type = llvm::IntegerType::getInt64Ty(context->getLLVMContext());
 
-  context
-      ->gen_if(lt(
-                   expressions::ProteusValueExpression{
-                       new IntType(),
-                       {Builder->CreateLoad(
-                            retrycnt.mem->getType()->getPointerElementType(),
-                            retrycnt.mem),
-                        retrycnt.isNull}},
-                   1),
-               childState)([&]() {
-        p1 = Builder->CreateZExt(
-            priority.evaluate(context, childState, retrycnt).target, phi_type);
-        b1 = Builder->GetInsertBlock();
-      })
-      .gen_else([&]() {
-        p2 = Builder->CreateZExt(
-            alternative.evaluate(context, childState, retrycnt).target,
-            phi_type);
-        b2 = Builder->GetInsertBlock();
-      });
+  gen_if(lt(
+             expressions::ProteusValueExpression{
+                 new IntType(),
+                 {Builder->CreateLoad(
+                      retrycnt.mem->getType()->getPointerElementType(),
+                      retrycnt.mem),
+                  retrycnt.isNull}},
+             1),
+         childState, context)([&]() {
+    p1 = Builder->CreateZExt(
+        priority.evaluate(context, childState, retrycnt).target, phi_type);
+    b1 = Builder->GetInsertBlock();
+  }).gen_else([&]() {
+    p2 = Builder->CreateZExt(
+        alternative.evaluate(context, childState, retrycnt).target, phi_type);
+    b2 = Builder->GetInsertBlock();
+  });
 
   auto phi = Builder->CreatePHI(phi_type, 2);
   phi->addIncoming(p1, b1);
@@ -164,26 +162,23 @@ routing_target PreferLocalServer::evaluate(ParallelContext *context,
   llvm::Value *p2;
   auto phi_type = llvm::IntegerType::getInt64Ty(context->getLLVMContext());
 
-  context
-      ->gen_if(lt(
-                   expressions::ProteusValueExpression{
-                       new IntType(),
-                       {Builder->CreateLoad(
-                            retrycnt.mem->getType()->getPointerElementType(),
-                            retrycnt.mem),
-                        retrycnt.isNull}},
-                   1),
-               childState)([&]() {
-        p1 = Builder->CreateZExt(
-            priority.evaluate(context, childState, retrycnt).target, phi_type);
-        b1 = Builder->GetInsertBlock();
-      })
-      .gen_else([&]() {
-        p2 = Builder->CreateZExt(
-            alternative.evaluate(context, childState, retrycnt).target,
-            phi_type);
-        b2 = Builder->GetInsertBlock();
-      });
+  gen_if(lt(
+             expressions::ProteusValueExpression{
+                 new IntType(),
+                 {Builder->CreateLoad(
+                      retrycnt.mem->getType()->getPointerElementType(),
+                      retrycnt.mem),
+                  retrycnt.isNull}},
+             1),
+         childState, context)([&]() {
+    p1 = Builder->CreateZExt(
+        priority.evaluate(context, childState, retrycnt).target, phi_type);
+    b1 = Builder->GetInsertBlock();
+  }).gen_else([&]() {
+    p2 = Builder->CreateZExt(
+        alternative.evaluate(context, childState, retrycnt).target, phi_type);
+    b2 = Builder->GetInsertBlock();
+  });
 
   auto phi = Builder->CreatePHI(phi_type, 2);
   phi->addIncoming(p1, b1);

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,7 +23,7 @@
 
 #include "olap/expressions/expressions/ref-expression.hpp"
 
-#include <olap/values/indexed-seq.hpp>
+#include <codegen/expressions/indexed-seq.hpp>
 
 namespace expressions {
 RefExpression::RefExpression(expression_t ptr)

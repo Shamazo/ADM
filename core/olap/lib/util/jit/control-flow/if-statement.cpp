@@ -21,15 +21,17 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef PROTEUS_PROJECT_RECORD_HPP
-#define PROTEUS_PROJECT_RECORD_HPP
+#include <olap/util/jit/control-flow/if-statement.hpp>
 
-#include <llvm/IR/IRBuilder.h>
+#include "lib/expressions/expressions-generator.hpp"
 
-#include <codegen/expressions/expressionTypes.hpp>
+static ProteusValue genExpr(const expression_t &expr,
+                            const OperatorState &state, Context *context) {
+  ExpressionGeneratorVisitor egv{context, state};
+  return expr.accept(egv);
+}
 
-llvm::Value *projectArg(const RecordType *type, llvm::Value *record,
-                        RecordAttribute *attr,
-                        llvm::IRBuilder<> *const Builder);
-
-#endif /* PROTEUS_PROJECT_RECORD_HPP */
+if_branch gen_if(const expression_t &expr, const OperatorState &state,
+                 Context *context) {
+  return {genExpr(expr, state, context), context, nullptr};
+}

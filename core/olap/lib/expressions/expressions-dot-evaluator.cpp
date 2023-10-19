@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,10 +23,10 @@
 
 #include "expressions-dot-evaluator.hpp"
 
+#include <codegen/context/context.hpp>
 #include <olap/expressions/expressions/ref-expression.hpp>
 
 #include "expressions-generator.hpp"
-#include "olap/util/context.hpp"
 
 using namespace llvm;
 
@@ -613,25 +613,25 @@ ProteusValue ExpressionDotVisitor::visit(
     valWrapper.isNull = context->createFalse();
     switch (id) {
       case INT:
-        //#ifdef DEBUG
-        //        {
-        //            /* Printing the pos. to be marked */
-        //            if(e1->getProjectionName() == "age") {
-        //                cout << "AGE! " << endl;
-        //                Function* debugInt = context->getFunction("printi");
-        //                vector<Value*> ArgsV;
-        //                ArgsV.clear();
-        //                ArgsV.push_back(left.value);
-        //                Builder->CreateCall(debugInt, ArgsV);
-        //            }
-        //            else
-        //            {
-        //                cout << "Other projection - " <<
-        //                e1->getProjectionName()
-        //                << endl;
-        //            }
-        //        }
-        //#endif
+        // #ifdef DEBUG
+        //         {
+        //             /* Printing the pos. to be marked */
+        //             if(e1->getProjectionName() == "age") {
+        //                 cout << "AGE! " << endl;
+        //                 Function* debugInt = context->getFunction("printi");
+        //                 vector<Value*> ArgsV;
+        //                 ArgsV.clear();
+        //                 ArgsV.push_back(left.value);
+        //                 Builder->CreateCall(debugInt, ArgsV);
+        //             }
+        //             else
+        //             {
+        //                 cout << "Other projection - " <<
+        //                 e1->getProjectionName()
+        //                 << endl;
+        //             }
+        //         }
+        // #endif
         valWrapper.value = Builder->CreateICmpEQ(left.value, right.value);
         return valWrapper;
       case FLOAT:

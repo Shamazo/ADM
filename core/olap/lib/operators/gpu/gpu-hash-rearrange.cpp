@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -224,7 +224,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
                                                {cond, context->createFalse()}};
 
   auto activemask = gpu_intrinsic::activemask(context);
-  context->gen_if(condExpr, childState)([&] {
+  gen_if(condExpr, childState, context)([&] {
     for (size_t i = 0; i < buffs.size(); ++i) {
       Value *buff_thrd = Builder->CreateInBoundsGEP(
           buffs[i]->getType()->getNonOpaquePointerElementType(), buffs[i], idx);
@@ -286,7 +286,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
   Builder->CreateCall(syncthreads);
 
   activemask = gpu_intrinsic::activemask(context);
-  context->gen_if(condExpr, childState)([&] {
+  gen_if(condExpr, childState, context)([&] {
     for (size_t i = 0; i < buffs.size(); ++i) {
       Value *buff_thrd = Builder->CreateInBoundsGEP(
           buffs[i]->getType()->getNonOpaquePointerElementType(), buffs[i], idx);
@@ -414,7 +414,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
       new BoolType(), {inc_cond, context->createFalse()}};
 
   activemask = gpu_intrinsic::activemask(context);
-  context->gen_if(incCondExpr, childState)([&]() {
+  gen_if(incCondExpr, childState, context)([&]() {
     idx[1] = target;
     Value *cnt_ptr = Builder->CreateInBoundsGEP(
         cnt->getType()->getNonOpaquePointerElementType(), cnt, idx);
@@ -462,7 +462,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
   // if (!done){
   //    if (idx < h_vector_size/4){
   activemask = gpu_intrinsic::activemask(context);
-  context->gen_if(storeCondExpr, childState)([&]() {
+  gen_if(storeCondExpr, childState, context)([&]() {
     //        uint32_t * b_old = buff[h];
     //        reinterpret_cast<int4 *>(b_old)[idx] = tmp.vec;
     //        __threadfence_block(); //even safer and with the same
@@ -512,7 +512,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
         {Builder->CreateICmpEQ(w, last_index), context->createFalse()}};
 
     auto activemask = gpu_intrinsic::activemask(context);
-    context->gen_if(cExpr, childState)([&] {
+    gen_if(cExpr, childState, context)([&] {
       auto activemask = gpu_intrinsic::activemask(context);
       for (const auto &buff : buffs) {
         Value *buff_thrd = Builder->CreateInBoundsGEP(
@@ -861,39 +861,39 @@ struct mv_description {
   char *__restrict__ to;  //[16];
 };
 
-//#ifndef NCUDA
+// #ifndef NCUDA
 //__device__ void GpuHashRearrange_copy(int4 *__restrict__ to,
-//                                      const int4 *__restrict__ from) {
-//  *to = *from;
-//}
+//                                       const int4 *__restrict__ from) {
+//   *to = *from;
+// }
 //
 //__global__ void GpuHashRearrange_pack(mv_description *desc) {
-//  mv_description d = desc[blockIdx.x];
+//   mv_description d = desc[blockIdx.x];
 //
-//  const int4 *from = (const int4 *)d.from;
-//  int4 *to = (int4 *)(((((uint64_t)d.to) + 16 - 1) / 16) * 16);
-//  size_t offset = ((char *)to) - d.to;
+//   const int4 *from = (const int4 *)d.from;
+//   int4 *to = (int4 *)(((((uint64_t)d.to) + 16 - 1) / 16) * 16);
+//   size_t offset = ((char *)to) - d.to;
 //
-//  size_t packs = (d.bytes - offset) / 16;
-//  size_t rem = (d.bytes - offset) % 16;
+//   size_t packs = (d.bytes - offset) / 16;
+//   size_t rem = (d.bytes - offset) % 16;
 //
-//#pragma unroll 2
-//  for (size_t i = threadIdx.x; i < packs; i += blockDim.x) {
-//    GpuHashRearrange_copy(to + i, from + i);
-//  }
+// #pragma unroll 2
+//   for (size_t i = threadIdx.x; i < packs; i += blockDim.x) {
+//     GpuHashRearrange_copy(to + i, from + i);
+//   }
 //
-//  if (threadIdx.x < offset) {
-//    d.to[threadIdx.x] = d.from[packs * 16 + threadIdx.x];
-//  }
+//   if (threadIdx.x < offset) {
+//     d.to[threadIdx.x] = d.from[packs * 16 + threadIdx.x];
+//   }
 //
-//  if (threadIdx.x < rem) {
-//    d.to[d.bytes - rem + threadIdx.x] =
-//        d.from[packs * 16 + offset + threadIdx.x];
-//  }
+//   if (threadIdx.x < rem) {
+//     d.to[d.bytes - rem + threadIdx.x] =
+//         d.from[packs * 16 + offset + threadIdx.x];
+//   }
 //
-//  // if (threadIdx.x == 0) release_buffer(from);
-//}
-//#endif
+//   // if (threadIdx.x == 0) release_buffer(from);
+// }
+// #endif
 
 void GpuHashRearrange::close(Pipeline *pip) {
   // ((void (*)(void *)) this->flushFunc)(pip->getState());

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,8 +23,9 @@
 
 #include "plugins-output.hpp"
 
+#include <codegen/context/context.hpp>
+
 #include "lib/expressions/expressions-generator.hpp"
-#include "olap/util/context.hpp"
 
 Materializer::Materializer(
     std::vector<RecordAttribute *> wantedFields,

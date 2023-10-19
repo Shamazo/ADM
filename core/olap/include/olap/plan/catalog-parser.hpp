@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,7 +24,7 @@
 #ifndef CATALOG_PARSER_HPP_
 #define CATALOG_PARSER_HPP_
 
-#include "olap/values/expressionTypes.hpp"
+#include <codegen/expressions/expressionTypes.hpp>
 
 #if __has_include(<filesystem>)
 #include <filesystem>

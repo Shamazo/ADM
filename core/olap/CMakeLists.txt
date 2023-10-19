@@ -92,7 +92,6 @@ set(olap_cxx
   lib/util/atois.cpp
   lib/util/caching.cpp
   lib/util/catalog.cpp
-  lib/util/context.cpp
   lib/util/demangle.cpp
   lib/util/flush-operator-tree.cpp
   lib/util/functions.cpp
@@ -107,8 +106,6 @@ set(olap_cxx
   lib/util/parallel-context.cpp
   lib/util/project-record.cpp
   lib/util/slack-limiter.cpp
-  lib/values/expressionTypes.cpp
-  lib/values/indexed-seq.cpp
   )
 
 # C++ files requiring CUDA headers
@@ -143,6 +140,7 @@ target_link_libraries(${PROJECT_NAME}
   LLVM::LLVM
   proteus::platform
   proteus::storage
+  proteus::codegen
   jsmn::jsmn
   rt # for shared memory
   )

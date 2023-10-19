@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,7 +23,7 @@
 
 #include "olap/expressions/expressions.hpp"
 
-#include <olap/util/context.hpp>
+#include <codegen/context/context.hpp>
 #include <olap/util/demangle.hpp>
 
 expression_t toExpression(Monoid m, expression_t lhs, expression_t rhs) {

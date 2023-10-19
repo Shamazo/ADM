@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,9 +24,10 @@
 #ifndef MODULE_HPP_
 #define MODULE_HPP_
 
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
-#include "olap/util/context.hpp"
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
+
+#include <codegen/context/context.hpp>
 
 class JITModule {
  protected:

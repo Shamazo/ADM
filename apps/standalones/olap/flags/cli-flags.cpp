@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,9 +23,9 @@
 #include <gflags/gflags.h>
 
 #include <cli-flags.hpp>
+#include <codegen/context/context.hpp>
 #include <iostream>
 #include <olap/common/olap-common.hpp>
-#include <olap/util/context.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/topology.hpp>
 #include <platform/util/glog.hpp>

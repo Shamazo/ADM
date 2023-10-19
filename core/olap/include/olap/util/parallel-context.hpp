@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,7 +24,7 @@
 #ifndef PROTEUS_PARALLEL_CONTEXT_HPP_
 #define PROTEUS_PARALLEL_CONTEXT_HPP_
 
-#include "context.hpp"
+#include <codegen/context/context.hpp>
 
 class PipelineGenFactory;
 class PipelineGen;

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -31,11 +31,10 @@
 #ifndef ATOIS_HPP_
 #define ATOIS_HPP_
 
+#include <codegen/context/context.hpp>
 #include <platform/common/common.hpp>
 
-#include "olap/util/context.hpp"
-
-//#define DEBUGATOIS
+// #define DEBUGATOIS
 
 void atois(llvm::Value *buf, llvm::Value *len, llvm::AllocaInst *mem_result,
            Context *context);

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,16 +24,15 @@
 #ifndef PLUGINS_LLVM_HPP_
 #define PLUGINS_LLVM_HPP_
 
+#include <codegen/context/context.hpp>
+#include <codegen/expressions/expressionTypes.hpp>
+#include <olap/operators/operator-state.hpp>
 #include <olap/util/cache-info.hpp>
-#include <olap/util/context.hpp>
 #include <olap/util/parallel-context.hpp>
-#include <olap/values/expressionTypes.hpp>
 #include <platform/common/common.hpp>
 #include <platform/common/unsupported-operation.hpp>
 
 /* Leads to incomplete type */
-class OperatorState;
-class Operator;
 // class ProteusValueMemory;
 // class ProteusValue;
 

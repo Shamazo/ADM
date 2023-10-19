@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,15 +21,15 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <codegen/context/context.hpp>
+#include <codegen/expressions/expressionTypes.hpp>
 #include <olap/expressions/binary-operators.hpp>
 #include <olap/expressions/expressions.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/test/environment.hpp>
 #include <olap/test/test-utils.hpp>
-#include <olap/util/context.hpp>
 #include <olap/util/parallel-context.hpp>
-#include <olap/values/expressionTypes.hpp>
 #include <platform/common/common.hpp>
 
 #include "gtest/gtest.h"

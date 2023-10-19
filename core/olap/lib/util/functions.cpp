@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,11 +24,11 @@
 #include "functions.hpp"
 
 #include <chrono>
-#include <ctime>
 #include <iostream>
 #include <olap/util/parallel-context.hpp>
 #include <ostream>
 #include <platform/common/error-handling.hpp>
+#include <platform/memory/memory-allocator.hpp>
 #include <storage/storage-manager.hpp>
 
 #include "catalog.hpp"
@@ -49,7 +49,7 @@ namespace filesystem = std::experimental::filesystem;
 }
 #endif
 
-//#define JSON_TIGHT
+// #define JSON_TIGHT
 #include "jsmn.h"
 
 // Remember to add these functions as extern in .hpp too!

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -26,10 +26,11 @@
 
 #include <vector>
 
-#include "olap/util/context.hpp"
-
 // #include "cuda.h"
 // #include "cuda_runtime_api.h"
+#include <llvm/IR/BasicBlock.h>
+
+#include <codegen/context/context.hpp>
 #include <future>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <utility>

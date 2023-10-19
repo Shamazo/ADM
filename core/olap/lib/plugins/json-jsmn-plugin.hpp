@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,16 +24,17 @@
 #ifndef JSON_JSMN_PLUGIN_HPP_
 #define JSON_JSMN_PLUGIN_HPP_
 
+#include <codegen/context/context.hpp>
+
 #include "lib/util/catalog.hpp"
 #include "olap/plugins/plugins.hpp"
-#include "olap/util/context.hpp"
 
-//#JSON
+// #JSON
 #define JSMN_STRICT
 //
-//#define JSON_TIGHT
+// #define JSON_TIGHT
 #include "jsmn.h"
-//#define DEBUGJSMN
+// #define DEBUGJSMN
 
 namespace jsmn {
 
