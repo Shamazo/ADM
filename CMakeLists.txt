@@ -148,7 +148,7 @@ if (NOT PLATFORM_ONLY)
   include(rapidjson)
   include(cuckoo)
   include(grpc)
-endif()
+endif ()
 
 #-----------------------------------------------------------------------
 # Build Documentation
@@ -161,7 +161,7 @@ if (DOXYGEN_FOUND)
     ${CMAKE_CURRENT_SOURCE_DIR}/core
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime
     COMMENT "Generate doxygen pages"
-  )
+    )
 endif ()
 
 install(DIRECTORY "frontends/R/" DESTINATION ${CMAKE_INSTALL_PREFIX}/pelago/frontends/R/) # Creates <..>/pelago/frontends/R
@@ -172,28 +172,29 @@ install(DIRECTORY "frontends/R/" DESTINATION ${CMAKE_INSTALL_PREFIX}/pelago/fron
 
 # build libjsmn
 if (NOT PLATFORM_ONLY)
-add_subdirectory(external/jsmn)
-endif()
+  add_subdirectory(external/jsmn)
+endif ()
 
 # code generation library
 add_subdirectory(core/platform)
 if (NOT PLATFORM_ONLY)
-add_subdirectory(core/storage)
-add_subdirectory(core/planner)
-add_subdirectory(core/olap)
-add_subdirectory(core/oltp)
-add_subdirectory(core/htap)
-add_subdirectory(runtime)
-endif()
+  add_subdirectory(core/storage)
+  add_subdirectory(core/planner)
+  add_subdirectory(core/olap)
+  add_subdirectory(core/oltp)
+  add_subdirectory(core/htap)
+  add_subdirectory(core/codegen)
+  add_subdirectory(runtime)
+endif ()
 
 #-----------------------------------------------------------------------
 # Build our executables
 #-----------------------------------------------------------------------
 add_subdirectory(apps)
 if (NOT PLATFORM_ONLY)
-#  tests/ are integration tests, does not contain platform unit tests
-add_subdirectory(tests)
-endif()
+  #  tests/ are integration tests, does not contain platform unit tests
+  add_subdirectory(tests)
+endif ()
 
 #-----------------------------------------------------------------------
 # Package definitions
