@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,14 +21,20 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef EXPRESSIONTYPES_HPP_
-#define EXPRESSIONTYPES_HPP_
+#ifndef PROTEUS_EXPRESSIONTYPES_HPP
+#define PROTEUS_EXPRESSIONTYPES_HPP
 
 #include <cassert>
-#include <memory>
+#include <iostream>
+#include <list>
+#include <map>
 #include <ostream>
-#include <platform/common/common.hpp>
-#include <utility>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "platform/common/common.hpp"
 
 /* Original.*/
 // enum typeID    { BOOL, STRING, FLOAT, INT, RECORD, LIST, BAG, SET, BLOCK };
@@ -585,4 +591,4 @@ RelWithAttributes rel::operator()(T... x) {
   return (*this)({x...});
 }
 
-#endif /* EXPRESSIONTYPES_HPP_ */
+#endif  // PROTEUS_EXPRESSIONTYPES_HPP

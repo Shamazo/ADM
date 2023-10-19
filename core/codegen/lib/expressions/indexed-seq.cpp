@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,21 +21,14 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef PROTEUS_INDEXED_SEQ_HPP
-#define PROTEUS_INDEXED_SEQ_HPP
+#include "codegen/expressions/indexed-seq.hpp"
 
-#include <olap/values/expressionTypes.hpp>
+#include <llvm/IR/Type.h>
 
 namespace type {
 
-class IndexedSeq : public CollectionTypeCRTP<IndexedSeq, INDEXEDSEQ> {
- public:
-  static constexpr auto name = "IndexedSeq";
-  using CollectionTypeCRTP::CollectionTypeCRTP;
-
-  llvm::Type *getLLVMType(llvm::LLVMContext &ctx) const override;
-};
+llvm::Type *IndexedSeq::getLLVMType(llvm::LLVMContext &ctx) const {
+  return getNestedType().getLLVMType(ctx)->getPointerElementType();
+}
 
 }  // namespace type
-
-#endif /* PROTEUS_INDEXED_SEQ_HPP */

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2018
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,12 +21,12 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef IF_STATEMENT_HPP_
-#define IF_STATEMENT_HPP_
+#ifndef PROTEUS_IF_STATEMENT_HPP
+#define PROTEUS_IF_STATEMENT_HPP
 
-#include <olap/values/expressionTypes.hpp>
-#include <platform/common/common.hpp>
-#include <platform/memory/memory-allocator.hpp>
+#include <cassert>
+
+#include "platform/common/common.hpp"
 
 class Context;
 
@@ -40,33 +40,21 @@ namespace expressions {
 class Expression;
 }
 class expression_t;
-class ExpressionGeneratorVisitor;
-class OperatorState;
 
 class if_branch {
  private:
   ProteusBareValue condition;
   Context *const context;
-  llvm::BasicBlock *afterBB;
+  [[maybe_unused]] llvm::BasicBlock *afterBB;
 
  public:
   inline constexpr if_branch(ProteusBareValue condition, Context *context,
                              llvm::BasicBlock *afterBB)
       : condition(condition), context(context), afterBB(afterBB) {}
 
-  if_branch(const expression_t &expr, const OperatorState &state,
-            Context *context, llvm::BasicBlock *afterBB);
-
  public:
   inline constexpr if_branch(ProteusBareValue condition, Context *context)
       : if_branch(condition, context, nullptr) {}
-
-  // inline constexpr if_branch(    expressions::Expression *expr    ,
-  //                             const OperatorState     &state    ,
-  //                             Context                 *context);
-
-  if_branch(const expression_t &expr, const OperatorState &state,
-            Context *context);
 
  public:
   template <typename Fthen>
@@ -134,14 +122,6 @@ class if_then {
     return {cond, context, AfterBB};
   }
 
-  template <typename Felse>
-  if_branch gen_else_if(const expression_t &expr, const OperatorState &state) {
-    assert(ElseBB && "gen_else* called twice in same gen_if");
-    openElseCase();
-    ElseBB = nullptr;
-    return {expr, state, context, AfterBB};
-  }
-
   ~if_then() {
     if (ElseBB) gen_else([]() {});
     // Just to be sure, reset the insertion pointer to AfterBB
@@ -154,4 +134,4 @@ if_then if_branch::operator()(Fthen then) && {
   return {condition, then, context};
 }
 
-#endif /* IF_STATEMENT_HPP_ */
+#endif  // PROTEUS_IF_STATEMENT_HPP

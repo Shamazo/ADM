@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -29,30 +29,30 @@
  *  CodegenMemcpy
  */
 
-#ifndef CONTEXT_HPP_
-#define CONTEXT_HPP_
+#ifndef PROTEUS_CONTEXT_HPP
+#define PROTEUS_CONTEXT_HPP
 
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Vectorize.h>
 
-#include <platform/common/common.hpp>
-#include <platform/memory/memory-allocator.hpp>
-
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Vectorize.h"
-#include "olap/operators/operator-state.hpp"
-#include "olap/util/jit/control-flow/if-statement.hpp"
-#include "olap/values/expressionTypes.hpp"
+#include "codegen/expressions/expressionTypes.hpp"
+#include "codegen/jit/control-flow/if-statement.hpp"
+#include "platform/common/common.hpp"
 
 #define MODULEPASS 0
 
-//#ifdef DEBUG
+// #ifdef DEBUG
 #define DEBUGCTX
-//#endif
+// #endif
 
+class Pipeline;
+class PipelineGen;
+class GpuPipelineGen;
 class Context;
 
 extern bool print_generated_code;
@@ -390,9 +390,6 @@ class Context {
   virtual if_branch gen_if(ProteusValue cond);
   virtual if_branch gen_if(ProteusBareValue cond);
 
-  virtual if_branch gen_if(const expression_t &expr,
-                           const OperatorState &state);
-
  private:
   template <typename, typename = void>
   static constexpr bool is_type_complete_v = false;
@@ -599,4 +596,4 @@ void While::operator()(Fbody body) && {
   Builder->SetInsertPoint(AfterBB);
 }
 
-#endif /* CONTEXT_HPP_ */
+#endif  // PROTEUS_CONTEXT_HPP

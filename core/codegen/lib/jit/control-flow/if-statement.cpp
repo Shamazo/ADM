@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2018
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,26 +21,11 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "olap/util/jit/control-flow/if-statement.hpp"
+#include "codegen/jit/control-flow/if-statement.hpp"
 
 #include <llvm/IR/IRBuilder.h>
 
-#include "lib/expressions/expressions-generator.hpp"
-#include "olap/util/context.hpp"
-
-static ProteusValue gen(const expression_t &expr, const OperatorState &state,
-                        Context *context) {
-  ExpressionGeneratorVisitor egv{context, state};
-  return expr.accept(egv);
-}
-
-if_branch::if_branch(const expression_t &expr, const OperatorState &state,
-                     Context *context, llvm::BasicBlock *afterBB)
-    : if_branch(gen(expr, state, context), context, afterBB) {}
-
-if_branch::if_branch(const expression_t &expr, const OperatorState &state,
-                     Context *context)
-    : if_branch(expr, state, context, nullptr) {}
+#include "codegen/context/context.hpp"
 
 void if_then::openCase(const ProteusBareValue &cond) {
   auto Builder = context->getBuilder();

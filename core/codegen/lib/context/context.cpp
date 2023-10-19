@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,18 +21,9 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "olap/util/context.hpp"
+#include "codegen/context/context.hpp"
 
 #include <dlfcn.h>
-
-#include "lib/expressions/expressions-generator.hpp"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/Passes.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Utils.h"
-#include "olap/util/jit/control-flow/if-statement.hpp"
 
 bool print_generated_code = true;
 
@@ -661,11 +652,6 @@ if_branch Context::gen_if(ProteusBareValue cond) {
   return if_branch(cond, this);
 }
 if_branch Context::gen_if(ProteusValue cond) { return gen_if({cond.value}); }
-
-if_branch Context::gen_if(const expression_t &expr,
-                          const OperatorState &state) {
-  return if_branch(expr, state, this);
-}
 
 While Context::gen_while(std::function<ProteusValue()> cond) {
   return {std::move(cond), this};
