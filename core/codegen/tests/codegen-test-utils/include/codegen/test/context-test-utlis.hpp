@@ -21,8 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef PROTEUS_CONTEXT_UTLIS_HPP
-#define PROTEUS_CONTEXT_UTLIS_HPP
+#ifndef PROTEUS_CONTEXT_TEST_UTLIS_HPP
+#define PROTEUS_CONTEXT_TEST_UTLIS_HPP
 
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/Function.h>
@@ -120,4 +120,4 @@ class DummyTestContext : public Context {
 
 }  // namespace codegen
 
-#endif  // PROTEUS_CONTEXT_UTLIS_HPP
+#endif  // PROTEUS_CONTEXT_TEST_UTLIS_HPP

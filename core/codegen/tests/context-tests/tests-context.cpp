@@ -36,7 +36,7 @@
 #include <memory>
 
 #include "codegen/context/context.hpp"
-#include "codegen/test/context-utlis.hpp"
+#include "codegen/test/context-test-utlis.hpp"
 
 using namespace codegen;
 
@@ -54,15 +54,15 @@ class ContextTest : public ::testing::Test {
 };
 
 // Just make an empty void function
-TEST_F(ContextTest, JustWorks) {
+TEST_F(ContextTest, SmokeTest) {
   auto* builder = testContext->getBuilder();
-  testContext->prepareTestFunction("justWorksFunc", testContext->voidType, {});
+  testContext->prepareTestFunction("emptyFunc", testContext->voidType, {});
 
   builder->CreateRetVoid();
 
   testContext->finishTestFunction(/*dump=*/true);
   auto* justWorkingFunc =
-      testContext->getCompiledTestFunction<void (*)()>("justWorksFunc");
+      testContext->getCompiledTestFunction<void (*)()>("emptyFunc");
   justWorkingFunc();
 }
 

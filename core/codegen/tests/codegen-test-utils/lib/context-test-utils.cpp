@@ -41,7 +41,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_os_ostream.h>
 
-#include "codegen/test/context-utlis.hpp"
+#include "codegen/test/context-test-utlis.hpp"
 
 namespace codegen {
 
