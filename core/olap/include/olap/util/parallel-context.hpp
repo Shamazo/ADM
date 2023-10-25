@@ -21,19 +21,20 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "select.hpp"
+#ifndef PROTEUS_PARALLEL_CONTEXT_HPP_
+#define PROTEUS_PARALLEL_CONTEXT_HPP_
 
-#include <olap/util/jit/control-flow/if-statement.hpp>
+#include <codegen/context/parallel-context.hpp>
 
-void Select::produce_(OlapParallelContext *context) {
-  getChild()->produce(context);
-}
+class OlapParallelContext : public ParallelContext {
+ public:
+  explicit OlapParallelContext(const std::string &moduleName,
+                               bool gpuRoot = false);
 
-void Select::consume(OlapParallelContext *context,
-                     const OperatorState &childState) {
-  gen_if(expr, childState, context)([&] {
-    // Triggering parent
-    OperatorState newState{*this, childState};
-    getParent()->consume(context, newState);
-  });
-}
+ private:
+  friend class DeviceCross;
+  friend class CpuToGpu;
+  friend class GpuToCpu;
+};
+
+#endif /* PROTEUS_PARALLEL_CONTEXT_HPP_ */

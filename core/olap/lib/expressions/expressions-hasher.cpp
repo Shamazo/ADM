@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -322,9 +322,9 @@ ProteusValue ExpressionHasherVisitor::visit(
         cout << "...but is not useable " << endl;
 #endif
       } else {
-        assert(dynamic_cast<ParallelContext *>(context));
+        assert(dynamic_cast<OlapParallelContext *>(context));
         ProteusValue tmpWrapper = plugin->readCachedValue(
-            info, currState, dynamic_cast<ParallelContext *>(context));
+            info, currState, dynamic_cast<OlapParallelContext *>(context));
         //                Value *tmp = tmpWrapper.value;
         //                AllocaInst *mem_tmp =
         //                context->CreateEntryBlockAlloca(F, "mem_cachedToHash",
@@ -375,10 +375,10 @@ ProteusValue ExpressionHasherVisitor::visit(
       }
 
       // Path involves a projection / an object
-      assert(dynamic_cast<ParallelContext *>(context));
+      assert(dynamic_cast<OlapParallelContext *>(context));
       mem_path = plugin->readPath(
           activeRelation, bindings, e->getProjectionName().c_str(),
-          e->getAttribute(), dynamic_cast<ParallelContext *>(context));
+          e->getAttribute(), dynamic_cast<OlapParallelContext *>(context));
     } else {
       // Path involves a primitive datatype
       //(e.g., the result of unnesting a list of primitives)

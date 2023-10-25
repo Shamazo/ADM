@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -203,7 +203,7 @@ void ExprMaterializer::freeArenas() const {
   Builder->CreateCall(freeLLVM, ArgsFree);
 }
 
-void ExprMaterializer::produce_(ParallelContext *context) {
+void ExprMaterializer::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 
   /* Free Arenas */

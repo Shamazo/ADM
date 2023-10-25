@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -32,7 +32,7 @@
 class DistributedBinaryBlockPlugin : public BinaryBlockPlugin {
  public:
   static constexpr auto type = "distributed-block";
-  DistributedBinaryBlockPlugin(ParallelContext *context,
+  DistributedBinaryBlockPlugin(OlapParallelContext *context,
                                const std::string &fnamePrefix, RecordType rec,
                                vector<RecordAttribute *> &whichFields);
 };

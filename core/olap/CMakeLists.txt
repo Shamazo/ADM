@@ -102,6 +102,7 @@ set(olap_cxx
   lib/util/jit/gpu-module.cpp
   lib/util/jit/gpu-pipeline.cpp
   lib/util/jit/jit-module.cpp
+  lib/util/jit/olap-pipeline.cpp
   lib/util/jit/pipeline.cpp
   lib/util/parallel-context.cpp
   lib/util/project-record.cpp

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -27,18 +27,18 @@
 #include <platform/util/logging.hpp>
 
 #include "lib/util/catalog.hpp"
-#include "lib/util/jit/cpu-pipeline.hpp"
+#include "lib/util/jit/olap-pipeline.hpp"
 
 using namespace llvm;
 
-void CpuToGpu::produce_(ParallelContext *context) {
+void CpuToGpu::produce_(OlapParallelContext *context) {
   generateGpuSide(context);
 
   context->popPipeline();
 
   gpu_pip = context->removeLatestPipeline();
 
-  context->pushDeviceProvider<CpuPipelineGenFactory>();
+  context->pushDeviceProvider<OlapCpuPipelineGenFactory>();
   context->pushPipeline(gpu_pip);
 
   context->registerOpen(this, [this](Pipeline *pip) {
@@ -66,7 +66,7 @@ void CpuToGpu::produce_(ParallelContext *context) {
   context->popDeviceProvider();
 }
 
-void CpuToGpu::generateGpuSide(ParallelContext *context) {
+void CpuToGpu::generateGpuSide(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
   std::vector<size_t> wantedFieldsArg_id;
@@ -167,7 +167,7 @@ void CpuToGpu::generateGpuSide(ParallelContext *context) {
   Builder->SetInsertPoint(context->getEndingBlock());
 }
 
-void CpuToGpu::consume(ParallelContext *const context,
+void CpuToGpu::consume(OlapParallelContext *const context,
                        const OperatorState &childState) {
   // Prepare
   LLVMContext &llvmContext = context->getLLVMContext();

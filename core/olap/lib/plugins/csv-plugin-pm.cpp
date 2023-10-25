@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -33,13 +33,13 @@ using namespace llvm;
 namespace pm {
 
 extern "C" pm::CSVPlugin *createPmCsvPlugin(
-    ParallelContext *context, std::string fname, RecordType rec,
+    OlapParallelContext *context, std::string fname, RecordType rec,
     const std::vector<RecordAttribute *> &projs) {
   return new CSVPlugin(context, fname, rec, projs, ';', 10, 2, false);
 }
 
 extern "C" pm::CSVPlugin *createPmTsvPlugin(
-    ParallelContext *context, std::string fname, RecordType rec,
+    OlapParallelContext *context, std::string fname, RecordType rec,
     const std::vector<RecordAttribute *> &projs) {
   return new CSVPlugin(context, fname, rec, projs, '|', 10, 2, false);
 }
@@ -317,7 +317,8 @@ void CSVPlugin::init() {
   }
 };
 
-void CSVPlugin::generate(const ::Operator &producer, ParallelContext *context) {
+void CSVPlugin::generate(const ::Operator &producer,
+                         OlapParallelContext *context) {
   if (!hasPM) {
     return scanAndPopulatePM(producer);
   } else {
@@ -331,7 +332,7 @@ void CSVPlugin::generate(const ::Operator &producer, ParallelContext *context) {
 ProteusValueMemory CSVPlugin::readPath(string activeRelation, Bindings bindings,
                                        const char *pathVar,
                                        RecordAttribute attr,
-                                       ParallelContext *context) {
+                                       OlapParallelContext *context) {
   ProteusValueMemory mem_valWrapper;
   {
     const OperatorState *state = bindings.state;
@@ -362,13 +363,13 @@ ProteusValueMemory CSVPlugin::readPath(string activeRelation, Bindings bindings,
 
 ProteusValueMemory CSVPlugin::readValue(ProteusValueMemory mem_value,
                                         const ExpressionType *type,
-                                        ParallelContext *context) {
+                                        OlapParallelContext *context) {
   return mem_value;
 }
 
 ProteusValue CSVPlugin::readCachedValue(CacheInfo info,
                                         const OperatorState &currState,
-                                        ParallelContext *context) {
+                                        OlapParallelContext *context) {
   return readCachedValue(info, currState.getBindings());
 }
 
@@ -596,7 +597,7 @@ void CSVPlugin::finish() {
 
 llvm::Value *CSVPlugin::getValueSize(ProteusValueMemory mem_value,
                                      const ExpressionType *type,
-                                     ParallelContext *context) {
+                                     OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:
@@ -1994,16 +1995,16 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
 
         /* Set position to curr_new_line + pm_offset */
         Builder->CreateStore(val_offset, mem_pos);
-        //#ifdef DEBUGPM
-        //                {
-        //                    vector<Value*> ArgsV;
-        //                    ArgsV.clear();
-        //                    ArgsV.push_back(val_pmOffset16);
-        //                    Function* debugInt =
-        //                    context->getFunction("printShort");
-        //                    Builder->CreateCall(debugInt, ArgsV, "printf");
-        //                }
-        //#endif
+        // #ifdef DEBUGPM
+        //                 {
+        //                     vector<Value*> ArgsV;
+        //                     ArgsV.clear();
+        //                     ArgsV.push_back(val_pmOffset16);
+        //                     Function* debugInt =
+        //                     context->getFunction("printShort");
+        //                     Builder->CreateCall(debugInt, ArgsV, "printf");
+        //                 }
+        // #endif
         /* How many fields to skip */
         for (int i = 0; i < pmDistanceBefore; i++) {
           skipDelimLLVM(delimInner);

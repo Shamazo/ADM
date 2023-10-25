@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -30,7 +30,7 @@
 
 class GpuHashRearrange : public experimental::UnaryOperator {
  public:
-  GpuHashRearrange(Operator *const child, ParallelContext *const context,
+  GpuHashRearrange(Operator *const child, OlapParallelContext *const context,
                    int numOfBuckets, const std::vector<expression_t> &matExpr,
                    expression_t hashExpr,
                    RecordAttribute *hashProject = nullptr)
@@ -58,8 +58,8 @@ class GpuHashRearrange : public experimental::UnaryOperator {
     LOG(INFO) << "Collapsing GpuHashRearrange operator";
   }
 
-  void produce_(ParallelContext *context) override;
-  void consume(ParallelContext *context,
+  void produce_(OlapParallelContext *context) override;
+  void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
   [[nodiscard]] bool isFiltering() const override { return false; }
 
@@ -78,14 +78,14 @@ class GpuHashRearrange : public experimental::UnaryOperator {
   }
 
  protected:
-  virtual void consume_flush(ParallelContext *context,
+  virtual void consume_flush(OlapParallelContext *context,
                              llvm::IntegerType *target_type);
 
   virtual void open(Pipeline *pip);
   virtual void close(Pipeline *pip);
 
   static llvm::Value *hash(const std::vector<expression_t> &exprs,
-                           ParallelContext *context,
+                           OlapParallelContext *context,
                            const OperatorState &childState);
 
   std::vector<expression_t> matExpr;

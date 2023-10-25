@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -61,13 +61,14 @@ Nest::Nest(Monoid acc, expressions::Expression *outputExpr,
  * stop entirely before finishing the operator's work
  * => generation takes place in two steps
  */
-void Nest::produce_(ParallelContext *context) {
+void Nest::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 
   generateProbe(context);
 }
 
-void Nest::consume(ParallelContext *context, const OperatorState &childState) {
+void Nest::consume(OlapParallelContext *context,
+                   const OperatorState &childState) {
   generateInsert(context, childState);
 }
 
@@ -219,7 +220,7 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
 #endif
 }
 
-void Nest::generateProbe(ParallelContext *context) const {
+void Nest::generateProbe(OlapParallelContext *context) const {
   IRBuilder<> *Builder = context->getBuilder();
   LLVMContext &llvmContext = context->getLLVMContext();
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
@@ -476,18 +477,18 @@ void Nest::generateProbe(ParallelContext *context) const {
   ExpressionType *oidType = new IntType();
   RecordAttribute attr_oid(htName, activeLoop, oidType);
   allBucketBindings[attr_oid] = mem_oidWrapper;
-  //#ifdef DEBUG
-  //        ArgsV.clear();
-  //        Function* debugInt64 = context->getFunction("printi");
-  //        Value* finalResult =
-  //        Builder->CreateLoad(mem_accumulating->getType()->getPointerElementType(),
-  //        mem_accumulating); ArgsV.push_back(finalResult);
-  //        Builder->CreateCall(debugInt64, ArgsV);
-  //        ArgsV.clear();
-  //        ArgsV.push_back(context->createInt32(-7));
-  //        Builder->CreateCall(debugInt64, ArgsV);
-  //        ArgsV.clear();
-  //#endif
+  // #ifdef DEBUG
+  //         ArgsV.clear();
+  //         Function* debugInt64 = context->getFunction("printi");
+  //         Value* finalResult =
+  //         Builder->CreateLoad(mem_accumulating->getType()->getPointerElementType(),
+  //         mem_accumulating); ArgsV.push_back(finalResult);
+  //         Builder->CreateCall(debugInt64, ArgsV);
+  //         ArgsV.clear();
+  //         ArgsV.push_back(context->createInt32(-7));
+  //         Builder->CreateCall(debugInt64, ArgsV);
+  //         ArgsV.clear();
+  // #endif
 
   OperatorState groupState(*this, allBucketBindings);
   getParent()->consume(context, groupState);
@@ -509,7 +510,7 @@ void Nest::generateProbe(ParallelContext *context) const {
   Builder->SetInsertPoint(loopEndHT);
 }
 
-void Nest::generateSum(ParallelContext *context, const OperatorState &state,
+void Nest::generateSum(OlapParallelContext *context, const OperatorState &state,
                        AllocaInst *mem_accumulating) const {
   IRBuilder<> *Builder = context->getBuilder();
   LLVMContext &llvmContext = context->getLLVMContext();
@@ -585,7 +586,7 @@ void Nest::generateSum(ParallelContext *context, const OperatorState &state,
   Builder->SetInsertPoint(endBlock);
 }
 
-AllocaInst *Nest::resetAccumulator(ParallelContext *context) const {
+AllocaInst *Nest::resetAccumulator(OlapParallelContext *context) const {
   AllocaInst *mem_accumulating = nullptr;
 
   IRBuilder<> *Builder = context->getBuilder();

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -68,7 +68,7 @@ Nest::Nest(vector<Monoid> accs, vector<expression_t> outputExprs,
   }
 }
 
-void Nest::produce_(ParallelContext *context) {
+void Nest::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 
   generateProbe(this->context);
@@ -513,18 +513,18 @@ void Nest::generateProbe(Context *const context) const {
   ExpressionType *oidType = new IntType();
   RecordAttribute attr_oid = RecordAttribute(htName, activeLoop, oidType);
   (*allBucketBindings)[attr_oid] = mem_oidWrapper;
-  //#ifdef DEBUG
-  //        ArgsV.clear();
-  //        Function* debugInt64 = context->getFunction("printi");
-  //        Value* finalResult =
-  //        Builder->CreateLoad(mem_accumulating->getType()->getPointerElementType(),
-  //        mem_accumulating); ArgsV.push_back(finalResult);
-  //        Builder->CreateCall(debugInt64, ArgsV);
-  //        ArgsV.clear();
-  //        ArgsV.push_back(context->createInt32(-7));
-  //        Builder->CreateCall(debugInt64, ArgsV);
-  //        ArgsV.clear();
-  //#endif
+  // #ifdef DEBUG
+  //         ArgsV.clear();
+  //         Function* debugInt64 = context->getFunction("printi");
+  //         Value* finalResult =
+  //         Builder->CreateLoad(mem_accumulating->getType()->getPointerElementType(),
+  //         mem_accumulating); ArgsV.push_back(finalResult);
+  //         Builder->CreateCall(debugInt64, ArgsV);
+  //         ArgsV.clear();
+  //         ArgsV.push_back(context->createInt32(-7));
+  //         Builder->CreateCall(debugInt64, ArgsV);
+  //         ArgsV.clear();
+  // #endif
 
   OperatorState *groupState = new OperatorState(*this, *allBucketBindings);
   getParent()->consume(context, *groupState);

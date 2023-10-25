@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -40,7 +40,7 @@ MemMoveScaleOut::MemMoveConf *MemMoveScaleOut::createMoveConf() const {
   return new (pmmc) MemMoveScaleOut::MemMoveConf;
 }
 
-void MemMoveScaleOut::genReleaseOldBuffer(ParallelContext *context,
+void MemMoveScaleOut::genReleaseOldBuffer(OlapParallelContext *context,
                                           llvm::Value *src) const {
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
   //  src->getType()->dump();
@@ -113,7 +113,7 @@ void MemMoveScaleOut::close(Pipeline *pip) {
 }
 
 ProteusValueMemory MemMoveScaleOut::getServerId(
-    ParallelContext *, const OperatorState &childState) const {
+    OlapParallelContext *, const OperatorState &childState) const {
   RecordAttribute srcServer{wantedFields[0]->getRelationName(), "srcServer",
                             new Int64Type()};  // FIXME: OID type for blocks ?
   return childState[srcServer];

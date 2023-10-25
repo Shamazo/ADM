@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -72,13 +72,13 @@ class Operator {
   }
 
  protected:
-  virtual void produce_(ParallelContext *context) = 0;
+  virtual void produce_(OlapParallelContext *context) = 0;
 
  public:
-  virtual void produce(ParallelContext *context) final {
-    //#ifndef NDEBUG
-    //    auto * pip = context->getCurrentPipeline();
-    //#endif
+  virtual void produce(OlapParallelContext *context) final {
+    // #ifndef NDEBUG
+    //     auto * pip = context->getCurrentPipeline();
+    // #endif
     produce_(context);
     //    assert(pip == context->getCurrentPipeline());
   }
@@ -201,13 +201,13 @@ class POperator : public T {
   using T::T;
 
   void consume(Context *const context, const OperatorState &childState) final {
-    auto ctx = dynamic_cast<ParallelContext *>(context);
+    auto ctx = dynamic_cast<OlapParallelContext *>(context);
     assert(ctx);
 
     consume(ctx, childState);
   }
 
-  virtual void consume(ParallelContext *context,
+  virtual void consume(OlapParallelContext *context,
                        const OperatorState &childState) = 0;
 };
 

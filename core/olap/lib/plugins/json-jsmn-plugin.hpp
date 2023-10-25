@@ -72,19 +72,20 @@ class JSONPlugin : public Plugin {
   JSONPlugin(Context *const context, string &fname, ExpressionType *schema);
   ~JSONPlugin() override;
   void init() override {}
-  void generate(const Operator &producer, ParallelContext *context) override;
+  void generate(const Operator &producer,
+                OlapParallelContext *context) override;
   void finish() override;
   string &getName() override { return fname; }
 
   // 1-1 correspondence with 'RecordProjection' expression
   ProteusValueMemory readPath(string activeRelation, Bindings wrappedBindings,
                               const char *pathVar, RecordAttribute attr,
-                              ParallelContext *context) override;
+                              OlapParallelContext *context) override;
   ProteusValueMemory readValue(ProteusValueMemory mem_value,
                                const ExpressionType *type,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   ProteusValue readCachedValue(CacheInfo info, const OperatorState &currState,
-                               ParallelContext *context) override {
+                               OlapParallelContext *context) override {
     string error_msg = "[JSMNPlugin: ] No caching support yet";
     LOG(ERROR) << error_msg;
     throw runtime_error(error_msg);
@@ -129,7 +130,7 @@ class JSONPlugin : public Plugin {
 
   llvm::Value *getValueSize(ProteusValueMemory mem_value,
                             const ExpressionType *type,
-                            ParallelContext *context) override;
+                            OlapParallelContext *context) override;
 
   // Used by unnest
   ProteusValueMemory initCollectionUnnest(

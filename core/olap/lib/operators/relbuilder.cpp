@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2019
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -63,7 +63,7 @@
 #include "unnest.hpp"
 #include "update.hpp"
 
-RelBuilder::RelBuilder(ParallelContext *ctx, Operator *root)
+RelBuilder::RelBuilder(OlapParallelContext *ctx, Operator *root)
     : ctx(ctx), root(root) {}
 
 RelBuilder::RelBuilder(const RelBuilder &builder, Operator *root)
@@ -94,8 +94,8 @@ expressions::InputArgument RelBuilder::getOutputArgUnnested() const {
   return new RecordType(attrs);
 }
 
-RelBuilder::RelBuilder() : RelBuilder(new ParallelContext("main", false)) {}
-RelBuilder::RelBuilder(ParallelContext *ctx) : RelBuilder(ctx, nullptr) {}
+RelBuilder::RelBuilder() : RelBuilder(new OlapParallelContext("main", false)) {}
+RelBuilder::RelBuilder(OlapParallelContext *ctx) : RelBuilder(ctx, nullptr) {}
 
 const RecordType &RelBuilder::getRecordType(CatalogParser &catalog,
                                             std::string relName) {
@@ -409,9 +409,9 @@ RelBuilder RelBuilder::print(const vector<expression_t> &e, Plugin *pg,
   } else {
     datasetInfo = new InputInfo();
     datasetInfo->path = outrel;
-    assert(
-        ctx &&
-        "A ParallelContext is required to register relationships on the fly");
+    assert(ctx &&
+           "A OlapParallelContext is required to register relationships on the "
+           "fly");
 
     catalog.setInputInfo(outrel, datasetInfo);
     setOIDType(catalog, outrel, pg->getOIDType());
@@ -573,10 +573,10 @@ class HintRowCount : public experimental::UnaryOperator {
   [[nodiscard]] DegreeOfParallelism getDOP() const override {
     return getChild()->getDOP();
   }
-  void produce_(ParallelContext *context) override {
+  void produce_(OlapParallelContext *context) override {
     return getChild()->produce(context);
   }
-  void consume(ParallelContext *context,
+  void consume(OlapParallelContext *context,
                const OperatorState &binding) override {
     getParent()->consume(context, binding);
   }
@@ -758,7 +758,8 @@ void RelBuilder::registerPlugin(const std::string &relName, Plugin *pg) {
   Catalog::getInstance().registerPlugin(relName, pg);
 }
 
-typedef Plugin *(*plugin_creator_t)(ParallelContext *, std::string, RecordType,
+typedef Plugin *(*plugin_creator_t)(OlapParallelContext *, std::string,
+                                    RecordType,
                                     const std::vector<RecordAttribute *> &);
 
 std::string hyphenatedPluginToCamel(const std::string &line);

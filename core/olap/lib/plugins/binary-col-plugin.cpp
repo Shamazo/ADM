@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -352,7 +352,7 @@ void BinaryColPlugin::init() {
 }
 
 void BinaryColPlugin::generate(const ::Operator &producer,
-                               ParallelContext *context) {
+                               OlapParallelContext *context) {
   return scan(producer);
 }
 
@@ -363,7 +363,7 @@ ProteusValueMemory BinaryColPlugin::readPath(string activeRelation,
                                              Bindings bindings,
                                              const char *pathVar,
                                              RecordAttribute attr,
-                                             ParallelContext *context) {
+                                             OlapParallelContext *context) {
   ProteusValueMemory mem_projection;
   {
     const ::OperatorState *state = bindings.state;
@@ -399,13 +399,13 @@ ProteusValueMemory BinaryColPlugin::readPath(string activeRelation,
  * needing the materialized string */
 ProteusValueMemory BinaryColPlugin::readValue(ProteusValueMemory mem_value,
                                               const ExpressionType *type,
-                                              ParallelContext *context) {
+                                              OlapParallelContext *context) {
   return mem_value;
 }
 
 ProteusValue BinaryColPlugin::readCachedValue(CacheInfo info,
                                               const OperatorState &currState,
-                                              ParallelContext *context) {
+                                              OlapParallelContext *context) {
   return readCachedValue(info, currState.getBindings());
 }
 
@@ -582,7 +582,7 @@ void BinaryColPlugin::finish() {
 
 llvm::Value *BinaryColPlugin::getValueSize(ProteusValueMemory mem_value,
                                            const ExpressionType *type,
-                                           ParallelContext *context) {
+                                           OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:

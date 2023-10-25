@@ -24,13 +24,13 @@
 #include "gpu-hash-group-by-chained.hpp"
 
 #include <cmath>
+#include <codegen/util/gpu/gpu-intrinsics.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/topology.hpp>
 
 #include "gmonoids.hpp"
 #include "lib/expressions/expressions-generator.hpp"
-#include "lib/util/gpu/gpu-intrinsics.hpp"
 
 using namespace llvm;
 
@@ -44,7 +44,7 @@ GpuHashGroupByChained::GpuHashGroupByChained(
       << "GroupBy's hashtable too small for GPU algo, auto-resizing";
 }
 
-void GpuHashGroupByChained::produce_(ParallelContext *context) {
+void GpuHashGroupByChained::produce_(OlapParallelContext *context) {
   context->pushPipeline();
 
   buildHashTableFormat(context);
@@ -60,7 +60,7 @@ void GpuHashGroupByChained::produce_(ParallelContext *context) {
   generate_scan(context);
 }
 
-void GpuHashGroupByChained::buildHashTableFormat(ParallelContext *context) {
+void GpuHashGroupByChained::buildHashTableFormat(OlapParallelContext *context) {
   prepareDescription(context);
   for (const auto &t : ptr_types) {
     out_param_ids.push_back(context->appendStateVar(t));  //, true, false));
@@ -75,7 +75,7 @@ void GpuHashGroupByChained::buildHashTableFormat(ParallelContext *context) {
   head_param_id = context->appendStateVar(t_head_ptr);
 }
 
-void GpuHashGroupByChained::generate_build(ParallelContext *context,
+void GpuHashGroupByChained::generate_build(OlapParallelContext *context,
                                            const OperatorState &childState) {
   IRBuilder<> *Builder = context->getBuilder();
   LLVMContext &llvmContext = context->getLLVMContext();

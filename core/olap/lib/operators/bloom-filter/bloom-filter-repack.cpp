@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -25,14 +25,14 @@
 
 #include <llvm/IR/IntrinsicsX86.h>
 
+#include <codegen/jit/pipeline.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/util/logging.hpp>
 
 #include "lib/expressions/expressions-generator.hpp"
-#include "lib/util/jit/pipeline.hpp"
 
-void BloomFilterRepack::produce_(ParallelContext *context) {
+void BloomFilterRepack::produce_(OlapParallelContext *context) {
   context->registerOpen(this, [this](Pipeline *pip) { this->open(pip); });
   context->registerClose(this, [this](Pipeline *pip) { this->close(pip); });
 
@@ -107,7 +107,7 @@ void BloomFilterRepack::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void BloomFilterRepack::consumeVector(ParallelContext *context,
+void BloomFilterRepack::consumeVector(OlapParallelContext *context,
                                       const OperatorState &childState,
                                       llvm::Value *filter, size_t vsize,
                                       llvm::Value *offset, llvm::Value *N) {
@@ -444,7 +444,7 @@ void BloomFilterRepack::consumeVector(ParallelContext *context,
   });
 }
 
-void BloomFilterRepack::consume(ParallelContext *context,
+void BloomFilterRepack::consume(OlapParallelContext *context,
                                 const OperatorState &childState) {
   std::vector<RecordAttribute> attributes;
 
@@ -527,7 +527,7 @@ void BloomFilterRepack::consume(ParallelContext *context,
   consume_flush(context);
 }
 
-void BloomFilterRepack::consume_flush(ParallelContext *context) {
+void BloomFilterRepack::consume_flush(OlapParallelContext *context) {
   save_current_blocks_and_restore_at_exit_scope blks{context};
   llvm::LLVMContext &llvmContext = context->getLLVMContext();
 

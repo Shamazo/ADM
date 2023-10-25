@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -53,7 +53,7 @@ class ZipCollect : public BinaryOperator {
   ZipCollect(RecordAttribute *ptrAttr, RecordAttribute *splitter,
              RecordAttribute *targetAttr, RecordAttribute *inputLeft,
              RecordAttribute *inputRight, Operator *const leftChild,
-             Operator *const rightChild, ParallelContext *const context,
+             Operator *const rightChild, OlapParallelContext *const context,
              int numOfBuckets, RecordAttribute *hash_key_left,
              const vector<expression_t> &wantedFieldsLeft,
              RecordAttribute *hash_key_right,
@@ -61,7 +61,7 @@ class ZipCollect : public BinaryOperator {
 
   ~ZipCollect() override { LOG(INFO) << "Collapsing PacketZip operator"; }
 
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
                const OperatorState &childState) override;
 
@@ -106,7 +106,7 @@ class ZipCollect : public BinaryOperator {
 
   int *partition_ptr[128];
 
-  ParallelContext *context;
+  OlapParallelContext *context;
   string opLabel;
   vector<expression_t> wantedFieldsLeft;
   vector<expression_t> wantedFieldsRight;
@@ -138,12 +138,12 @@ class ZipInitiate : public UnaryOperator {
  public:
   ZipInitiate(RecordAttribute *ptrAttr, RecordAttribute *splitter,
               RecordAttribute *targetAttr, Operator *const child,
-              ParallelContext *const context, int numOfBuckets,
+              OlapParallelContext *const context, int numOfBuckets,
               ZipState &state1, ZipState &state2, string opLabel);
 
   ~ZipInitiate() override {}
 
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
 
   void consume(Context *const context,
                const OperatorState &childState) override;
@@ -166,7 +166,7 @@ class ZipInitiate : public UnaryOperator {
  private:
   void generate_send();
 
-  ParallelContext *context;
+  OlapParallelContext *context;
   string opLabel;
   RecordAttribute *targetAttr;
   RecordAttribute *ptrAttr;
@@ -196,13 +196,13 @@ class ZipInitiate : public UnaryOperator {
 class ZipForward : public UnaryOperator {
  public:
   ZipForward(RecordAttribute *targetAttr, Operator *const child,
-             ParallelContext *const context,
+             OlapParallelContext *const context,
              const vector<expression_t> &wantedFields, string opLabel,
              ZipState &state);
 
   ~ZipForward() override {}
 
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
                const OperatorState &childState) override;
   bool isFiltering() const override { return false; }
@@ -218,7 +218,7 @@ class ZipForward : public UnaryOperator {
  private:
   void cacheFormat();
 
-  ParallelContext *context;
+  OlapParallelContext *context;
   string opLabel;
   vector<expression_t> wantedFields;
   RecordAttribute *targetAttr;

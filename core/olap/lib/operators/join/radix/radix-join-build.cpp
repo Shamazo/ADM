@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -28,7 +28,7 @@
 using namespace llvm;
 
 RadixJoinBuild::RadixJoinBuild(expression_t keyExpr, Operator *child,
-                               ParallelContext *context, string opLabel,
+                               OlapParallelContext *context, string opLabel,
                                Materializer &mat, StructType *htEntryType,
                                size_t /* bytes */ size,
                                size_t /* bytes */ kvSize, bool is_agg)
@@ -55,7 +55,7 @@ RadixJoinBuild::~RadixJoinBuild() {
   //  Can't do garbage collection here, need to do it from codegen
 }
 
-void RadixJoinBuild::produce_(ParallelContext *context) {
+void RadixJoinBuild::produce_(OlapParallelContext *context) {
   initializeState(context);
 
   Operator *newChild = nullptr;
@@ -78,7 +78,7 @@ void RadixJoinBuild::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void RadixJoinBuild::initializeState(ParallelContext *context) {
+void RadixJoinBuild::initializeState(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
   Type *int64_type = Type::getInt64Ty(llvmContext);
@@ -226,12 +226,12 @@ void RadixJoinBuild::initializeState(ParallelContext *context) {
 
 void RadixJoinBuild::consume(Context *const context,
                              const OperatorState &childState) {
-  auto *ctx = dynamic_cast<ParallelContext *>(context);
+  auto *ctx = dynamic_cast<OlapParallelContext *>(context);
   assert(ctx && "Update caller to new API");
   consume(ctx, childState);
 }
 
-void RadixJoinBuild::consume(ParallelContext *const context,
+void RadixJoinBuild::consume(OlapParallelContext *const context,
                              const OperatorState &childState) {
   IRBuilder<> *Builder = context->getBuilder();
   LLVMContext &llvmContext = context->getLLVMContext();
@@ -610,7 +610,7 @@ void RadixJoinBuild::consume(ParallelContext *const context,
  *
  * @return item count per resulting cluster
  */
-Value *RadixJoinBuild::radix_cluster_nopadding(ParallelContext *context,
+Value *RadixJoinBuild::radix_cluster_nopadding(OlapParallelContext *context,
                                                Value *mem_tuplesNo,
                                                Value *mem_kv_id) const {
   IRBuilder<> *Builder = context->getBuilder();

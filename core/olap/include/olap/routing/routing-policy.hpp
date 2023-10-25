@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -42,7 +42,7 @@ namespace routing {
 class RoutingPolicy {
  public:
   virtual ~RoutingPolicy() = default;
-  virtual routing_target evaluate(ParallelContext *context,
+  virtual routing_target evaluate(OlapParallelContext *context,
                                   const OperatorState &childState,
                                   ProteusValueMemory retrycnt) = 0;
 };
@@ -52,7 +52,7 @@ class Random : public RoutingPolicy {
 
  public:
   explicit Random(size_t fanout) : fanout(fanout) {}
-  routing_target evaluate(ParallelContext *context,
+  routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };
@@ -63,7 +63,7 @@ class HashBased : public RoutingPolicy {
 
  public:
   HashBased(size_t fanout, expression_t e) : fanout(fanout), e(std::move(e)) {}
-  routing_target evaluate(ParallelContext *context,
+  routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };
@@ -76,7 +76,7 @@ class Local : public RoutingPolicy {
  public:
   Local(size_t fanout, const std::vector<RecordAttribute *> &wantedFields,
         const AffinityPolicy *aff);
-  routing_target evaluate(ParallelContext *context,
+  routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };
@@ -93,7 +93,7 @@ class PreferLocal : public RoutingPolicy {
  public:
   PreferLocal(size_t fanout, const std::vector<RecordAttribute *> &wantedFields,
               const AffinityPolicy *aff);
-  routing_target evaluate(ParallelContext *context,
+  routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };
@@ -104,7 +104,7 @@ class PreferLocalServer : public RoutingPolicy {
 
  public:
   PreferLocalServer(size_t fanout);
-  routing_target evaluate(ParallelContext *context,
+  routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };

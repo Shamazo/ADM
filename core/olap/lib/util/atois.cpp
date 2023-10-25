@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,16 +21,9 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-/*
- * atois.hpp
- *
- *  Created on: Apr 1, 2015
- *      Author: manolee
- */
-
 #include "atois.hpp"
 
-#include "olap/util/parallel-context.hpp"
+#include <olap/util/parallel-context.hpp>
 
 using namespace llvm;
 
@@ -843,7 +836,7 @@ void atois(Value *buf, Value *len, AllocaInst *mem_result, Context *context) {
     Builder->CreateCall(debugInt, ArgsV);
   }
 #endif
-  if (dynamic_cast<ParallelContext *>(context)) {
+  if (dynamic_cast<OlapParallelContext *>(context)) {
     Builder->CreateCall(
         Intrinsic::getDeclaration(context->getModule(), Intrinsic::trap));
     Builder->CreateUnreachable();

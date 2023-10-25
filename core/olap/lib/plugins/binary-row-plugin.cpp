@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -101,7 +101,7 @@ ProteusValueMemory BinaryRowPlugin::readPath(string activeRelation,
                                              Bindings bindings,
                                              const char *pathVar,
                                              RecordAttribute attr,
-                                             ParallelContext *context) {
+                                             OlapParallelContext *context) {
   ProteusValueMemory mem_projection;
   {
     const OperatorState *state = bindings.state;
@@ -125,7 +125,7 @@ ProteusValueMemory BinaryRowPlugin::readPath(string activeRelation,
 
 ProteusValueMemory BinaryRowPlugin::readValue(ProteusValueMemory mem_value,
                                               const ExpressionType *type,
-                                              ParallelContext *context) {
+                                              OlapParallelContext *context) {
   return mem_value;
 }
 
@@ -160,7 +160,7 @@ void BinaryRowPlugin::finish() {
 
 llvm::Value *BinaryRowPlugin::getValueSize(ProteusValueMemory mem_value,
                                            const ExpressionType *type,
-                                           ParallelContext *context) {
+                                           OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:
@@ -459,7 +459,7 @@ void BinaryRowPlugin::readAsFloatLLVM(
 }
 
 void BinaryRowPlugin::generate(const ::Operator &producer,
-                               ParallelContext *context) {
+                               OlapParallelContext *context) {
   auto f = context->getGlobalFunction();
   // Prepare
   LLVMContext &llvmContext = context->getLLVMContext();

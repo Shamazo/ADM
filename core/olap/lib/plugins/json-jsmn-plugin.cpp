@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -25,7 +25,7 @@
 
 #include "lib/operators/operators.hpp"
 // Definitely not enough as a solution
-//#define MAXTOKENS 1000
+// #define MAXTOKENS 1000
 
 using namespace llvm;
 
@@ -559,7 +559,7 @@ void JSONPlugin::skipToEnd() {
 ProteusValueMemory JSONPlugin::readPath(string activeRelation,
                                         Bindings wrappedBindings,
                                         const char *path, RecordAttribute attr,
-                                        ParallelContext *context) {
+                                        OlapParallelContext *context) {
   /**
    * FIXME Add an extra (generated) check here
    * Only objects are relevant to path expressions
@@ -920,7 +920,7 @@ ProteusValueMemory JSONPlugin::readPathInternal(
 
 ProteusValueMemory JSONPlugin::readValue(ProteusValueMemory mem_value,
                                          const ExpressionType *type,
-                                         ParallelContext *context) {
+                                         OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
   Type *charPtrType = Type::getInt8PtrTy(llvmContext);
   Type *int64Type = Type::getInt64Ty(llvmContext);
@@ -1570,7 +1570,7 @@ ProteusValue JSONPlugin::hashValue(ProteusValueMemory mem_value,
 //                                    &ifBlock, &elseBlock,endBlock);
 //    Value* minus_1 = context->createInt64(-1);
 //    Value *cond = Builder->CreateICmpNE(tokenNo,minus_1);
-//#ifdef DEBUG
+// #ifdef DEBUG
 ////            ArgsV.clear();
 ////            ArgsV.push_back(context->createInt32(-34));
 ////            Builder->CreateCall(debugInt, ArgsV);
@@ -1578,56 +1578,56 @@ ProteusValue JSONPlugin::hashValue(ProteusValueMemory mem_value,
 ////            ArgsV.push_back(tokenNo);
 ////            Builder->CreateCall(debugInt64, ArgsV);
 ////            ArgsV.clear();
-//#endif
-//    Builder->CreateCondBr(cond,ifBlock,elseBlock);
+// #endif
+//     Builder->CreateCondBr(cond,ifBlock,elseBlock);
 //
-//    /**
-//     * IF BLOCK (tokenNo != -1)
-//     */
-//    Builder->SetInsertPoint(ifBlock);
+//     /**
+//      * IF BLOCK (tokenNo != -1)
+//      */
+//     Builder->SetInsertPoint(ifBlock);
 //
-//    hashFunc = context->getFunction("hashStringC");
-//    ArgsV.clear();
-//    ArgsV.push_back(bufPtr);
-//    //FIXME tmp! - must make token_start and token_end datatype size_t
-//    Value* token_start64 = Builder->CreateSExt(token_start,int64Type);
-//    Value* token_end64 = Builder->CreateSExt(token_end,int64Type);
-//    ArgsV.push_back(token_start64);
-//    ArgsV.push_back(token_end64);
+//     hashFunc = context->getFunction("hashStringC");
+//     ArgsV.clear();
+//     ArgsV.push_back(bufPtr);
+//     //FIXME tmp! - must make token_start and token_end datatype size_t
+//     Value* token_start64 = Builder->CreateSExt(token_start,int64Type);
+//     Value* token_end64 = Builder->CreateSExt(token_end,int64Type);
+//     ArgsV.push_back(token_start64);
+//     ArgsV.push_back(token_end64);
 //
-//    hashedValue = Builder->CreateCall(hashFunc, ArgsV, "hashStringC");
-//    Builder->CreateStore(hashedValue, mem_hashedValue);
-//    Builder->CreateStore(context->createFalse(), mem_hashedValue_isNull);
+//     hashedValue = Builder->CreateCall(hashFunc, ArgsV, "hashStringC");
+//     Builder->CreateStore(hashedValue, mem_hashedValue);
+//     Builder->CreateStore(context->createFalse(), mem_hashedValue_isNull);
 //
-//    Builder->CreateBr(endBlock);
+//     Builder->CreateBr(endBlock);
 //
-//    /**
-//     * ELSE BLOCK
-//     * "nullptr" case
-//     * TODO What should the behavior be in this case?
-//     *
-//     * c-p from Sybase manual: If the grouping column contains a null value,
-//     * that row becomes its own group in the results.
-//     * If the grouping column contains more than one null value,
-//     * the null values form a single group.
-//     */
-//    Builder->SetInsertPoint(elseBlock);
+//     /**
+//      * ELSE BLOCK
+//      * "nullptr" case
+//      * TODO What should the behavior be in this case?
+//      *
+//      * c-p from Sybase manual: If the grouping column contains a null value,
+//      * that row becomes its own group in the results.
+//      * If the grouping column contains more than one null value,
+//      * the null values form a single group.
+//      */
+//     Builder->SetInsertPoint(elseBlock);
 //
-//    Value* undefValue =
-//    Constant::getNullValue(mem_hashedValue->getAllocatedType());
-//    Builder->CreateStore(undefValue, mem_hashedValue);
-//    Builder->CreateStore(context->createTrue(), mem_hashedValue_isNull);
-//    Builder->CreateBr(endBlock);
+//     Value* undefValue =
+//     Constant::getNullValue(mem_hashedValue->getAllocatedType());
+//     Builder->CreateStore(undefValue, mem_hashedValue);
+//     Builder->CreateStore(context->createTrue(), mem_hashedValue_isNull);
+//     Builder->CreateBr(endBlock);
 //
-//    Builder->SetInsertPoint(endBlock);
+//     Builder->SetInsertPoint(endBlock);
 //
-//    ProteusValue valWrapper;
-//    valWrapper.value =
-//    Builder->CreateLoad(mem_hashedValue->getType()->getPointerElementType(),
-//    mem_hashedValue); valWrapper.isNull =
-//    Builder->CreateLoad(mem_hashedValue_isNull->getType()->getPointerElementType(),
-//    mem_hashedValue_isNull); return valWrapper;
-//}
+//     ProteusValue valWrapper;
+//     valWrapper.value =
+//     Builder->CreateLoad(mem_hashedValue->getType()->getPointerElementType(),
+//     mem_hashedValue); valWrapper.isNull =
+//     Builder->CreateLoad(mem_hashedValue_isNull->getType()->getPointerElementType(),
+//     mem_hashedValue_isNull); return valWrapper;
+// }
 void JSONPlugin::flushChunk(ProteusValueMemory mem_value, Value *fileName) {
   LLVMContext &llvmContext = context->getLLVMContext();
   Type *charPtrType = Type::getInt8PtrTy(llvmContext);
@@ -1693,7 +1693,7 @@ void JSONPlugin::flushChunk(ProteusValueMemory mem_value, Value *fileName) {
 }
 
 void JSONPlugin::generate(const ::Operator &producer,
-                          ParallelContext *context) {
+                          OlapParallelContext *context) {
   return scanObjects(producer, context->getGlobalFunction());
 }
 
@@ -1704,7 +1704,7 @@ void JSONPlugin::finish() {
 
 llvm::Value *JSONPlugin::getValueSize(ProteusValueMemory mem_value,
                                       const ExpressionType *type,
-                                      ParallelContext *context) {
+                                      OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:

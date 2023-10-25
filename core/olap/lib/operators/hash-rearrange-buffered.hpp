@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -30,8 +30,8 @@
 
 class HashRearrangeBuffered : public UnaryOperator {
  public:
-  HashRearrangeBuffered(Operator *const child, ParallelContext *const context,
-                        int numOfBuckets,
+  HashRearrangeBuffered(Operator *const child,
+                        OlapParallelContext *const context, int numOfBuckets,
                         const vector<expressions::Expression *> &wantedFields,
                         expression_t hashExpr,
                         RecordAttribute *hashProject = nullptr)
@@ -47,7 +47,7 @@ class HashRearrangeBuffered : public UnaryOperator {
     LOG(INFO) << "Collapsing HashRearrangeBuffered operator";
   }
 
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
                const OperatorState &childState) override;
   bool isFiltering() const override { return false; }
@@ -82,7 +82,7 @@ class HashRearrangeBuffered : public UnaryOperator {
 
   int64_t cap;
 
-  ParallelContext *const context;
+  OlapParallelContext *const context;
 
   PipelineGen *closingPip;
   PipelineGen *closingPip1;

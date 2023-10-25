@@ -25,7 +25,7 @@
 
 #include <olap/util/jit/control-flow/if-statement.hpp>
 
-void Unnest::produce_(ParallelContext *context) {
+void Unnest::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 }
 

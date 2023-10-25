@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2019
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,6 +21,7 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <codegen/jit/pipeline.hpp>
 #include <olap/plan/prepared-statement.hpp>
 #include <olap/util/parallel-context.hpp>
 #include <platform/memory/memory-manager.hpp>
@@ -33,7 +34,6 @@
 #include "lib/util/caching.hpp"
 #include "lib/util/catalog.hpp"
 #include "lib/util/flush-operator-tree.hpp"
-#include "lib/util/jit/pipeline.hpp"
 #include "plan-parser.hpp"
 
 static constexpr auto defaultCatalogJSON = "inputs";
@@ -168,7 +168,7 @@ PreparedStatement PreparedStatement::from(
   {
     time_block t("Tcodegen: ");
 
-    auto ctx = new ParallelContext(label, false);
+    auto ctx = new OlapParallelContext(label, false);
     CatalogParser catalog{defaultCatalogJSON, ctx};
     auto label_ptr = new std::string{label};
     PlanExecutor exec{planPath.c_str(), catalog, std::move(affFactory),
@@ -197,7 +197,7 @@ PreparedStatement PreparedStatement::from(
   {
     time_block t("Tcodegen: ");
 
-    auto ctx = new ParallelContext(label, false);
+    auto ctx = new OlapParallelContext(label, false);
     CatalogParser catalog{catalogJSON.c_str(), ctx};
     auto label_ptr = new std::string{label};
     PlanExecutor exec{planPath, catalog, label_ptr->c_str()};

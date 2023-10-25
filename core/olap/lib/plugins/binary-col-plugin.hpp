@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -26,9 +26,9 @@
 #include <olap/plugins/plugins.hpp>
 #include <storage/storage-manager.hpp>
 
-//#ifdef DEBUG
+// #ifdef DEBUG
 #define DEBUGBINCOL
-//#endif
+// #endif
 
 class Context;
 
@@ -65,16 +65,17 @@ class BinaryColPlugin : public Plugin {
   string &getName() override { return fnamePrefix; }
   void init() override;
   //    void initCached();
-  void generate(const Operator &producer, ParallelContext *context) override;
+  void generate(const Operator &producer,
+                OlapParallelContext *context) override;
   void finish() override;
   ProteusValueMemory readPath(string activeRelation, Bindings bindings,
                               const char *pathVar, RecordAttribute attr,
-                              ParallelContext *context) override;
+                              OlapParallelContext *context) override;
   ProteusValueMemory readValue(ProteusValueMemory mem_value,
                                const ExpressionType *type,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   ProteusValue readCachedValue(CacheInfo info, const OperatorState &currState,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   //    {
   //        string error_msg = "[BinaryColPlugin: ] No caching support should be
   //        needed"; LOG(ERROR) << error_msg; throw runtime_error(error_msg);
@@ -138,7 +139,7 @@ class BinaryColPlugin : public Plugin {
 
   llvm::Value *getValueSize(ProteusValueMemory mem_value,
                             const ExpressionType *type,
-                            ParallelContext *context) override;
+                            OlapParallelContext *context) override;
 
   ExpressionType *getOIDType() override { return new Int64Type(); }
 

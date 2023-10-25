@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2018
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -37,7 +37,7 @@
 
 class PreparedStatement;
 class CatalogParser;
-class ParallelContext;
+class OlapParallelContext;
 
 class [[nodiscard]] pg {
  private:
@@ -60,10 +60,10 @@ class [[nodiscard]] pg {
  */
 class RelBuilder {
  private:
-  ParallelContext* ctx;
+  OlapParallelContext* ctx;
   Operator* root;
 
-  RelBuilder(ParallelContext* ctx, Operator* root);
+  RelBuilder(OlapParallelContext* ctx, Operator* root);
   RelBuilder(const RelBuilder& builder, Operator* root);
 
   RelBuilder apply(Operator* op) const;
@@ -85,7 +85,7 @@ class RelBuilder {
 
  private:
   RelBuilder();
-  explicit RelBuilder(ParallelContext* ctx);
+  explicit RelBuilder(OlapParallelContext* ctx);
 
   friend class RelBuilderFactory;
 

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -46,7 +46,7 @@ HashGroupByChained::HashGroupByChained(std::vector<GpuAggrMatExpr> agg_exprs,
       maxInputSize(maxInputSize),
       opLabel(std::move(opLabel)) {}
 
-void HashGroupByChained::produce_(ParallelContext *context) {
+void HashGroupByChained::produce_(OlapParallelContext *context) {
   prepareDescription(context);
   generate_scan(context);
 
@@ -62,12 +62,12 @@ void HashGroupByChained::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void HashGroupByChained::consume(ParallelContext *context,
+void HashGroupByChained::consume(OlapParallelContext *context,
                                  const OperatorState &childState) {
   generate_build(context, childState);
 }
 
-void HashGroupByChained::prepareDescription(ParallelContext *context) {
+void HashGroupByChained::prepareDescription(OlapParallelContext *context) {
   agg_exprs.emplace_back(new expressions::IntConstant(0), ~((size_t)0), 0);
 
   size_t bitoffset = 0;
@@ -142,7 +142,7 @@ void HashGroupByChained::prepareDescription(ParallelContext *context) {
   agg_exprs.erase(agg_exprs.begin());  // erase dummy entry for next
 }
 
-void HashGroupByChained::buildHashTableFormat(ParallelContext *context) {
+void HashGroupByChained::buildHashTableFormat(OlapParallelContext *context) {
   for (const auto &t : ptr_types) {
     out_param_ids.push_back(context->appendStateVar(t));  //, true, false));
   }
@@ -183,7 +183,7 @@ void HashGroupByChained::buildHashTableFormat(ParallelContext *context) {
         Type *substate_t = f_t->getParamType(f_t->getNumParams() - 1);
 
         Value *substate = Builder->CreateBitCast(
-            ((ParallelContext *)context)->getSubStateVar(), substate_t);
+            ((OlapParallelContext *)context)->getSubStateVar(), substate_t);
         args.emplace_back(substate);
 
         Builder->CreateCall(f, args);
@@ -191,7 +191,7 @@ void HashGroupByChained::buildHashTableFormat(ParallelContext *context) {
 }
 
 Value *HashGroupByChained::hash(const std::vector<expression_t> &exprs,
-                                ParallelContext *context,
+                                OlapParallelContext *context,
                                 const OperatorState &childState) {
   Value *hash;
   if (exprs.size() == 1) {
@@ -210,7 +210,7 @@ Value *HashGroupByChained::hash(const std::vector<expression_t> &exprs,
 }
 
 std::vector<llvm::Value *> HashGroupByChained::prepareHashTableEntry(
-    ParallelContext *context, const OperatorState &childState) const {
+    OlapParallelContext *context, const OperatorState &childState) const {
   Value *head_ptr = context->getStateVar(head_param_id);
   Value *eochain = ConstantInt::get((IntegerType *)head_ptr->getType()
                                         ->getPointerElementType()
@@ -253,7 +253,7 @@ std::vector<llvm::Value *> HashGroupByChained::prepareHashTableEntry(
 }
 
 void HashGroupByChained::destroyHashTableEntry(
-    ParallelContext *context, const OperatorState &childState,
+    OlapParallelContext *context, const OperatorState &childState,
     std::vector<llvm::Value *> out_vals) const {
   IRBuilder<> *Builder = context->getBuilder();
   for (const GpuAggrMatExpr &mexpr : agg_exprs) {
@@ -264,7 +264,7 @@ void HashGroupByChained::destroyHashTableEntry(
   }
 }
 
-void HashGroupByChained::generate_build(ParallelContext *context,
+void HashGroupByChained::generate_build(OlapParallelContext *context,
                                         const OperatorState &childState) {
   IRBuilder<> *Builder = context->getBuilder();
   LLVMContext &llvmContext = context->getLLVMContext();
@@ -431,7 +431,7 @@ void HashGroupByChained::generate_build(ParallelContext *context,
 
   // Value * next =
   // Builder->CreateExtractValue(Builder->CreateAtomicCmpXchg(Builder->CreateInBoundsGEP(((const
-  // ParallelContext *) context)->getStateVar(out_param_ids[0]),
+  // OlapParallelContext *) context)->getStateVar(out_param_ids[0]),
   // std::vector<Value
   // *>{current, context->createInt32(0)}),
   //                                             eochain,
@@ -503,7 +503,7 @@ void HashGroupByChained::generate_build(ParallelContext *context,
   // if (written) next[idx].next = idx;
   context->gen_if({Builder->CreateLoad(
       mem_written->getType()->getPointerElementType(), mem_written)})([&]() {
-    // Value * str = UndefValue::get(((const ParallelContext *)
+    // Value * str = UndefValue::get(((const OlapParallelContext *)
     // context)->getStateVar(out_param_ids[0])->getType()->getPointerElementType());
     // str = Builder->CreateInsertValue(str, Builder->CreateLoad(mem_idx), 0);
     Value *inv_ptr = Builder->CreateInBoundsGEP(
@@ -635,7 +635,7 @@ void HashGroupByChained::generate_build(ParallelContext *context,
 static std::mutex garbage_m;
 static std::map<std::pair<void *, int32_t>, std::vector<void *>> garbage;
 
-void HashGroupByChained::generate_scan(ParallelContext *context) {
+void HashGroupByChained::generate_scan(OlapParallelContext *context) {
   // Prepare
   LLVMContext &llvmContext = context->getLLVMContext();
 
@@ -846,9 +846,9 @@ void HashGroupByChained::generate_scan(ParallelContext *context) {
   //  Any new code will be inserted in AfterBB.
   Builder->SetInsertPoint(context->getEndingBlock());
 
-  // ((ParallelContext *) context)->registerOpen (this, [this](Pipeline *
+  // ((OlapParallelContext *) context)->registerOpen (this, [this](Pipeline *
   // pip){this->open (pip);});
-  // ((ParallelContext *) context)->registerClose(this, [this](Pipeline *
+  // ((OlapParallelContext *) context)->registerClose(this, [this](Pipeline *
   // pip){this->close(pip);});
 }
 

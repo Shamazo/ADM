@@ -21,19 +21,17 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "select.hpp"
+#include <olap/util/parallel-context.hpp>
 
-#include <olap/util/jit/control-flow/if-statement.hpp>
+#include "lib/util/jit/olap-pipeline.hpp"
 
-void Select::produce_(OlapParallelContext *context) {
-  getChild()->produce(context);
-}
+OlapParallelContext::OlapParallelContext(const std::string &moduleName,
+                                         bool gpuRoot)
+    : ParallelContext(moduleName) {
+  if (gpuRoot)
+    pushDeviceProvider(&(OlapGpuPipelineGenFactory::getInstance()));
+  else
+    pushDeviceProvider(&(OlapCpuPipelineGenFactory::getInstance()));
 
-void Select::consume(OlapParallelContext *context,
-                     const OperatorState &childState) {
-  gen_if(expr, childState, context)([&] {
-    // Triggering parent
-    OperatorState newState{*this, childState};
-    getParent()->consume(context, newState);
-  });
+  pushPipeline();
 }

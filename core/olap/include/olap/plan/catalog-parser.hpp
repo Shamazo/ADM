@@ -37,7 +37,7 @@ namespace filesystem = std::experimental::filesystem;
 }
 #endif
 
-class ParallelContext;
+class OlapParallelContext;
 
 typedef struct InputInfo {
   std::string path;
@@ -48,11 +48,11 @@ typedef struct InputInfo {
 
 class CatalogParser {
   std::filesystem::path catalogPath;
-  ParallelContext *context;
+  OlapParallelContext *context;
 
  public:
   CatalogParser(std::filesystem::path catalogPath,
-                ParallelContext *context = nullptr);
+                OlapParallelContext *context = nullptr);
 
   static CatalogParser &getInstance();
 
@@ -74,7 +74,7 @@ class CatalogParser {
 
   InputInfo *getOrCreateInputInfo(std::string inputName);
   InputInfo *getOrCreateInputInfo(std::string inputName,
-                                  ParallelContext *context);
+                                  OlapParallelContext *context);
 
   void setInputInfo(std::string inputName, InputInfo *info) {
     inputs[inputName] = info;

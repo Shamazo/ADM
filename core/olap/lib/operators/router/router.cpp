@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,6 +23,7 @@
 
 #include "router.hpp"
 
+#include <codegen/jit/pipeline.hpp>
 #include <cstring>
 #include <olap/routing/routing-policy.hpp>
 #include <olap/util/demangle.hpp>
@@ -31,11 +32,10 @@
 #include <platform/util/timing.hpp>
 
 #include "lib/expressions/expressions-generator.hpp"
-#include "lib/util/jit/pipeline.hpp"
 
 using namespace llvm;
 
-void Router::produce_(ParallelContext *context) {
+void Router::produce_(OlapParallelContext *context) {
   generate_catch(context);
 
   context->popPipeline();
@@ -51,7 +51,7 @@ void Router::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void Router::generate_catch(ParallelContext *context) {
+void Router::generate_catch(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
   // IRBuilder<> * Builder       = context->getBuilder    ();
   // BasicBlock  * insBB         = Builder->GetInsertBlock();
@@ -65,7 +65,7 @@ void Router::generate_catch(ParallelContext *context) {
 
   Type *oidType = ptoid->getLLVMType(llvmContext);
 
-  // Value * subState   = ((ParallelContext *) context)->getSubStateVar();
+  // Value * subState   = ((OlapParallelContext *) context)->getSubStateVar();
   // Value * subStatePtr = context->CreateEntryBlockAlloca(F, "subStatePtr",
   // subState->getType());
 
@@ -354,7 +354,7 @@ std::unique_ptr<routing::RoutingPolicy> Router::getPolicy() const {
   assert(false);
 }
 
-void Router::consume(ParallelContext *const context,
+void Router::consume(OlapParallelContext *const context,
                      const OperatorState &childState) {
   // Generate throw code
   LLVMContext &llvmContext = context->getLLVMContext();

@@ -26,7 +26,7 @@
 #include <codegen/expressions/indexed-seq.hpp>
 #include <lib/expressions/expressions-generator.hpp>
 
-void BloomFilterBuild::produce_(ParallelContext *context) {
+void BloomFilterBuild::produce_(OlapParallelContext *context) {
   auto t = getFilterType(context);
 
   filter_ptr = context->appendStateVar(
@@ -48,7 +48,7 @@ void BloomFilterBuild::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void BloomFilterBuild::consume(ParallelContext *context,
+void BloomFilterBuild::consume(OlapParallelContext *context,
                                const OperatorState &childState) {
   auto ref = findInFilter(context, childState);
 

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2019
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -104,7 +104,7 @@ int lookupInDictionary(string s, const rapidjson::Value &val) {
 }
 
 expressions::extract_unit ExpressionParser::parseUnitRange(
-    std::string range, ParallelContext *ctx) {
+    std::string range, OlapParallelContext *ctx) {
   if (range == "YEAR") return expressions::extract_unit::YEAR;
   if (range == "MONTH") return expressions::extract_unit::MONTH;
   if (range == "DAY") return expressions::extract_unit::DAYOFMONTH;
@@ -135,7 +135,7 @@ expressions::extract_unit ExpressionParser::parseUnitRange(
 }
 
 expression_t ExpressionParser::parseExpression(const rapidjson::Value &val,
-                                               ParallelContext *ctx) {
+                                               OlapParallelContext *ctx) {
   assert(val.IsObject());
   expression_t ret = parseExpressionWithoutRegistering(val, ctx);
   if (val.HasMember("register_as")) {
@@ -168,7 +168,7 @@ expression_t ExpressionParser::parseExpression(const rapidjson::Value &val,
  */
 
 expression_t ExpressionParser::parseExpressionWithoutRegistering(
-    const rapidjson::Value &val, ParallelContext *ctx) {
+    const rapidjson::Value &val, OlapParallelContext *ctx) {
   assert(val.IsObject());
 
   const char *keyExpression = "expression";

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -61,16 +61,17 @@ class CSVPlugin : public Plugin {
             bool stringBrackets = true, bool hasHeader = false);
   string &getName() override { return fname; }
   void init() override;
-  void generate(const ::Operator &producer, ParallelContext *context) override;
+  void generate(const ::Operator &producer,
+                OlapParallelContext *context) override;
   void finish() override;
   ProteusValueMemory readPath(string activeRelation, Bindings bindings,
                               const char *pathVar, RecordAttribute attr,
-                              ParallelContext *context) override;
+                              OlapParallelContext *context) override;
   ProteusValueMemory readValue(ProteusValueMemory mem_value,
                                const ExpressionType *type,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   ProteusValue readCachedValue(CacheInfo info, const OperatorState &currState,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   virtual ProteusValue readCachedValue(
       CacheInfo info, const map<RecordAttribute, ProteusValueMemory> &bindings);
 
@@ -112,7 +113,7 @@ class CSVPlugin : public Plugin {
 
   llvm::Value *getValueSize(ProteusValueMemory mem_value,
                             const ExpressionType *type,
-                            ParallelContext *context) override;
+                            OlapParallelContext *context) override;
 
   /* Export PM */
   /* XXX I think it's the 'Caching Service' that should

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2018
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -34,7 +34,7 @@ Project::Project(vector<expression_t> outputExprs, string relName,
       relName(relName),
       outputExprs(outputExprs) {}
 
-void Project::produce_(ParallelContext *context) {
+void Project::produce_(OlapParallelContext *context) {
   Plugin *pg = Catalog::getInstance().getPlugin(relName);
   auto t = pg->getOIDType()->getLLVMType(context->getLLVMContext());
   oid_id = context->appendStateVar(

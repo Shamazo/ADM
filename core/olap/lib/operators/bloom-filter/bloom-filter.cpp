@@ -61,13 +61,13 @@ BloomFilter::BloomFilter(Operator *child, expression_t e, size_t filterSize,
       filterSize(filterSize),
       bloomId(bloomId) {}
 
-llvm::Type *BloomFilter::getFilterType(ParallelContext *context) const {
+llvm::Type *BloomFilter::getFilterType(OlapParallelContext *context) const {
   return llvm::PointerType::getUnqual(llvm::ArrayType::get(
       llvm::Type::getInt1Ty(context->getLLVMContext()), filterSize));
 }
 
 expressions::RefExpression BloomFilter::findInFilter(
-    ParallelContext *context, const OperatorState &childState) const {
+    OlapParallelContext *context, const OperatorState &childState) const {
   auto fptr_v = context->getStateVar(filter_ptr);
 
   auto btype = new BoolType();

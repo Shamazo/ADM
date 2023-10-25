@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -95,7 +95,8 @@ void CSVPlugin::init() {
   NamedValuesCSV[bufVar] = bufMem;
 };
 
-void CSVPlugin::generate(const ::Operator &producer, ParallelContext *context) {
+void CSVPlugin::generate(const ::Operator &producer,
+                         OlapParallelContext *context) {
   return scanCSV(producer, context->getGlobalFunction());
 }
 
@@ -105,7 +106,7 @@ void CSVPlugin::generate(const ::Operator &producer, ParallelContext *context) {
 ProteusValueMemory CSVPlugin::readPath(string activeRelation, Bindings bindings,
                                        const char *pathVar,
                                        RecordAttribute attr,
-                                       ParallelContext *context) {
+                                       OlapParallelContext *context) {
   const OperatorState &state = *(bindings.state);
   RecordAttribute tmpKey(fname, pathVar, this->getOIDType());
   return state[tmpKey];
@@ -113,7 +114,7 @@ ProteusValueMemory CSVPlugin::readPath(string activeRelation, Bindings bindings,
 
 ProteusValueMemory CSVPlugin::readValue(ProteusValueMemory mem_value,
                                         const ExpressionType *type,
-                                        ParallelContext *context) {
+                                        OlapParallelContext *context) {
   return mem_value;
 }
 
@@ -281,7 +282,7 @@ void CSVPlugin::finish() {
 
 llvm::Value *CSVPlugin::getValueSize(ProteusValueMemory mem_value,
                                      const ExpressionType *type,
-                                     ParallelContext *context) {
+                                     OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -52,7 +52,7 @@ class Nest : public UnaryOperator {
        const list<expressions::InputArgument> &g_nullToZero,
        Operator *const child, char *opLabel, Materializer &mat);
   ~Nest() override { LOG(INFO) << "Collapsing Nest operator"; }
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
                const OperatorState &childState) override;
   Materializer &getMaterializer() { return mat; }

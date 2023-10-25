@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -40,7 +40,7 @@ class UnionAll : public Router {
 
   ~UnionAll() override { LOG(INFO) << "Collapsing UnionAll operator"; }
 
-  void produce_(ParallelContext *context) override;
+  void produce_(OlapParallelContext *context) override;
 
   DegreeOfParallelism getDOPServers() const override {
     auto dop = children[0]->getDOPServers();

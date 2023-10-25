@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -273,9 +273,9 @@ ProteusValue ExpressionGeneratorVisitor::visit(
         cout << "...but is not useable " << endl;
 #endif
       } else {
-        assert(dynamic_cast<ParallelContext *>(context));
+        assert(dynamic_cast<OlapParallelContext *>(context));
         return plugin->readCachedValue(
-            info, currState, dynamic_cast<ParallelContext *>(context));
+            info, currState, dynamic_cast<OlapParallelContext *>(context));
       }
     } else {
 #ifdef DEBUGCACHING
@@ -316,10 +316,10 @@ ProteusValue ExpressionGeneratorVisitor::visit(
       }
 
       // Path involves a projection / an object
-      assert(dynamic_cast<ParallelContext *>(context));
+      assert(dynamic_cast<OlapParallelContext *>(context));
       mem_path = plugin->readPath(
           activeRelation, bindings, e->getProjectionName().c_str(),
-          e->getAttribute(), dynamic_cast<ParallelContext *>(context));
+          e->getAttribute(), dynamic_cast<OlapParallelContext *>(context));
     } else {
       // Path involves a primitive datatype
       //(e.g., the result of unnesting a list of primitives)
@@ -330,9 +330,9 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 
       mem_path = currState[tupleIdentifier];
     }
-    assert(dynamic_cast<ParallelContext *>(context));
+    assert(dynamic_cast<OlapParallelContext *>(context));
     mem_val = plugin->readValue(mem_path, e->getExpressionType(),
-                                dynamic_cast<ParallelContext *>(context));
+                                dynamic_cast<OlapParallelContext *>(context));
     Value *val = Builder->CreateLoad(
         mem_val.mem->getType()->getPointerElementType(), mem_val.mem);
     ProteusValue valWrapper;
@@ -377,24 +377,24 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 //        //<< e->getAttribute().getAttrName()<< endl;
 //        CacheInfo info = cache.getCache(e);
 //        if (info.structFieldNo != -1) {
-//#ifdef DEBUGCACHING
+// #ifdef DEBUGCACHING
 //            cout << "[Generator: ] Expression found for "
 //                    << e->getOriginalRelationName() << "."
 //                    << e->getAttribute().getAttrName() << "!" << endl;
-//#endif
+// #endif
 //            if (!cache.getCacheIsFull(e)) {
-//#ifdef DEBUGCACHING
+// #ifdef DEBUGCACHING
 //                cout << "...but is not useable " << endl;
-//#endif
+// #endif
 //            } else {
 //                return plugin->readCachedValue(info, currState);
 //            }
 //        } else {
-//#ifdef DEBUGCACHING
+// #ifdef DEBUGCACHING
 //            cout << "[Generator: ] No cache found for "
 //                    << e->getOriginalRelationName() << "."
 //                    << e->getAttribute().getAttrName() << "!" << endl;
-//#endif
+// #endif
 //        }
 //        //}
 //    }
@@ -437,7 +437,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 //        Value *val =
 //        Builder->CreateLoad(mem_val.mem->getType()->getPointerElementType(),
 //        mem_val.mem);
-//#ifdef DEBUG
+// #ifdef DEBUG
 //        {
 //            /* Printing the pos. to be marked */
 ////            if(e->getProjectionName() == "age") {
@@ -468,7 +468,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 //                endl;
 //            }
 //        }
-//#endif
+// #endif
 //        ProteusValue valWrapper;
 //        valWrapper.value = val;
 //        valWrapper.isNull = mem_val.isNull;
@@ -973,7 +973,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 
 ProteusValue ExpressionGeneratorVisitor::visit(
     const expressions::PlaceholderExpression *e) {
-  auto ctx = dynamic_cast<const ParallelContext *>(context);
+  auto ctx = dynamic_cast<const OlapParallelContext *>(context);
   assert(ctx);
   auto session = ctx->getSessionParametersPtr();
   auto Builder = context->getBuilder();

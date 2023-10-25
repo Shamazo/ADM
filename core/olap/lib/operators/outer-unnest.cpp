@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -25,7 +25,7 @@
 
 using namespace llvm;
 
-void OuterUnnest::produce_(ParallelContext *context) {
+void OuterUnnest::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 }
 

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,7 +23,7 @@
 
 #include "unionall.hpp"
 
-void UnionAll::produce_(ParallelContext *context) {
+void UnionAll::produce_(OlapParallelContext *context) {
   generate_catch(context);
 
   catch_pip = context->operator->();

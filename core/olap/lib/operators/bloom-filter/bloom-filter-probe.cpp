@@ -26,7 +26,7 @@
 #include <olap/expressions/expressions/ref-expression.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 
-void BloomFilterProbe::produce_(ParallelContext *context) {
+void BloomFilterProbe::produce_(OlapParallelContext *context) {
   auto t = getFilterType(context);
 
   filter_ptr = context->appendStateVar(
@@ -42,7 +42,7 @@ void BloomFilterProbe::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void BloomFilterProbe::consume(ParallelContext *context,
+void BloomFilterProbe::consume(OlapParallelContext *context,
                                const OperatorState &childState) {
   auto ref = findInFilter(context, childState);
 

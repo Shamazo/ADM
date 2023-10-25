@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -27,7 +27,7 @@
 #include "lib/operators/operators.hpp"
 
 //"Should" be enough on a per-row basis
-//#define MAXTOKENS 1000
+// #define MAXTOKENS 1000
 
 using namespace llvm;
 
@@ -152,7 +152,7 @@ struct pmJSON {
 //
 //}
 
-extern "C" JSONPlugin *createJsonPlugin(ParallelContext *context,
+extern "C" JSONPlugin *createJsonPlugin(OlapParallelContext *context,
                                         std::string fname, RecordType rec,
                                         std::vector<RecordAttribute *> &) {
   return new JSONPlugin(context, fname, new RecordType(rec), /* FIXME */ 10,
@@ -545,7 +545,7 @@ ProteusValue JSONPlugin::collectionHasNext(
 //    context->getStructElem(mem_currentTokenId.mem, 0); Value *val_rowId =
 //    context->getStructElem(mem_currentTokenId.mem, 1); Value
 //    *val_currentTokenNo = context->getStructElem(mem_currentTokenId.mem, 2);
-//#ifdef DEBUGJSON
+// #ifdef DEBUGJSON
 //    {
 //        //Printing the active token that will be forwarded
 //        vector<Value*> ArgsV;
@@ -554,7 +554,7 @@ ProteusValue JSONPlugin::collectionHasNext(
 //        Function* debugInt = context->getFunction("printi64");
 //        Builder->CreateCall(debugInt, ArgsV);
 //    }
-//#endif
+// #endif
 //    Type *idType = (mem_currentTokenId.mem)->getAllocatedType();
 //    AllocaInst *mem_tokenToReturnId =
 //                context->CreateEntryBlockAlloca(F,"mem_NestedToken",idType);
@@ -697,7 +697,7 @@ ProteusValue JSONPlugin::collectionHasNext(
 /// Builder->CreateLoad(mem_tmp->getType()->getPointerElementType(), mem_tmp); /
 /// Builder->CreateStore(val_tmp, mem_tokenToReturnId);
 //
-//#ifdef DEBUGJSON
+// #ifdef DEBUGJSON
 //    {
 //        //Printing the active token that will be forwarded
 //        vector<Value*> ArgsV;
@@ -708,7 +708,7 @@ ProteusValue JSONPlugin::collectionHasNext(
 //        = context->getFunction("printi64"); Builder->CreateCall(debugInt,
 //        ArgsV);
 //    }
-//#endif
+// #endif
 //    ProteusValueMemory mem_newTokenIdWrap;
 //    mem_newTokenIdWrap.mem = mem_tokenToReturnId;
 //    mem_newTokenIdWrap.isNull = context->createFalse();
@@ -1142,7 +1142,7 @@ llvm::Value *JSONPlugin::getEnd(llvm::Value *jsmnToken) {
 ProteusValueMemory JSONPlugin::readPath(string activeRelation,
                                         Bindings wrappedBindings,
                                         const char *path, RecordAttribute attr,
-                                        ParallelContext *context) {
+                                        OlapParallelContext *context) {
   if (staticSchema)
     return readPredefinedPath(activeRelation, wrappedBindings, attr);
   /**
@@ -1800,7 +1800,7 @@ ProteusValueMemory JSONPlugin::readPathInternal(
 
 ProteusValueMemory JSONPlugin::readValue(ProteusValueMemory mem_value,
                                          const ExpressionType *type,
-                                         ParallelContext *context) {
+                                         OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
   Type *int64Type = Type::getInt64Ty(llvmContext);
   Type *int32Type = Type::getInt32Ty(llvmContext);
@@ -2066,7 +2066,7 @@ ProteusValueMemory JSONPlugin::readValue(ProteusValueMemory mem_value,
 
 ProteusValue JSONPlugin::readCachedValue(CacheInfo info,
                                          const OperatorState &currState,
-                                         ParallelContext *context) {
+                                         OlapParallelContext *context) {
   return readCachedValue(info, currState.getBindings());
 }
 
@@ -2751,7 +2751,7 @@ void JSONPlugin::flushValueEager(ProteusValue valWrapper,
 }
 
 void JSONPlugin::generate(const ::Operator &producer,
-                          ParallelContext *context) {
+                          OlapParallelContext *context) {
   return scanObjects(producer, context->getGlobalFunction());
 }
 
@@ -2762,7 +2762,7 @@ void JSONPlugin::finish() {
 
 llvm::Value *JSONPlugin::getValueSize(ProteusValueMemory mem_value,
                                       const ExpressionType *type,
-                                      ParallelContext *context) {
+                                      OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:

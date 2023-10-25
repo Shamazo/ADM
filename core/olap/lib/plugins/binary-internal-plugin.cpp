@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -87,7 +87,7 @@ BinaryInternalPlugin::~BinaryInternalPlugin() {}
 void BinaryInternalPlugin::init(){};
 
 void BinaryInternalPlugin::generate(const ::Operator &producer,
-                                    ParallelContext *context) {
+                                    OlapParallelContext *context) {
   if (mem_pos == nullptr || mem_buffer == nullptr) {
     /* XXX Later on, populate this function to simplify Nest */
     string error_msg = string("[BinaryInternalPlugin: ] Unexpected use of pg.");
@@ -429,11 +429,9 @@ void BinaryInternalPlugin::scan(const ::Operator &producer) {
   Builder->SetInsertPoint(AfterBB);
 }
 
-ProteusValueMemory BinaryInternalPlugin::readPath(string activeRelation,
-                                                  Bindings bindings,
-                                                  const char *pathVar,
-                                                  RecordAttribute attr,
-                                                  ParallelContext *context) {
+ProteusValueMemory BinaryInternalPlugin::readPath(
+    string activeRelation, Bindings bindings, const char *pathVar,
+    RecordAttribute attr, OlapParallelContext *context) {
   ProteusValueMemory mem_valWrapper;
   {
     const ::OperatorState *state = bindings.state;
@@ -455,9 +453,9 @@ ProteusValueMemory BinaryInternalPlugin::readPath(string activeRelation,
   return mem_valWrapper;
 }
 
-ProteusValueMemory BinaryInternalPlugin::readValue(ProteusValueMemory mem_value,
-                                                   const ExpressionType *type,
-                                                   ParallelContext *context) {
+ProteusValueMemory BinaryInternalPlugin::readValue(
+    ProteusValueMemory mem_value, const ExpressionType *type,
+    OlapParallelContext *context) {
   return mem_value;
 }
 
@@ -623,7 +621,7 @@ void BinaryInternalPlugin::finish() {}
 
 llvm::Value *BinaryInternalPlugin::getValueSize(ProteusValueMemory mem_value,
                                                 const ExpressionType *type,
-                                                ParallelContext *context) {
+                                                OlapParallelContext *context) {
   switch (type->getTypeID()) {
     case BOOL:
     case INT:

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -41,8 +41,8 @@ class GpuToCpu : public DeviceCross {
 
   ~GpuToCpu() override { LOG(INFO) << "Collapsing GpuToCpu operator"; }
 
-  void produce_(ParallelContext *context) override;
-  void consume(ParallelContext *const context,
+  void produce_(OlapParallelContext *context) override;
+  void consume(OlapParallelContext *const context,
                const OperatorState &childState) override;
 
   RecordType getRowType() const override { return wantedFields; }
@@ -53,7 +53,7 @@ class GpuToCpu : public DeviceCross {
   }
 
  private:
-  void generate_catch(ParallelContext *context);
+  void generate_catch(OlapParallelContext *context);
 
   void open(Pipeline *pip);
   void close(Pipeline *pip);

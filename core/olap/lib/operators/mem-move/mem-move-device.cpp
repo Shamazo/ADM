@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,6 +23,7 @@
 
 #include "mem-move-device.hpp"
 
+#include <codegen/jit/pipeline.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
@@ -30,7 +31,6 @@
 #include <platform/util/timing.hpp>
 
 #include "lib/util/catalog.hpp"
-#include "lib/util/jit/pipeline.hpp"
 
 buff_pair buff_pair::not_moved(proteus::managed_ptr buff) {
   return {std::move(buff), nullptr};
@@ -88,14 +88,14 @@ void propagateWorkUnit(MemMoveDevice::MemMoveConf *mmc,
 }
 }
 
-void MemMoveDevice::genReleaseOldBuffer(ParallelContext *context,
+void MemMoveDevice::genReleaseOldBuffer(OlapParallelContext *context,
                                         llvm::Value *src) const {
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
   context->gen_call(release_buffer,
                     {context->getBuilder()->CreateBitCast(src, charPtrType)});
 }
 
-void MemMoveDevice::produce_(ParallelContext *context) {
+void MemMoveDevice::produce_(OlapParallelContext *context) {
   auto &llvmContext = context->getLLVMContext();
   auto int32_type = llvm::Type::getInt32Ty(context->getLLVMContext());
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
@@ -196,11 +196,11 @@ void MemMoveDevice::produce_(ParallelContext *context) {
 }
 
 ProteusValueMemory MemMoveDevice::getServerId(
-    ParallelContext *context, const OperatorState &childState) const {
+    OlapParallelContext *context, const OperatorState &childState) const {
   return context->toMem(context->createInt64(0), context->createFalse());
 }
 
-void MemMoveDevice::consume(ParallelContext *context,
+void MemMoveDevice::consume(OlapParallelContext *context,
                             const OperatorState &childState) {
   // Prepare
   auto &llvmContext = context->getLLVMContext();
@@ -224,7 +224,7 @@ void MemMoveDevice::consume(ParallelContext *context,
 
   Builder->SetInsertPoint(context->getCurrentEntryBlock());
 
-  auto device_id = ((ParallelContext *)context)->getStateVar(device_id_var);
+  auto device_id = ((OlapParallelContext *)context)->getStateVar(device_id_var);
 
   Builder->SetInsertPoint(insBB);
   auto N = Builder->CreateLoad(
@@ -241,7 +241,8 @@ void MemMoveDevice::consume(ParallelContext *context,
       mem_oidWrapper.mem->getType()->getPointerElementType(),
       mem_oidWrapper.mem);
 
-  llvm::Value *memmv = ((ParallelContext *)context)->getStateVar(memmvconf_var);
+  llvm::Value *memmv =
+      ((OlapParallelContext *)context)->getStateVar(memmvconf_var);
 
   std::vector<llvm::Value *> pushed;
   llvm::Value *is_noop = context->createTrue();

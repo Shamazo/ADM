@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -29,36 +29,37 @@
 
 #include "plugins.hpp"
 
-class ParallelContext;
+class OlapParallelContext;
 
 class BinaryBlockPlugin : public Plugin {
  public:
   static constexpr auto type = "block";
 
  protected:
-  BinaryBlockPlugin(ParallelContext *context, const string &fnamePrefix,
+  BinaryBlockPlugin(OlapParallelContext *context, const string &fnamePrefix,
                     RecordType rec,
                     const std::vector<RecordAttribute *> &whichFields,
                     bool load);
 
  public:
-  BinaryBlockPlugin(ParallelContext *context, const string &fnamePrefix,
+  BinaryBlockPlugin(OlapParallelContext *context, const string &fnamePrefix,
                     RecordType rec,
                     const std::vector<RecordAttribute *> &whichFields);
 
   string &getName() override { return fnamePrefix; }
   void init() override;
 
-  void generate(const Operator &producer, ParallelContext *context) override;
+  void generate(const Operator &producer,
+                OlapParallelContext *context) override;
   void finish() override;
   ProteusValueMemory readPath(string activeRelation, Bindings bindings,
                               const char *pathVar, RecordAttribute attr,
-                              ParallelContext *context) override;
+                              OlapParallelContext *context) override;
   ProteusValueMemory readValue(ProteusValueMemory mem_value,
                                const ExpressionType *type,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
   ProteusValue readCachedValue(CacheInfo info, const OperatorState &currState,
-                               ParallelContext *context) override;
+                               OlapParallelContext *context) override;
 
   ProteusValue hashValue(ProteusValueMemory mem_value,
                          const ExpressionType *type, Context *context) override;
@@ -88,7 +89,7 @@ class BinaryBlockPlugin : public Plugin {
   }
 
   void forEachInCollection(
-      ParallelContext *context, ProteusValue val_parentObject,
+      OlapParallelContext *context, ProteusValue val_parentObject,
       ProteusBareValue offset, ProteusBareValue step,
       ProteusBareValue val_parentObjectSize,
       const std::function<void(ProteusValueMemory mem_currentChild,
@@ -110,7 +111,7 @@ class BinaryBlockPlugin : public Plugin {
 
   llvm::Value *getValueSize(ProteusValueMemory mem_value,
                             const ExpressionType *type,
-                            ParallelContext *context) override;
+                            OlapParallelContext *context) override;
 
   ExpressionType *getOIDType() override { return new Int64Type(); }
 
@@ -155,7 +156,7 @@ class BinaryBlockPlugin : public Plugin {
   [[nodiscard]] RecordType getRowType() const override;
 
  protected:
-  void loadData(ParallelContext *context, data_loc loc);
+  void loadData(OlapParallelContext *context, data_loc loc);
 
   void flushOutputInternal(Context *context, std::string fileName,
                            const ExpressionType *type);
@@ -183,23 +184,24 @@ class BinaryBlockPlugin : public Plugin {
     throw runtime_error(error_msg);
   }
 
-  void finalize_data(ParallelContext *context);
+  void finalize_data(OlapParallelContext *context);
 
-  [[nodiscard]] virtual llvm::Value *getSession(ParallelContext *) const {
+  [[nodiscard]] virtual llvm::Value *getSession(OlapParallelContext *) const {
     return nullptr;
   }
 
   virtual std::pair<llvm::Value *, llvm::Value *> getPartitionSizes(
-      ParallelContext *context, llvm::Value *) const;
-  virtual void freePartitionSizes(ParallelContext *context,
+      OlapParallelContext *context, llvm::Value *) const;
+  virtual void freePartitionSizes(OlapParallelContext *context,
                                   llvm::Value *) const;
 
-  virtual llvm::Value *getDataPointersForFile(ParallelContext *context,
+  virtual llvm::Value *getDataPointersForFile(OlapParallelContext *context,
                                               size_t i, llvm::Value *) const;
-  virtual void freeDataPointersForFile(ParallelContext *context, size_t i,
+  virtual void freeDataPointersForFile(OlapParallelContext *context, size_t i,
                                        llvm::Value *) const;
 
-  virtual void releaseSession(ParallelContext *context, llvm::Value *) const {}
+  virtual void releaseSession(OlapParallelContext *context,
+                              llvm::Value *) const {}
 
   bool isLazy() override { return true; }
 
@@ -244,32 +246,32 @@ class BinaryBlockPlugin : public Plugin {
   static constexpr auto itemCtrVar = "itemCtr";
 
   // Used to generate code
-  void skipLLVM(ParallelContext *context, RecordAttribute attName,
+  void skipLLVM(OlapParallelContext *context, RecordAttribute attName,
                 llvm::Value *offset);
 
-  void nextEntry(ParallelContext *context, llvm::Value *blockSize);
+  void nextEntry(OlapParallelContext *context, llvm::Value *blockSize);
 
-  void readAsLLVM(ParallelContext *context, RecordAttribute attName,
+  void readAsLLVM(OlapParallelContext *context, RecordAttribute attName,
                   std::map<RecordAttribute, ProteusValueMemory> &variables);
 
   /* Operates over int* */
-  void readAsIntLLVM(ParallelContext *context, RecordAttribute attName,
+  void readAsIntLLVM(OlapParallelContext *context, RecordAttribute attName,
                      std::map<RecordAttribute, ProteusValueMemory> &variables);
   /* Operates over float* */
   void readAsFloatLLVM(
-      ParallelContext *context, RecordAttribute attName,
+      OlapParallelContext *context, RecordAttribute attName,
       std::map<RecordAttribute, ProteusValueMemory> &variables);
   /* Operates over bool* */
   void readAsBooleanLLVM(
-      ParallelContext *context, RecordAttribute attName,
+      OlapParallelContext *context, RecordAttribute attName,
       std::map<RecordAttribute, ProteusValueMemory> &variables);
 
   ProteusValueMemory readProteusValue(ProteusValueMemory val,
                                       const ExpressionType *type,
-                                      ParallelContext *context);
+                                      OlapParallelContext *context);
 
   // Generates a for loop that performs the file scan
-  void scan(const Operator &producer, ParallelContext *context);
+  void scan(const Operator &producer, OlapParallelContext *context);
 
  private:
   const void **getDataForField(size_t i);
@@ -296,7 +298,7 @@ class BinaryBlockPlugin : public Plugin {
   friend int64_t *getTuplesPerPartition(BinaryBlockPlugin *pg);
   friend void freeTuplesPerPartition(int64_t *, BinaryBlockPlugin *pg);
 
-  void nextEntryInBlock(llvm::Value *mem_itemCtr, ParallelContext *context,
+  void nextEntryInBlock(llvm::Value *mem_itemCtr, OlapParallelContext *context,
                         ProteusBareValue step);
 };
 

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -23,11 +23,10 @@
 
 #include "mem-broadcast-device.hpp"
 
+#include <codegen/jit/pipeline.hpp>
 #include <lib/util/catalog.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
-
-#include "lib/util/jit/pipeline.hpp"
 
 using namespace llvm;
 
@@ -114,7 +113,7 @@ void propagateWorkUnitBroadcast(MemBroadcastDevice::MemBroadcastConf *mmc,
 }
 }
 
-void MemBroadcastDevice::produce_(ParallelContext *context) {
+void MemBroadcastDevice::produce_(OlapParallelContext *context) {
   auto &llvmContext = context->getLLVMContext();
   auto int32_type = Type::getInt32Ty(context->getLLVMContext());
   auto charPtrType = Type::getInt8PtrTy(context->getLLVMContext());
@@ -221,7 +220,7 @@ void MemBroadcastDevice::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-void MemBroadcastDevice::consume(ParallelContext *context,
+void MemBroadcastDevice::consume(OlapParallelContext *context,
                                  const OperatorState &childState) {
   // Prepare
   auto &llvmContext = context->getLLVMContext();

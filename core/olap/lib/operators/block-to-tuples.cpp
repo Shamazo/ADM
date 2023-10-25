@@ -22,6 +22,7 @@
 */
 #include "block-to-tuples.hpp"
 
+#include <codegen/jit/pipeline.hpp>
 #include <olap/plugins/plugins.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/block-manager.hpp>
@@ -29,11 +30,10 @@
 #include <platform/util/logging.hpp>
 
 #include "lib/util/catalog.hpp"
-#include "lib/util/jit/pipeline.hpp"
 
 using namespace llvm;
 
-void BlockToTuples::produce_(ParallelContext *context) {
+void BlockToTuples::produce_(OlapParallelContext *context) {
   context->registerOpen(this, [this](Pipeline *pip) { this->open(pip); });
   context->registerClose(this, [this](Pipeline *pip) { this->close(pip); });
 
@@ -50,7 +50,7 @@ void BlockToTuples::produce_(ParallelContext *context) {
   getChild()->produce(context);
 }
 
-ProteusBareValue BlockToTuples::step(ParallelContext *context,
+ProteusBareValue BlockToTuples::step(OlapParallelContext *context,
                                      llvm::IntegerType *type) {
   auto Builder = context->getBuilder();
   Value *inc;
@@ -63,7 +63,7 @@ ProteusBareValue BlockToTuples::step(ParallelContext *context,
 }
 
 void BlockToTuples::nextEntry(llvm::Value *mem_itemCtr,
-                              ParallelContext *context) {
+                              OlapParallelContext *context) {
   // Prepare
   auto Builder = context->getBuilder();
 
@@ -78,7 +78,7 @@ void BlockToTuples::nextEntry(llvm::Value *mem_itemCtr,
   Builder->CreateStore(val_new_itemCtr, mem_itemCtr);
 }
 
-void BlockToTuples::consume(ParallelContext *context,
+void BlockToTuples::consume(OlapParallelContext *context,
                             const OperatorState &childState) {
   // Prepare
   LLVMContext &llvmContext = context->getLLVMContext();

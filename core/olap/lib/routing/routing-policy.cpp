@@ -36,7 +36,7 @@ extern "C" size_t random_local_cu(void *ptr, AffinityPolicy *aff) {
 }
 
 namespace routing {
-::routing_target Random::evaluate(ParallelContext *const context,
+::routing_target Random::evaluate(OlapParallelContext *const context,
                                   const OperatorState &childState,
                                   ProteusValueMemory retrycnt) {
   if (fanout == 1) return {context->createInt64(0), false};
@@ -67,7 +67,7 @@ namespace routing {
   return {Builder->CreateURem(target, fanoutV), true};
 }
 
-::routing_target HashBased::evaluate(ParallelContext *const context,
+::routing_target HashBased::evaluate(OlapParallelContext *const context,
                                      const OperatorState &childState,
                                      ProteusValueMemory retrycnt) {
   auto Builder = context->getBuilder();
@@ -79,7 +79,7 @@ namespace routing {
   return {Builder->CreateURem(target, fanoutV), false};
 }
 
-::routing_target Local::evaluate(ParallelContext *const context,
+::routing_target Local::evaluate(OlapParallelContext *const context,
                                  const OperatorState &childState,
                                  ProteusValueMemory retrycnt) {
   if (fanout == 1) return {context->createInt64(0), false};
@@ -112,7 +112,7 @@ PreferLocal::PreferLocal(size_t fanout,
                          const AffinityPolicy *aff)
     : priority(fanout, wantedFields, aff), alternative(fanout) {}
 
-routing_target PreferLocal::evaluate(ParallelContext *context,
+routing_target PreferLocal::evaluate(OlapParallelContext *context,
                                      const OperatorState &childState,
                                      ProteusValueMemory retrycnt) {
   auto Builder = context->getBuilder();
@@ -151,7 +151,7 @@ routing_target PreferLocal::evaluate(ParallelContext *context,
 PreferLocalServer::PreferLocalServer(size_t fanout)
     : priority(fanout), alternative(fanout) {}
 
-routing_target PreferLocalServer::evaluate(ParallelContext *context,
+routing_target PreferLocalServer::evaluate(OlapParallelContext *context,
                                            const OperatorState &childState,
                                            ProteusValueMemory retrycnt) {
   auto Builder = context->getBuilder();

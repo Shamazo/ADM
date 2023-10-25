@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -52,9 +52,10 @@ class MemMoveScaleOut : public MemMoveDevice {
   [[nodiscard]] MemMoveScaleOut::MemMoveConf *createMoveConf() const override;
 
   [[nodiscard]] ProteusValueMemory getServerId(
-      ParallelContext *context, const OperatorState &childState) const override;
+      OlapParallelContext *context,
+      const OperatorState &childState) const override;
 
-  void genReleaseOldBuffer(ParallelContext *context,
+  void genReleaseOldBuffer(OlapParallelContext *context,
                            llvm::Value *src) const override;
 
   // virtual void open(Pipeline *pip);

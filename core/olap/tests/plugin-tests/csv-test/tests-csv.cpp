@@ -38,7 +38,7 @@
 // TODO update these tests to use RelBuilder + check outputs
 // current coverage is of codegen, but does not check correctness
 TEST(CSV, ScanCsvPM) {
-  ParallelContext &ctx = *prepareContext("ScanCsvPM");
+  OlapParallelContext &ctx = *prepareOlapContext("ScanCsvPM");
   Catalog &catalog = Catalog::getInstance();
 
   /**
@@ -92,7 +92,7 @@ TEST(CSV, ScanCsvPM) {
 }
 
 TEST(CSV, ScanCsvWideBuildPM) {
-  ParallelContext &ctx = *prepareContext("ScanCsvWidePM");
+  OlapParallelContext &ctx = *prepareOlapContext("ScanCsvWidePM");
   Catalog &catalog = Catalog::getInstance();
 
   /**
@@ -160,7 +160,7 @@ TEST(CSV, ScanCsvWideBuildPM) {
 }
 
 void scanCsvWideUsePM_(size_t *newline, short **offsets) {
-  ParallelContext &ctx = *prepareContext("ScanCsvWideUsePM");
+  OlapParallelContext &ctx = *prepareOlapContext("ScanCsvWideUsePM");
   Catalog &catalog = Catalog::getInstance();
 
   /**
@@ -228,7 +228,7 @@ void scanCsvWideUsePM_(size_t *newline, short **offsets) {
 }
 
 TEST(CSV, scanCsvWideUsePM) {
-  ParallelContext &ctx = *prepareContext("ScanCsvWideBuildPM");
+  OlapParallelContext &ctx = *prepareOlapContext("ScanCsvWideBuildPM");
   Catalog &catalog = Catalog::getInstance();
 
   /**

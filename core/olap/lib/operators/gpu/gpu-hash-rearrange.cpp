@@ -24,6 +24,8 @@
 #include "gpu-hash-rearrange.hpp"
 
 #include <algorithm>
+#include <codegen/jit/pipeline.hpp>
+#include <codegen/util/gpu/gpu-intrinsics.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/memory/memory-manager.hpp>
@@ -31,12 +33,10 @@
 
 #include "lib/expressions/expressions-generator.hpp"
 #include "lib/expressions/expressions-hasher.hpp"
-#include "lib/util/gpu/gpu-intrinsics.hpp"
-#include "lib/util/jit/pipeline.hpp"
 
 using namespace llvm;
 
-void GpuHashRearrange::produce_(ParallelContext *context) {
+void GpuHashRearrange::produce_(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
   Type *idx_type = Type::getInt32Ty(llvmContext);
@@ -58,10 +58,10 @@ void GpuHashRearrange::produce_(ParallelContext *context) {
       PointerType::getUnqual(ArrayType::get(idx_type, numOfBuckets)));
   oidVar_id = context->appendStateVar(PointerType::getUnqual(oid_type));
 
-  ((ParallelContext *)context)->registerOpen(this, [this](Pipeline *pip) {
+  ((OlapParallelContext *)context)->registerOpen(this, [this](Pipeline *pip) {
     this->open(pip);
   });
-  ((ParallelContext *)context)->registerClose(this, [this](Pipeline *pip) {
+  ((OlapParallelContext *)context)->registerClose(this, [this](Pipeline *pip) {
     this->close(pip);
   });
 
@@ -69,7 +69,7 @@ void GpuHashRearrange::produce_(ParallelContext *context) {
 }
 
 Value *GpuHashRearrange::hash(const std::vector<expression_t> &exprs,
-                              ParallelContext *context,
+                              OlapParallelContext *context,
                               const OperatorState &childState) {
   if (exprs.size() == 1) {
     ExpressionHasherVisitor hasher{context, childState};
@@ -84,7 +84,7 @@ Value *GpuHashRearrange::hash(const std::vector<expression_t> &exprs,
   }
 }
 
-void GpuHashRearrange::consume(ParallelContext *context,
+void GpuHashRearrange::consume(OlapParallelContext *context,
                                const OperatorState &childState) {
   LLVMContext &llvmContext = context->getLLVMContext();
   IRBuilder<> *Builder = context->getBuilder();
@@ -560,7 +560,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
 
       Value *new_oid = Builder->CreateAtomicRMW(
           AtomicRMWInst::BinOp::Add,
-          ((ParallelContext *)context)->getStateVar(oidVar_id),
+          ((OlapParallelContext *)context)->getStateVar(oidVar_id),
           ConstantInt::get(oid_type, cap),
 #if LLVM_VERSION_MAJOR >= 13
           llvm::Align(context->getSizeOf(oid_type)),
@@ -639,7 +639,7 @@ void GpuHashRearrange::consume(ParallelContext *context,
   consume_flush(context, target_type);
 }
 
-void GpuHashRearrange::consume_flush(ParallelContext *context,
+void GpuHashRearrange::consume_flush(OlapParallelContext *context,
                                      llvm::IntegerType *target_type) {
   save_current_blocks_and_restore_at_exit_scope blks{context};
   LLVMContext &llvmContext = context->getLLVMContext();
@@ -758,7 +758,7 @@ void GpuHashRearrange::consume_flush(ParallelContext *context,
 
   Value *new_oid = Builder->CreateAtomicRMW(
       AtomicRMWInst::BinOp::Add,
-      ((ParallelContext *)context)->getStateVar(oidVar_id), cnt,
+      ((OlapParallelContext *)context)->getStateVar(oidVar_id), cnt,
 #if LLVM_VERSION_MAJOR >= 13
       llvm::Align(context->getSizeOf(cnt)),
 #endif

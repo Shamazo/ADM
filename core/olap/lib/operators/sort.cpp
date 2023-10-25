@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -32,7 +32,8 @@
 using namespace llvm;
 
 expressions::RecordConstruction buildSortOutputExpression(
-    ParallelContext *const context, const vector<expression_t> &orderByFields) {
+    OlapParallelContext *const context,
+    const vector<expression_t> &orderByFields) {
   size_t i = 0;
 
   list<expressions::AttributeConstruction> attrs;
@@ -46,7 +47,7 @@ expressions::RecordConstruction buildSortOutputExpression(
   return {attrs};
 }
 
-Sort::Sort(Operator *const child, ParallelContext *const context,
+Sort::Sort(Operator *const child, OlapParallelContext *const context,
            const vector<expression_t> &orderByFields,
            const vector<direction> &dirs)
     : UnaryOperator(child),
@@ -56,7 +57,7 @@ Sort::Sort(Operator *const child, ParallelContext *const context,
       outputExpr(buildSortOutputExpression(context, orderByFields)),
       relName(orderByFields[0].getRegisteredRelName()) {}
 
-void Sort::produce_(ParallelContext *context) {
+void Sort::produce_(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
   Plugin *pg = Catalog::getInstance().getPlugin(relName);
@@ -164,12 +165,13 @@ void Sort::produce_(ParallelContext *context) {
 }
 
 void Sort::consume(Context *const context, const OperatorState &childState) {
-  ParallelContext *const ctx = dynamic_cast<ParallelContext *const>(context);
+  OlapParallelContext *const ctx =
+      dynamic_cast<OlapParallelContext *const>(context);
   assert(ctx);
   consume(ctx, childState);
 }
 
-void Sort::consume(ParallelContext *const context,
+void Sort::consume(OlapParallelContext *const context,
                    const OperatorState &childState) {
   LLVMContext &llvmContext = context->getLLVMContext();
   IRBuilder<> *Builder = context->getBuilder();

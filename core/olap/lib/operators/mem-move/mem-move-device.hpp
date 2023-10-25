@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -131,8 +131,8 @@ class MemMoveDevice : public experimental::UnaryOperator {
                       //                      {true, true, false, false}
                       std::vector<bool>(wantedFields.size(), true)) {}
 
-  void produce_(ParallelContext *context) override;
-  void consume(ParallelContext *context,
+  void produce_(OlapParallelContext *context) override;
+  void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
   [[nodiscard]] bool isFiltering() const override { return false; }
 
@@ -143,9 +143,9 @@ class MemMoveDevice : public experimental::UnaryOperator {
   virtual void destroyMoveConf(MemMoveConf *mmc) const;
 
   [[nodiscard]] virtual ProteusValueMemory getServerId(
-      ParallelContext *context, const OperatorState &childState) const;
+      OlapParallelContext *context, const OperatorState &childState) const;
 
-  virtual void genReleaseOldBuffer(ParallelContext *context,
+  virtual void genReleaseOldBuffer(OlapParallelContext *context,
                                    llvm::Value *pValue) const;
 
   const vector<RecordAttribute *> wantedFields;

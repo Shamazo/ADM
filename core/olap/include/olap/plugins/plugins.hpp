@@ -61,7 +61,8 @@ class Plugin {
   virtual string &getName() = 0;
   virtual void init() = 0;
   virtual void finish() = 0;
-  virtual void generate(const Operator &producer, ParallelContext *context) = 0;
+  virtual void generate(const Operator &producer,
+                        OlapParallelContext *context) = 0;
   /**
    * @param activeRelation Which relation's activeTuple is to be processed.
    *                          Does not have to be a native one
@@ -73,13 +74,13 @@ class Plugin {
   virtual ProteusValueMemory readPath(string activeRelation,
                                       Bindings wrappedBindings,
                                       const char *pathVar, RecordAttribute attr,
-                                      ParallelContext *context) = 0;
+                                      OlapParallelContext *context) = 0;
   virtual ProteusValueMemory readValue(ProteusValueMemory mem_value,
                                        const ExpressionType *type,
-                                       ParallelContext *context) = 0;
+                                       OlapParallelContext *context) = 0;
   virtual ProteusValue readCachedValue(CacheInfo info,
                                        const OperatorState &currState,
-                                       ParallelContext *context) = 0;
+                                       OlapParallelContext *context) = 0;
 
   // Relevant for hashing visitors
   virtual ProteusValue hashValue(ProteusValueMemory mem_value,
@@ -131,14 +132,15 @@ class Plugin {
     flushValueEager(value, type, context->CreateGlobalString(fileName.c_str()));
   }
 
-  virtual void updateValue(ParallelContext *context, ProteusValueMemory mem_rid,
+  virtual void updateValue(OlapParallelContext *context,
+                           ProteusValueMemory mem_rid,
                            ProteusValueMemory mem_value,
                            const ExpressionType *type,
                            const std::string &fileName) {
     throw proteus::unsupported_operation("update");
   }
 
-  virtual void updateValueEager(ParallelContext *context, ProteusValue rid,
+  virtual void updateValueEager(OlapParallelContext *context, ProteusValue rid,
                                 ProteusValue value, const ExpressionType *type,
                                 const std::string &fileName) {
     throw proteus::unsupported_operation("update eager");
@@ -155,7 +157,7 @@ class Plugin {
       ProteusValueMemory mem_currentChild) = 0;
 
   virtual void forEachInCollection(
-      ParallelContext *context, ProteusValue val_parentObject,
+      OlapParallelContext *context, ProteusValue val_parentObject,
       ProteusBareValue offset, ProteusBareValue step,
       ProteusBareValue val_parentObjectSize /* soon to be removed, the plugin
                                            should know the collection size */
@@ -173,7 +175,7 @@ class Plugin {
    */
   virtual llvm::Value *getValueSize(ProteusValueMemory mem_value,
                                     const ExpressionType *type,
-                                    ParallelContext *context) = 0;
+                                    OlapParallelContext *context) = 0;
 
   //    virtual typeID getOIDSize() = 0;
   virtual ExpressionType *getOIDType() = 0;
