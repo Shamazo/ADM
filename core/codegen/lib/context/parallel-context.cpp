@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,17 +20,15 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
 #include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/ToolOutputFile.h>
+#include <llvm/Target/TargetMachine.h>
 
-#include <olap/util/parallel-context.hpp>
+#include <codegen/context/parallel-context.hpp>
+#include <codegen/jit/cpu-pipeline.hpp>
+#include <codegen/jit/gpu-pipeline.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/util/timing.hpp>
-
-#include "lib/util/jit/cpu-pipeline.hpp"
-#include "lib/util/jit/gpu-pipeline.hpp"
-#include "llvm/Support/ToolOutputFile.h"
-#include "llvm/Target/TargetMachine.h"
 
 void ParallelContext::createJITEngine() {
   //     LLVMLinkInMCJIT();
@@ -193,15 +191,23 @@ llvm::Value *ParallelContext::getSubStateVar() const {
 //     TheFPM->add(createSLPVectorizerPass());
 // }
 
-ParallelContext::ParallelContext(const std::string &moduleName, bool gpu_root)
+ParallelContext *ParallelContext::prepareParallelContext(
+    const std::string &moduleName, bool gpuRoot) {
+  auto *context = new ParallelContext(moduleName);
+
+  if (gpuRoot)
+    context->pushDeviceProvider(&(GpuPipelineGenFactory::getInstance()));
+  else
+    context->pushDeviceProvider(&(CpuPipelineGenFactory::getInstance()));
+
+  context->pushPipeline();
+
+  return context;
+}
+
+ParallelContext::ParallelContext(const std::string &moduleName)
     : Context(moduleName), kernelName(moduleName), pip_cnt(0) {
   createJITEngine();
-  if (gpu_root)
-    pushDeviceProvider(&(GpuPipelineGenFactory::getInstance()));
-  else
-    pushDeviceProvider(&(CpuPipelineGenFactory::getInstance()));
-
-  pushPipeline();
 }
 
 ParallelContext::~ParallelContext() {

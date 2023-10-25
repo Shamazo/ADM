@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,13 +20,11 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#include <llvm/ADT/APFloat.h>
+#include <llvm/IR/InlineAsm.h>
 
-#include "gpu-intrinsics.hpp"
-
+#include <codegen/util/gpu/gpu-intrinsics.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
-
-#include "llvm/ADT/APFloat.h"
-#include "llvm/IR/InlineAsm.h"
 
 namespace gpu_intrinsic {
 

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,23 +20,21 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#ifndef PROTEUS_FUNCTIONS_HPP
+#define PROTEUS_FUNCTIONS_HPP
 
-#ifndef FUNCTIONS_HPP_
-#define FUNCTIONS_HPP_
-
-#include <platform/util/radix/aggregations/radix-aggr.hpp>
-#include <platform/util/radix/joins/radix-join.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <platform/util/string-object.hpp>
-#include <platform/util/timing.hpp>
-#include <string>
 
-class ParallelContext;
-struct HashtableBucketMetadata;
+// #define JSON_TIGHT
+#include "jsmn.h"
 
-ParallelContext *prepareContext(string moduleName);
 //===----------------------------------------------------------------------===//
 // "Library" functions that can be "extern'd" from user code.
 //===----------------------------------------------------------------------===//
+
+extern "C" double putchari(int X);
 
 extern "C" void nonTemporalCopy(char *out, char *in, int n);
 
@@ -48,23 +46,11 @@ extern "C" int printi64(size_t X);
 
 extern "C" int printFloat(double X);
 
+extern "C" void printptr(void *ptr);
+
 extern "C" int printc(char *X);
 
 extern "C" void printBoolean(bool X);
-
-extern "C" int atoi_llvm(const char *X);
-
-extern "C" void insertIntKeyToHT(int htIdentifier, int key, void *value,
-                                 int type_size);
-
-extern "C" void **probeIntHT(int htIdentifier, int key, int typeIndex);
-
-extern "C" void insertToHT(char *HTname, size_t key, void *value,
-                           int type_size);
-
-extern "C" void **probeHT(char *HTname, size_t key);
-
-extern "C" HashtableBucketMetadata *getMetadataHT(char *HTname);
 
 extern "C" int compareTokenString(const char *buf, size_t start, size_t end,
                                   const char *candidate);
@@ -72,6 +58,7 @@ extern "C" int compareTokenString(const char *buf, size_t start, size_t end,
 extern "C" int compareTokenString64(const char *buf, size_t start, size_t end,
                                     const char *candidate);
 
+// Definition is in the platform/lib/memory/buffer-manager.cu
 extern "C" bool equalStringObjs(StringObject obj1, StringObject obj2);
 
 extern "C" bool equalStrings(char *str1, char *str2);
@@ -94,9 +81,6 @@ extern "C" size_t hashDouble(double toHash);
 
 extern "C" size_t hashStringC(char *toHash, size_t start, size_t end);
 
-// extern "C" size_t hashString(string toHash);
-size_t hashString(string toHash);
-
 extern "C" size_t hashStringObject(StringObject obj);
 
 extern "C" size_t hashBoolean(bool toHash);
@@ -106,70 +90,22 @@ extern "C" size_t combineHashes(size_t hash1, size_t hash2);
 extern "C" size_t combineHashesNoOrder(size_t hash1, size_t hash2);
 
 /**
- * Radix hashing
- */
-
-extern "C" int *partitionHTLLVM(size_t num_tuples, joins::tuple_t *inTuples);
-extern "C" void bucket_chaining_join_prepareLLVM(
-    const joins::tuple_t *const tuplesR, int num_tuples, HT *ht);
-extern "C" int *partitionAggHTLLVM(size_t num_tuples, agg::tuple_t *inTuples);
-extern "C" void bucket_chaining_agg_prepareLLVM(
-    const agg::tuple_t *const tuplesR, int num_tuples, HT *ht);
-/**
- * Flushing data
- */
-
-extern "C" void flushObjectStart(char *fileName);
-
-extern "C" void flushObjectEnd(char *fileName);
-
-extern "C" void flushArrayStart(char *fileName);
-
-extern "C" void flushArrayEnd(char *fileName);
-
-extern "C" void flushInt(int toFlush, char *fileName);
-
-extern "C" void flushDString(int toFlush, void *dict, char *fileName);
-
-extern "C" void flushIntDequeAsBag(std::deque<int32_t> *toFlush,
-                                   char *fileName);
-
-extern "C" void flushInt64(int64_t toFlush, char *fileName);
-
-extern "C" void flushDate(int64_t toFlush, char *fileName);
-
-extern "C" void flushDouble(double toFlush, char *fileName);
-
-extern "C" void flushBoolean(bool toFlush, char *fileName);
-
-// Used for debugging purposes, ptrs are generally meaningless when flushed
-extern "C" void flushPtr(uintptr_t ptr, char *fileName);
-
-extern "C" void flushStringC(char *toFlush, size_t start, size_t end,
-                             char *fileName);
-
-// Used for pre-existing, well-formed strings (e.g. Record attributes)
-extern "C" void flushStringReady(char *toFlush, char *fileName);
-
-extern "C" void flushStringObject(StringObject toFlush, char *fileName);
-
-extern "C" void flushChar(char whichChar, char *fileName);
-
-extern "C" void flushOutput(char *fileName);
-extern "C" void flushBinaryOutput(char *fileName, std::ostream *strBuffer);
-
-extern "C" void flushDelim(size_t resultCtr, char whichDelim, char *fileName);
-
-/**
  * Memory mgmt
  */
+
 extern "C" void *getMemoryChunk(size_t chunkSize);
+
 extern "C" void *increaseMemoryChunk(void *chunk, size_t chunkSize);
+
 extern "C" void releaseMemoryChunk(void *chunk);
 
 /**
  * Parsing
  */
+
 extern "C" size_t newlineAVX(const char *const target, size_t targetLength);
 
-#endif /* FUNCTIONS_HPP_ */
+extern "C" void parseLineJSON(char *buf, size_t start, size_t end,
+                              jsmntok_t **tokens, size_t line);
+
+#endif  // PROTEUS_FUNCTIONS_HPP

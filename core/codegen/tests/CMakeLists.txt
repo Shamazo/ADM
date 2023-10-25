@@ -1,3 +1,5 @@
+add_subdirectory(codegen-test-environment)
 add_subdirectory(codegen-test-main)
 add_subdirectory(codegen-test-utils)
 add_subdirectory(context-tests)
+add_subdirectory(pipeline-tests)

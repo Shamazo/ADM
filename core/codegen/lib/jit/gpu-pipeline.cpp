@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,21 +20,19 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
-#include "gpu-pipeline.hpp"
+#include <codegen/jit/cpu-pipeline.hpp>
+#include <codegen/jit/gpu-pipeline.hpp>
 
 #pragma push_macro("NDEBUG")
 #define NDEBUG
 #include <llvm/IR/IntrinsicsNVPTX.h>
 #pragma pop_macro("NDEBUG")
 
-#include <olap/util/parallel-context.hpp>
+#include <codegen/context/parallel-context.hpp>
+#include <codegen/util/gpu/gpu-intrinsics.hpp>
 #include <platform/threadpool/threadpool.hpp>
 #include <platform/topology/topology.hpp>
 #include <platform/util/timing.hpp>
-
-#include "cpu-pipeline.hpp"
-#include "lib/util/gpu/gpu-intrinsics.hpp"
 
 using namespace llvm;
 
@@ -50,7 +48,6 @@ GpuPipelineGen::GpuPipelineGen(Context *context, std::string pipName,
   maxGridSize = defaultGridDim.x * defaultGridDim.y * defaultGridDim.z;
 
   registerSubPipeline();
-  registerFunctions();
 
   if (copyStateFrom) {
     Type *charPtrType = Type::getInt8PtrTy(getModule()->getContext());
@@ -81,308 +78,6 @@ GpuPipelineGen::GpuPipelineGen(Context *context, std::string pipName,
         Function *f = this->getFunction("destroyCudaStream");
         getBuilder()->CreateCall(f, strm);
       });
-
-#if LLVM_VERSION_MAJOR <= 8
-  registerFunction(
-      "atomicAdd_double",
-      Intrinsic::getDeclaration(
-          getModule(), Intrinsic::nvvm_atomic_load_add_f64, f64PtrType));
-  registerFunction(
-      "atomicAdd_float",
-      Intrinsic::getDeclaration(
-          getModule(), Intrinsic::nvvm_atomic_load_add_f32, f32PtrType));
-#endif
-
-  registerFunction(
-      "llvm.nvvm.bar.warp.sync",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_bar_warp_sync));
-
-  registerFunction(
-      "llvm.nvvm.vote.all.sync",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_vote_all_sync));
-
-  registerFunction(
-      "llvm.nvvm.vote.any.sync",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_vote_any_sync));
-
-  registerFunction(
-      "llvm.nvvm.vote.ballot.sync",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_vote_ballot_sync));
-
-  registerFunction(
-      "llvm.nvvm.vote.uni.sync",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_vote_uni_sync));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.ntid.x",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_ntid_x));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.tid.x",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_tid_x));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.lanemask.lt",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_lanemask_lt));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.lanemask.eq",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_lanemask_eq));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.nctaid.x",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_nctaid_x));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.ctaid.x",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_ctaid_x));
-
-  registerFunction("llvm.nvvm.read.ptx.sreg.laneid",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_read_ptx_sreg_laneid));
-
-  registerFunction(
-      "llvm.nvvm.membar.cta",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_membar_cta));
-  registerFunction(
-      "threadfence_block",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_membar_cta));
-
-  registerFunction(
-      "llvm.nvvm.membar.gl",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_membar_gl));
-  registerFunction("threadfence", Intrinsic::getDeclaration(
-                                      getModule(), Intrinsic::nvvm_membar_gl));
-
-  registerFunction(
-      "llvm.nvvm.membar.sys",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_membar_sys));
-
-  registerFunction(
-      "llvm.nvvm.barrier0",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::nvvm_barrier0));
-  registerFunction("syncthreads", Intrinsic::getDeclaration(
-                                      getModule(), Intrinsic::nvvm_barrier0));
-
-  registerFunction(
-      "llvm.ctpop",
-      Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, int32_type));
-
-  registerFunction("llvm.nvvm.shfl.sync.bfly.i32",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_shfl_sync_bfly_i32));
-  registerFunction("llvm.nvvm.shfl.sync.idx.i32",
-                   Intrinsic::getDeclaration(
-                       getModule(), Intrinsic::nvvm_shfl_sync_idx_i32));
-
-  FunctionType *intrprinti64 =
-      FunctionType::get(void_type, std::vector<Type *>{int64_type}, false);
-  Function *intr_pprinti64 = Function::Create(
-      intrprinti64, Function::ExternalLinkage, "dprinti64", getModule());
-  registerFunction("printi64", intr_pprinti64);
-
-  FunctionType *intrprinti =
-      FunctionType::get(void_type, std::vector<Type *>{int32_type}, false);
-  Function *intr_pprinti = Function::Create(
-      intrprinti, Function::ExternalLinkage, "dprinti", getModule());
-  registerFunction("printi", intr_pprinti);
-
-  FunctionType *intrprintptr =
-      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
-  Function *intr_pprintptr = Function::Create(
-      intrprintptr, Function::ExternalLinkage, "dprintptr", getModule());
-  registerFunction("printptr", intr_pprintptr);
-
-  FunctionType *intrget_buffers =
-      FunctionType::get(charPtrType, std::vector<Type *>{}, false);
-  Function *intr_pget_buffers = Function::Create(
-      intrget_buffers, Function::ExternalLinkage, "get_buffers", getModule());
-  intr_pget_buffers->setReturnDoesNotAlias();
-  registerFunction("get_buffers", intr_pget_buffers);
-
-  FunctionType *intrrelease_buffers =
-      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
-  Function *intr_prelease_buffers =
-      Function::Create(intrrelease_buffers, Function::ExternalLinkage,
-                       "release_buffers", getModule());
-  registerFunction("release_buffers", intr_prelease_buffers);
-}
-
-void GpuPipelineGen::registerFunctions() {
-  PipelineGen::registerFunctions();
-  Type *int32_type = Type::getInt32Ty(getModule()->getContext());
-  Type *int64_type = Type::getInt64Ty(getModule()->getContext());
-  Type *void_type = Type::getVoidTy(getModule()->getContext());
-  Type *charPtrType = Type::getInt8PtrTy(getModule()->getContext());
-  Type *bool_type = Type::getInt1Ty(getModule()->getContext());
-
-  Type *size_type;
-  if (sizeof(size_t) == 4)
-    size_type = int32_type;
-  else if (sizeof(size_t) == 8)
-    size_type = int64_type;
-  else
-    assert(false);
-
-  FunctionType *allocate =
-      FunctionType::get(charPtrType, std::vector<Type *>{size_type}, false);
-  Function *fallocate = Function::Create(allocate, Function::ExternalLinkage,
-                                         "allocate_gpu", getModule());
-  std::vector<std::pair<unsigned, Attribute>> attrs;
-  Attribute noAlias =
-      Attribute::get(getModule()->getContext(), Attribute::AttrKind::NoAlias);
-  attrs.emplace_back(0, noAlias);
-  fallocate->setAttributes(
-      AttributeList::get(getModule()->getContext(), attrs));
-  registerFunction("allocate", fallocate);
-
-  FunctionType *deallocate =
-      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
-  Function *fdeallocate = Function::Create(
-      deallocate, Function::ExternalLinkage, "deallocate_gpu", getModule());
-  registerFunction("deallocate", fdeallocate);
-
-  FunctionType *memcpy = FunctionType::get(
-      void_type,
-      std::vector<Type *>{charPtrType, charPtrType, size_type, bool_type},
-      false);
-  Function *fmemcpy = Function::Create(memcpy, Function::ExternalLinkage,
-                                       "memcpy_gpu", getModule());
-  registerFunction("memcpy", fmemcpy);
-
-  FunctionType *intrqsort = FunctionType::get(
-      void_type, std::vector<Type *>{charPtrType, size_type}, false);
-  Function *intr_pqsort_i = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_i", getModule());
-  registerFunction("qsort_i", intr_pqsort_i);
-
-  Function *intr_pqsort_l = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_l", getModule());
-  registerFunction("qsort_l", intr_pqsort_l);
-
-  Function *intr_pqsort_ii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ii", getModule());
-  registerFunction("qsort_ii", intr_pqsort_ii);
-
-  Function *intr_pqsort_il = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_il", getModule());
-  registerFunction("qsort_il", intr_pqsort_il);
-
-  Function *intr_pqsort_li = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_li", getModule());
-  registerFunction("qsort_li", intr_pqsort_li);
-
-  Function *intr_pqsort_ll = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ll", getModule());
-  registerFunction("qsort_ll", intr_pqsort_ll);
-
-  Function *intr_pqsort_iii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iii", getModule());
-  registerFunction("qsort_iii", intr_pqsort_iii);
-
-  Function *intr_pqsort_iil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iil", getModule());
-  registerFunction("qsort_iil", intr_pqsort_iil);
-
-  Function *intr_pqsort_ili = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ili", getModule());
-  registerFunction("qsort_ili", intr_pqsort_ili);
-
-  Function *intr_pqsort_ill = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ill", getModule());
-  registerFunction("qsort_ill", intr_pqsort_ill);
-
-  Function *intr_pqsort_lii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lii", getModule());
-  registerFunction("qsort_lii", intr_pqsort_lii);
-
-  Function *intr_pqsort_lil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lil", getModule());
-  registerFunction("qsort_lil", intr_pqsort_lil);
-
-  Function *intr_pqsort_lli = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lli", getModule());
-  registerFunction("qsort_lli", intr_pqsort_lli);
-
-  Function *intr_pqsort_lll = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lll", getModule());
-  registerFunction("qsort_lll", intr_pqsort_lll);
-
-  Function *intr_pqsort_iiii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iiii", getModule());
-  registerFunction("qsort_iiii", intr_pqsort_iiii);
-
-  Function *intr_pqsort_iiil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iiil", getModule());
-  registerFunction("qsort_iiil", intr_pqsort_iiil);
-
-  Function *intr_pqsort_iili = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iili", getModule());
-  registerFunction("qsort_iili", intr_pqsort_iili);
-
-  Function *intr_pqsort_iill = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iill", getModule());
-  registerFunction("qsort_iill", intr_pqsort_iill);
-
-  Function *intr_pqsort_ilii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ilii", getModule());
-  registerFunction("qsort_ilii", intr_pqsort_ilii);
-
-  Function *intr_pqsort_ilil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_ilil", getModule());
-  registerFunction("qsort_ilil", intr_pqsort_ilil);
-
-  Function *intr_pqsort_illi = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_illi", getModule());
-  registerFunction("qsort_illi", intr_pqsort_illi);
-
-  Function *intr_pqsort_illl = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_illl", getModule());
-  registerFunction("qsort_illl", intr_pqsort_illl);
-
-  Function *intr_pqsort_liii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_liii", getModule());
-  registerFunction("qsort_liii", intr_pqsort_liii);
-
-  Function *intr_pqsort_liil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_liil", getModule());
-  registerFunction("qsort_liil", intr_pqsort_liil);
-
-  Function *intr_pqsort_lili = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lili", getModule());
-  registerFunction("qsort_lili", intr_pqsort_lili);
-
-  Function *intr_pqsort_lill = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lill", getModule());
-  registerFunction("qsort_lill", intr_pqsort_lill);
-
-  Function *intr_pqsort_llii = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_llii", getModule());
-  registerFunction("qsort_llii", intr_pqsort_llii);
-
-  Function *intr_pqsort_llil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_llil", getModule());
-  registerFunction("qsort_llil", intr_pqsort_llil);
-
-  Function *intr_pqsort_llli = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_llli", getModule());
-  registerFunction("qsort_llli", intr_pqsort_llli);
-
-  Function *intr_pqsort_llll = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_llll", getModule());
-  registerFunction("qsort_llll", intr_pqsort_llll);
-
-  Function *intr_pqsort_lliiil = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_lliiil", getModule());
-  registerFunction("qsort_lliiil", intr_pqsort_lliiil);
-
-  Function *intr_pqsort_iillllllll = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_iillllllll", getModule());
-  registerFunction("qsort_iillllllll", intr_pqsort_iillllllll);
-
-  Function *intr_pqsort_llllllllll = Function::Create(
-      intrqsort, Function::ExternalLinkage, "qsort_llllllllll", getModule());
-  registerFunction("qsort_llllllllll", intr_pqsort_llllllllll);
 }
 
 size_t GpuPipelineGen::prepareStateArgument() {
@@ -598,7 +293,6 @@ void GpuPipelineGen::prepareInitDeinit() {
   registerFunction("memset", intr_pmemset);
 
   registerSubPipeline();
-  registerFunctions();
 
   Function *tmpF = F;
   F = prepareConsumeWrapper();
@@ -804,6 +498,319 @@ Value *GpuPipelineGen::workerScopedAtomicXchg(Value *ptr, Value *val) {
 void GpuPipelineGen::workerScopedMembar() {
   Function *membar_fun = getFunction("llvm.nvvm.membar.gl");
   getBuilder()->CreateCall(membar_fun, {});
+}
+
+void GpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
+  PipelineGenFactory::registerFunctions(pipelineGen);
+
+  auto *llvmModule = pipelineGen->getModule();
+  Type *int32_type = Type::getInt32Ty(llvmModule->getContext());
+  Type *int64_type = Type::getInt64Ty(llvmModule->getContext());
+  Type *void_type = Type::getVoidTy(llvmModule->getContext());
+  Type *charPtrType = Type::getInt8PtrTy(llvmModule->getContext());
+  Type *bool_type = Type::getInt1Ty(llvmModule->getContext());
+
+  Type *size_type;
+  if (sizeof(size_t) == 4)
+    size_type = int32_type;
+  else if (sizeof(size_t) == 8)
+    size_type = int64_type;
+  else
+    assert(false);
+
+  FunctionType *allocate =
+      FunctionType::get(charPtrType, std::vector<Type *>{size_type}, false);
+  Function *fallocate = Function::Create(allocate, Function::ExternalLinkage,
+                                         "allocate_gpu", llvmModule);
+  std::vector<std::pair<unsigned, Attribute>> attrs;
+  Attribute noAlias =
+      Attribute::get(llvmModule->getContext(), Attribute::AttrKind::NoAlias);
+  attrs.emplace_back(0, noAlias);
+  fallocate->setAttributes(AttributeList::get(llvmModule->getContext(), attrs));
+  pipelineGen->registerFunction("allocate", fallocate);
+
+  FunctionType *deallocate =
+      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
+  Function *fdeallocate = Function::Create(
+      deallocate, Function::ExternalLinkage, "deallocate_gpu", llvmModule);
+  pipelineGen->registerFunction("deallocate", fdeallocate);
+
+  FunctionType *memcpy = FunctionType::get(
+      void_type,
+      std::vector<Type *>{charPtrType, charPtrType, size_type, bool_type},
+      false);
+  Function *fmemcpy = Function::Create(memcpy, Function::ExternalLinkage,
+                                       "memcpy_gpu", llvmModule);
+  pipelineGen->registerFunction("memcpy", fmemcpy);
+
+  FunctionType *intrqsort = FunctionType::get(
+      void_type, std::vector<Type *>{charPtrType, size_type}, false);
+  Function *intr_pqsort_i = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_i", llvmModule);
+  pipelineGen->registerFunction("qsort_i", intr_pqsort_i);
+
+  Function *intr_pqsort_l = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_l", llvmModule);
+  pipelineGen->registerFunction("qsort_l", intr_pqsort_l);
+
+  Function *intr_pqsort_ii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ii", llvmModule);
+  pipelineGen->registerFunction("qsort_ii", intr_pqsort_ii);
+
+  Function *intr_pqsort_il = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_il", llvmModule);
+  pipelineGen->registerFunction("qsort_il", intr_pqsort_il);
+
+  Function *intr_pqsort_li = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_li", llvmModule);
+  pipelineGen->registerFunction("qsort_li", intr_pqsort_li);
+
+  Function *intr_pqsort_ll = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ll", llvmModule);
+  pipelineGen->registerFunction("qsort_ll", intr_pqsort_ll);
+
+  Function *intr_pqsort_iii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iii", llvmModule);
+  pipelineGen->registerFunction("qsort_iii", intr_pqsort_iii);
+
+  Function *intr_pqsort_iil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iil", llvmModule);
+  pipelineGen->registerFunction("qsort_iil", intr_pqsort_iil);
+
+  Function *intr_pqsort_ili = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ili", llvmModule);
+  pipelineGen->registerFunction("qsort_ili", intr_pqsort_ili);
+
+  Function *intr_pqsort_ill = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ill", llvmModule);
+  pipelineGen->registerFunction("qsort_ill", intr_pqsort_ill);
+
+  Function *intr_pqsort_lii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lii", llvmModule);
+  pipelineGen->registerFunction("qsort_lii", intr_pqsort_lii);
+
+  Function *intr_pqsort_lil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lil", llvmModule);
+  pipelineGen->registerFunction("qsort_lil", intr_pqsort_lil);
+
+  Function *intr_pqsort_lli = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lli", llvmModule);
+  pipelineGen->registerFunction("qsort_lli", intr_pqsort_lli);
+
+  Function *intr_pqsort_lll = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lll", llvmModule);
+  pipelineGen->registerFunction("qsort_lll", intr_pqsort_lll);
+
+  Function *intr_pqsort_iiii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iiii", llvmModule);
+  pipelineGen->registerFunction("qsort_iiii", intr_pqsort_iiii);
+
+  Function *intr_pqsort_iiil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iiil", llvmModule);
+  pipelineGen->registerFunction("qsort_iiil", intr_pqsort_iiil);
+
+  Function *intr_pqsort_iili = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iili", llvmModule);
+  pipelineGen->registerFunction("qsort_iili", intr_pqsort_iili);
+
+  Function *intr_pqsort_iill = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iill", llvmModule);
+  pipelineGen->registerFunction("qsort_iill", intr_pqsort_iill);
+
+  Function *intr_pqsort_ilii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ilii", llvmModule);
+  pipelineGen->registerFunction("qsort_ilii", intr_pqsort_ilii);
+
+  Function *intr_pqsort_ilil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_ilil", llvmModule);
+  pipelineGen->registerFunction("qsort_ilil", intr_pqsort_ilil);
+
+  Function *intr_pqsort_illi = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_illi", llvmModule);
+  pipelineGen->registerFunction("qsort_illi", intr_pqsort_illi);
+
+  Function *intr_pqsort_illl = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_illl", llvmModule);
+  pipelineGen->registerFunction("qsort_illl", intr_pqsort_illl);
+
+  Function *intr_pqsort_liii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_liii", llvmModule);
+  pipelineGen->registerFunction("qsort_liii", intr_pqsort_liii);
+
+  Function *intr_pqsort_liil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_liil", llvmModule);
+  pipelineGen->registerFunction("qsort_liil", intr_pqsort_liil);
+
+  Function *intr_pqsort_lili = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lili", llvmModule);
+  pipelineGen->registerFunction("qsort_lili", intr_pqsort_lili);
+
+  Function *intr_pqsort_lill = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lill", llvmModule);
+  pipelineGen->registerFunction("qsort_lill", intr_pqsort_lill);
+
+  Function *intr_pqsort_llii = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_llii", llvmModule);
+  pipelineGen->registerFunction("qsort_llii", intr_pqsort_llii);
+
+  Function *intr_pqsort_llil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_llil", llvmModule);
+  pipelineGen->registerFunction("qsort_llil", intr_pqsort_llil);
+
+  Function *intr_pqsort_llli = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_llli", llvmModule);
+  pipelineGen->registerFunction("qsort_llli", intr_pqsort_llli);
+
+  Function *intr_pqsort_llll = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_llll", llvmModule);
+  pipelineGen->registerFunction("qsort_llll", intr_pqsort_llll);
+
+  Function *intr_pqsort_lliiil = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_lliiil", llvmModule);
+  pipelineGen->registerFunction("qsort_lliiil", intr_pqsort_lliiil);
+
+  Function *intr_pqsort_iillllllll = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_iillllllll", llvmModule);
+  pipelineGen->registerFunction("qsort_iillllllll", intr_pqsort_iillllllll);
+
+  Function *intr_pqsort_llllllllll = Function::Create(
+      intrqsort, Function::ExternalLinkage, "qsort_llllllllll", llvmModule);
+  pipelineGen->registerFunction("qsort_llllllllll", intr_pqsort_llllllllll);
+
+#if LLVM_VERSION_MAJOR <= 8
+  registerFunction(
+      "atomicAdd_double",
+      Intrinsic::getDeclaration(
+          getModule(), Intrinsic::nvvm_atomic_load_add_f64, f64PtrType));
+  registerFunction(
+      "atomicAdd_float",
+      Intrinsic::getDeclaration(
+          getModule(), Intrinsic::nvvm_atomic_load_add_f32, f32PtrType));
+#endif
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.bar.warp.sync",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_bar_warp_sync));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.vote.all.sync",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_vote_all_sync));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.vote.any.sync",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_vote_any_sync));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.vote.ballot.sync",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_vote_ballot_sync));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.vote.uni.sync",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_vote_uni_sync));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.ntid.x",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_ntid_x));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.tid.x",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_tid_x));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.lanemask.lt",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_lanemask_lt));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.lanemask.eq",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_lanemask_eq));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.nctaid.x",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_nctaid_x));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.ctaid.x",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_ctaid_x));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.read.ptx.sreg.laneid",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_read_ptx_sreg_laneid));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.membar.cta",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_membar_cta));
+  pipelineGen->registerFunction(
+      "threadfence_block",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_membar_cta));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.membar.gl",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_membar_gl));
+  pipelineGen->registerFunction(
+      "threadfence",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_membar_gl));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.membar.sys",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_membar_sys));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.barrier0",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_barrier0));
+  pipelineGen->registerFunction(
+      "syncthreads",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_barrier0));
+
+  pipelineGen->registerFunction(
+      "llvm.ctpop",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::ctpop, int32_type));
+
+  pipelineGen->registerFunction(
+      "llvm.nvvm.shfl.sync.bfly.i32",
+      Intrinsic::getDeclaration(llvmModule,
+                                Intrinsic::nvvm_shfl_sync_bfly_i32));
+  pipelineGen->registerFunction(
+      "llvm.nvvm.shfl.sync.idx.i32",
+      Intrinsic::getDeclaration(llvmModule, Intrinsic::nvvm_shfl_sync_idx_i32));
+
+  FunctionType *intrprinti64 =
+      FunctionType::get(void_type, std::vector<Type *>{int64_type}, false);
+  Function *intr_pprinti64 = Function::Create(
+      intrprinti64, Function::ExternalLinkage, "dprinti64", llvmModule);
+  pipelineGen->registerFunction("printi64", intr_pprinti64);
+
+  FunctionType *intrprinti =
+      FunctionType::get(void_type, std::vector<Type *>{int32_type}, false);
+  Function *intr_pprinti = Function::Create(
+      intrprinti, Function::ExternalLinkage, "dprinti", llvmModule);
+  pipelineGen->registerFunction("printi", intr_pprinti);
+
+  FunctionType *intrprintptr =
+      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
+  Function *intr_pprintptr = Function::Create(
+      intrprintptr, Function::ExternalLinkage, "dprintptr", llvmModule);
+  pipelineGen->registerFunction("printptr", intr_pprintptr);
+
+  FunctionType *intrget_buffers =
+      FunctionType::get(charPtrType, std::vector<Type *>{}, false);
+  Function *intr_pget_buffers = Function::Create(
+      intrget_buffers, Function::ExternalLinkage, "get_buffers", llvmModule);
+  intr_pget_buffers->setReturnDoesNotAlias();
+  pipelineGen->registerFunction("get_buffers", intr_pget_buffers);
+
+  FunctionType *intrrelease_buffers =
+      FunctionType::get(void_type, std::vector<Type *>{charPtrType}, false);
+  Function *intr_prelease_buffers =
+      Function::Create(intrrelease_buffers, Function::ExternalLinkage,
+                       "release_buffers", llvmModule);
+  pipelineGen->registerFunction("release_buffers", intr_prelease_buffers);
 }
 
 extern "C" {

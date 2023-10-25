@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,12 +20,12 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#ifndef PROTEUS_CPU_PIPELINE_HPP
+#define PROTEUS_CPU_PIPELINE_HPP
 
-#ifndef RAW_CPU_PIPELINE_HPP_
-#define RAW_CPU_PIPELINE_HPP_
-
-#include "cpu-module.hpp"
-#include "pipeline.hpp"
+#include <codegen/jit/cpu-module.hpp>
+#include <codegen/jit/cpu-pipeline.hpp>
+#include <codegen/jit/pipeline.hpp>
 
 class CpuPipelineGen : public PipelineGen {
  protected:
@@ -51,6 +51,8 @@ class CpuPipelineGenFactory : public PipelineGenFactory {
  protected:
   CpuPipelineGenFactory() {}
 
+  void registerFunctions(PipelineGen *pipelineGen) override;
+
  public:
   static PipelineGenFactory &getInstance() {
     static CpuPipelineGenFactory instance;
@@ -59,8 +61,10 @@ class CpuPipelineGenFactory : public PipelineGenFactory {
 
   PipelineGen *create(Context *context, std::string pipName,
                       PipelineGen *copyStateFrom) override {
-    return new CpuPipelineGen(context, pipName, copyStateFrom);
+    auto *pipelineGen = new CpuPipelineGen(context, pipName, copyStateFrom);
+    CpuPipelineGenFactory::registerFunctions(pipelineGen);
+    return static_cast<PipelineGen *>(pipelineGen);
   }
 };
 
-#endif /* RAW_CPU_PIPELINE_HPP_ */
+#endif  // PROTEUS_CPU_PIPELINE_HPP

@@ -20,9 +20,8 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
-#ifndef MODULE_HPP_
-#define MODULE_HPP_
+#ifndef PROTEUS_JIT_MODULE_HPP
+#define PROTEUS_JIT_MODULE_HPP
 
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Module.h>
@@ -54,4 +53,4 @@ class JITModule {
   static void init(llvm::LLVMContext &llvmContext);
 };
 
-#endif /* MODULE_HPP_ */
+#endif  // PROTEUS_JIT_MODULE_HPP

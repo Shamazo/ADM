@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,11 +20,10 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#ifndef PROTEUS_GPU_INTRINSICS_HPP
+#define PROTEUS_GPU_INTRINSICS_HPP
 
-#ifndef GPU_INTRINSICS_HPP_
-#define GPU_INTRINSICS_HPP_
-
-#include "olap/util/parallel-context.hpp"
+#include <codegen/context/parallel-context.hpp>
 
 namespace gpu_intrinsic {
 
@@ -70,4 +69,4 @@ llvm::Value *ballot(ParallelContext *const context, llvm::Value *val_in);
 
 }  // namespace gpu_intrinsic
 
-#endif /* GPU_INTRINSICS_HPP_ */
+#endif  // PROTEUS_GPU_INTRINSICS_HPP

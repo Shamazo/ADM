@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,13 +20,12 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#ifndef PROTEUS_GPU_PIPELINE_HPP
+#define PROTEUS_GPU_PIPELINE_HPP
 
-#ifndef RAW_GPU_PIPELINE_HPP_
-#define RAW_GPU_PIPELINE_HPP_
-
-#include "cpu-module.hpp"
-#include "gpu-module.hpp"
-#include "pipeline.hpp"
+#include <codegen/jit/cpu-module.hpp>
+#include <codegen/jit/gpu-module.hpp>
+#include <codegen/jit/pipeline.hpp>
 
 class GpuPipelineGen : public PipelineGen {
  protected:
@@ -91,7 +90,6 @@ class GpuPipelineGen : public PipelineGen {
   void *getCompiledFunction(llvm::Function *f) override;
 
  protected:
-  void registerFunctions() override;
   virtual llvm::Function *prepareConsumeWrapper();
   virtual void markAsKernel(llvm::Function *F) const;
 };
@@ -99,6 +97,8 @@ class GpuPipelineGen : public PipelineGen {
 class GpuPipelineGenFactory : public PipelineGenFactory {
  protected:
   GpuPipelineGenFactory() {}
+
+  void registerFunctions(PipelineGen *pipelineGen) override;
 
  public:
   static PipelineGenFactory &getInstance() {
@@ -108,7 +108,9 @@ class GpuPipelineGenFactory : public PipelineGenFactory {
 
   PipelineGen *create(Context *context, std::string pipName,
                       PipelineGen *copyStateFrom) override {
-    return new GpuPipelineGen(context, pipName, copyStateFrom);
+    auto *pipelineGen = new GpuPipelineGen(context, pipName, copyStateFrom);
+    GpuPipelineGenFactory::registerFunctions(pipelineGen);
+    return static_cast<PipelineGen *>(pipelineGen);
   }
 };
 
@@ -122,4 +124,4 @@ void sync_strm(cudaStream_t strm);
 void destroyCudaStream(cudaStream_t strm);
 }
 
-#endif /* RAW_GPU_PIPELINE_HPP_ */
+#endif  // PROTEUS_GPU_PIPELINE_HPP

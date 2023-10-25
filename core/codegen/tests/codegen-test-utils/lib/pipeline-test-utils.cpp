@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,38 +20,24 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#include <cassert>
+#include <codegen/test/pipeline-test-utils.hpp>
 
-#include "jit-module.hpp"
+using namespace codegen;
 
-using namespace llvm;
+DummyPipelineContext::DummyPipelineContext(const std::string& moduleName)
+    : Context(moduleName) {}
 
-IRBuilder<> *JITModule::TheBuilder = nullptr;
-
-class JITer_impl;
-
-class JITer {
- public:
-  std::unique_ptr<JITer_impl> p_impl;
-
- public:
-  JITer();
-  ~JITer();
-
-  LLVMContext &getContext();
-};
-
-JITer &getJiter();
-
-JITModule::JITModule(Context *context, std::string pipName)
-    : TheModule(new Module(pipName, getJiter().getContext())),
-      pipName(pipName),
-      context(context) {
-  if (TheBuilder == nullptr) init(TheModule->getContext());
+llvm::Module* DummyPipelineContext::getModule() const {
+  assert(currentPipeline);
+  return currentPipeline->getModule();
 }
 
-void JITModule::init(LLVMContext &llvmContext) {
-  assert(TheBuilder == nullptr && "Module already initialized");
-  TheBuilder = new IRBuilder<>(llvmContext);
+llvm::IRBuilder<>* DummyPipelineContext::getBuilder() const {
+  assert(currentPipeline);
+  return currentPipeline->getBuilder();
 }
 
-Module *JITModule::getModule() const { return TheModule; }
+void DummyPipelineContext::setPipelineGen(PipelineGenPtr pipelineGen) {
+  currentPipeline = pipelineGen;
+}

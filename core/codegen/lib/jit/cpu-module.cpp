@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,7 +20,7 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-#include "cpu-module.hpp"
+#include <codegen/jit/cpu-module.hpp>
 
 #pragma push_macro("NDEBUG")
 #define NDEBUG
@@ -439,35 +439,35 @@ void CpuModule::compileAndLoad() {
 
   ::ThreadPool::getInstance().enqueue(
       [name = getModule()->getName()]() { getJiter().p_impl->lookup(name); });
-  //#ifdef DEBUGCTX
-  //  if (print_generated_code) {
-  //    string assembly;
-  //    {
-  //      raw_string_ostream stream(assembly);
-  //      buffer_ostream ostream(stream);
+  // #ifdef DEBUGCTX
+  //   if (print_generated_code) {
+  //     string assembly;
+  //     {
+  //       raw_string_ostream stream(assembly);
+  //       buffer_ostream ostream(stream);
   //
-  //      legacy::PassManager PM;
+  //       legacy::PassManager PM;
   //
-  //      // Ask the target to add backend passes as necessary.
-  //      TheExecutionEngine->getTargetMachine()->addPassesToEmitFile(
-  //          PM, ostream,
-  //#if LLVM_VERSION_MAJOR >= 7
-  //          nullptr,
-  //#endif
-  //          llvm::CGFT_AssemblyFile, false);
+  //       // Ask the target to add backend passes as necessary.
+  //       TheExecutionEngine->getTargetMachine()->addPassesToEmitFile(
+  //           PM, ostream,
+  // #if LLVM_VERSION_MAJOR >= 7
+  //           nullptr,
+  // #endif
+  //           llvm::CGFT_AssemblyFile, false);
   //
-  //      PM.run(*(getModule()));
-  //    }
-  //    std::ofstream oassembly("generated_code/" + pipName + ".s");
-  //    oassembly << assembly;
-  //  }
-  //#endif
-  //  for (Function &f : *getModule()) {
-  //    if (!f.isDeclaration()) {
-  //      auto addr = getJiter().p_impl->lookup(f.getName());
-  //      LOG(INFO) << f.getName().str() << " " << (void *)addr.getAddress();
-  //    }
-  //  }
+  //       PM.run(*(getModule()));
+  //     }
+  //     std::ofstream oassembly("generated_code/" + pipName + ".s");
+  //     oassembly << assembly;
+  //   }
+  // #endif
+  //   for (Function &f : *getModule()) {
+  //     if (!f.isDeclaration()) {
+  //       auto addr = getJiter().p_impl->lookup(f.getName());
+  //       LOG(INFO) << f.getName().str() << " " << (void *)addr.getAddress();
+  //     }
+  //   }
 }
 
 void *CpuModule::getCompiledFunction(std::string str) const {

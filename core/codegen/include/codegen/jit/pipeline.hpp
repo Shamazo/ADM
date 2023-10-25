@@ -20,9 +20,8 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
-#ifndef PIPELINE_HPP_
-#define PIPELINE_HPP_
+#ifndef PROTEUS_PIPELINE_HPP
+#define PROTEUS_PIPELINE_HPP
 
 #include <vector>
 
@@ -217,9 +216,6 @@ class PipelineGen {
 
  public:
   virtual void *getCompiledFunction(llvm::Function *f) = 0;
-
- protected:
-  virtual void registerFunctions();
 };
 
 class Pipeline {
@@ -337,9 +333,11 @@ class PipelineGenFactory {
 
   virtual ~PipelineGenFactory() {}
 
+  virtual void registerFunctions(PipelineGen *pipelineGen);
+
  public:
   virtual PipelineGen *create(Context *context, std::string pipName = "pip",
                               PipelineGen *copyStateFrom = nullptr) = 0;
 };
 
-#endif /* PIPELINE_HPP_ */
+#endif  // PROTEUS_PIPELINE_HPP

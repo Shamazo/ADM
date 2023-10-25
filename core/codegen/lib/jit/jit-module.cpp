@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,35 +20,37 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#include <codegen/jit/jit-module.hpp>
 
-#ifndef CPU_MODULE_HPP_
-#define CPU_MODULE_HPP_
+using namespace llvm;
 
-#include "jit-module.hpp"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Target/TargetMachine.h"
+IRBuilder<> *JITModule::TheBuilder = nullptr;
 
-class CpuModule : public JITModule {
- protected:
-  llvm::ExecutionEngine *TheExecutionEngine;
+class JITer_impl;
+
+class JITer {
+ public:
+  std::unique_ptr<JITer_impl> p_impl;
 
  public:
-  explicit CpuModule(Context *context, std::string pipName = "pip");
+  JITer();
+  ~JITer();
 
-  void compileAndLoad() override;
-  inline llvm::Module *getModule() const override {
-    return JITModule::getModule();
-  }
-
-  [[nodiscard]] static const llvm::DataLayout &getDL();
-
-  [[nodiscard]] const llvm::DataLayout &getDataLayout() const override {
-    return CpuModule::getDL();
-  }
-
-  void *getCompiledFunction(llvm::Function *f) const override;
-  void *getCompiledFunction(std::string str) const;
+  LLVMContext &getContext();
 };
 
-#endif /* CPU_MODULE_HPP_ */
+JITer &getJiter();
+
+JITModule::JITModule(Context *context, std::string pipName)
+    : TheModule(new Module(pipName, getJiter().getContext())),
+      pipName(pipName),
+      context(context) {
+  if (TheBuilder == nullptr) init(TheModule->getContext());
+}
+
+void JITModule::init(LLVMContext &llvmContext) {
+  assert(TheBuilder == nullptr && "Module already initialized");
+  TheBuilder = new IRBuilder<>(llvmContext);
+}
+
+Module *JITModule::getModule() const { return TheModule; }

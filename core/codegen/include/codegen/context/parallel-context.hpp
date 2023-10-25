@@ -20,9 +20,8 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
-#ifndef PROTEUS_PARALLEL_CONTEXT_HPP_
-#define PROTEUS_PARALLEL_CONTEXT_HPP_
+#ifndef PROTEUS_PARALLEL_CONTEXT_HPP
+#define PROTEUS_PARALLEL_CONTEXT_HPP
 
 #include <codegen/context/context.hpp>
 
@@ -32,7 +31,8 @@ class Pipeline;
 
 class ParallelContext : public Context {
  public:
-  explicit ParallelContext(const string &moduleName, bool gpu_root = false);
+  static ParallelContext *prepareParallelContext(const string &moduleName,
+                                                 bool gpuRoot);
   ~ParallelContext() override;
 
   virtual size_t appendParameter(llvm::Type *ptype, bool noalias = false,
@@ -56,20 +56,6 @@ class ParallelContext : public Context {
 
   // void pushNewPipeline    (PipelineGen *copyStateFrom = nullptr);
   // void pushNewCpuPipeline (PipelineGen *copyStateFrom = nullptr);
-
- private:
-  void pushDeviceProvider(PipelineGenFactory *factory);
-
-  template <typename T>
-  void pushDeviceProvider() {
-    pushDeviceProvider(&(T::getInstance()));
-  }
-
-  void popDeviceProvider();
-
-  friend class DeviceCross;
-  friend class CpuToGpu;
-  friend class GpuToCpu;
 
  public:
   void pushPipeline(PipelineGen *copyStateFrom = nullptr);
@@ -132,7 +118,18 @@ class ParallelContext : public Context {
   PipelineGen *operator->() const { return getCurrentPipeline(); }
 
  protected:
+  explicit ParallelContext(const string &moduleName);
+
   virtual void createJITEngine();
+
+  void pushDeviceProvider(PipelineGenFactory *factory);
+
+  template <typename T>
+  void pushDeviceProvider() {
+    pushDeviceProvider(&(T::getInstance()));
+  }
+
+  void popDeviceProvider();
 
  public:
   std::unique_ptr<llvm::TargetMachine> TheTargetMachine;
@@ -154,4 +151,4 @@ class ParallelContext : public Context {
   std::vector<bool> leafgen;
 };
 
-#endif /* PROTEUS_PARALLEL_CONTEXT_HPP_ */
+#endif  // PROTEUS_PARALLEL_CONTEXT_HPP

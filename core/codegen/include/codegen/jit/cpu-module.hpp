@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,39 +20,36 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
+#ifndef PROTEUS_CPU_MODULE_HPP
+#define PROTEUS_CPU_MODULE_HPP
 
-#ifndef GPU_MODULE_HPP_
-#define GPU_MODULE_HPP_
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Target/TargetMachine.h>
 
-#include <platform/common/gpu/gpu-common.hpp>
+#include <codegen/context/context.hpp>
+#include <codegen/jit/jit-module.hpp>
 
-#include "jit-module.hpp"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Target/TargetMachine.h"
-
-class GpuModule : public JITModule {
+class CpuModule : public JITModule {
  protected:
-  static llvm::LLVMTargetMachine *TheTargetMachine;
-  // static std::unique_ptr<llvm::legacy::FunctionPassManager>   FPasses ;
-
- protected:
-  // llvm::ExecutionEngine                             * TheExecutionEngine  ;
-  CUmodule *cudaModule;
+  llvm::ExecutionEngine *TheExecutionEngine;
 
  public:
-  GpuModule(Context *context, std::string pipName = "pip");
-
-  static void init();
+  explicit CpuModule(Context *context, std::string pipName = "pip");
 
   void compileAndLoad() override;
+  inline llvm::Module *getModule() const override {
+    return JITModule::getModule();
+  }
+
+  [[nodiscard]] static const llvm::DataLayout &getDL();
+
+  [[nodiscard]] const llvm::DataLayout &getDataLayout() const override {
+    return CpuModule::getDL();
+  }
 
   void *getCompiledFunction(llvm::Function *f) const override;
-
-  virtual void markToAvoidInteralizeFunction(std::string func);
-
- protected:
-  std::set<std::string> preserveFromInternalization;
+  void *getCompiledFunction(std::string str) const;
 };
 
-#endif /* GPU_MODULE_HPP_ */
+#endif  // PROTEUS_CPU_MODULE_HPP

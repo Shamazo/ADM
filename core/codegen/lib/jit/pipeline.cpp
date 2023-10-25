@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2017
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -20,14 +20,11 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-
-#include "pipeline.hpp"
-
 #include <llvm/InitializePasses.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/TargetSelect.h>
 
-#include <olap/util/parallel-context.hpp>
+#include <codegen/jit/pipeline.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/util/timing.hpp>
@@ -346,7 +343,7 @@ size_t PipelineGen::prepareStateArgument() {
 
   if (state_vars.empty())
     appendStateVar(int32Type);  // FIMXE: should not be necessary... there
-                                // should be some way to bypass it...
+  // should be some way to bypass it...
 
   state_type = StructType::create(state_vars, pipName + "_state_t");
   size_t state_id =
@@ -592,7 +589,7 @@ Pipeline::Pipeline(
 
   state = MemoryManager::mallocPinned(
       state_size);  //(getModule()->getDataLayout().getTypeSizeInBits(state_type)
-                    //+ 7) / 8);
+  //+ 7) / 8);
   assert(state);
 }
 
@@ -731,14 +728,9 @@ llvm::Function *PipelineGen::getFunctionOverload(std::string name,
   return getFunction(getFunctionNameOverload(name, type));
 }
 
-/*
- * For now, copied  from util/raw-functions.cpp and transformed for Pipeline
- *
- * TODO: deduplicate code...
- */
-void PipelineGen::registerFunctions() {
-  LLVMContext &ctx = getModule()->getContext();
-  Module *TheModule = getModule();
+void PipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
+  Module *TheModule = pipelineGen->getModule();
+  LLVMContext &ctx = TheModule->getContext();
   assert(TheModule != nullptr);
 
   Type *int1_bool_type = Type::getInt1Ty(ctx);
@@ -824,67 +816,6 @@ void PipelineGen::registerFunctions() {
   ArgsHashCombine.insert(ArgsHashCombine.begin(), int64_type);
   ArgsHashCombine.insert(ArgsHashCombine.begin(), int64_type);
 
-  /**
-   * Args of functions computing flush
-   */
-  vector<Type *> ArgsFlushInt;
-  ArgsFlushInt.insert(ArgsFlushInt.begin(), char_ptr_type);
-  ArgsFlushInt.insert(ArgsFlushInt.begin(), int32_type);
-
-  vector<Type *> ArgsFlushDString;
-  ArgsFlushDString.insert(ArgsFlushDString.begin(), char_ptr_type);
-  ArgsFlushDString.insert(ArgsFlushDString.begin(), char_ptr_type);
-  ArgsFlushDString.insert(ArgsFlushDString.begin(), int32_type);
-
-  vector<Type *> ArgsFlushInt64;
-  ArgsFlushInt64.insert(ArgsFlushInt64.begin(), char_ptr_type);
-  ArgsFlushInt64.insert(ArgsFlushInt64.begin(), int64_type);
-
-  vector<Type *> ArgsFlushDate;
-  ArgsFlushDate.insert(ArgsFlushDate.begin(), char_ptr_type);
-  ArgsFlushDate.insert(ArgsFlushDate.begin(), int64_type);
-
-  vector<Type *> ArgsFlushDouble;
-  ArgsFlushDouble.insert(ArgsFlushDouble.begin(), char_ptr_type);
-  ArgsFlushDouble.insert(ArgsFlushDouble.begin(), double_type);
-
-  vector<Type *> ArgsFlushStringC;
-  ArgsFlushStringC.insert(ArgsFlushStringC.begin(), char_ptr_type);
-  ArgsFlushStringC.insert(ArgsFlushStringC.begin(), int64_type);
-  ArgsFlushStringC.insert(ArgsFlushStringC.begin(), int64_type);
-  ArgsFlushStringC.insert(ArgsFlushStringC.begin(), char_ptr_type);
-
-  vector<Type *> ArgsFlushStringCv2;
-  ArgsFlushStringCv2.insert(ArgsFlushStringCv2.begin(), char_ptr_type);
-  ArgsFlushStringCv2.insert(ArgsFlushStringCv2.begin(), char_ptr_type);
-
-  vector<Type *> ArgsFlushStringObj;
-  ArgsFlushStringObj.insert(ArgsFlushStringObj.begin(), char_ptr_type);
-  ArgsFlushStringObj.insert(ArgsFlushStringObj.begin(), strObjType);
-
-  vector<Type *> ArgsFlushBoolean;
-  ArgsFlushBoolean.insert(ArgsFlushBoolean.begin(), char_ptr_type);
-  ArgsFlushBoolean.insert(ArgsFlushBoolean.begin(), int1_bool_type);
-
-  vector<Type *> ArgsFlushPtr;
-  ArgsFlushPtr.insert(ArgsFlushPtr.begin(), char_ptr_type);
-  ArgsFlushPtr.insert(ArgsFlushPtr.begin(), uintptr_type);
-
-  vector<Type *> ArgsFlushStartEnd;
-  ArgsFlushStartEnd.insert(ArgsFlushStartEnd.begin(), char_ptr_type);
-
-  vector<Type *> ArgsFlushChar;
-  ArgsFlushChar.insert(ArgsFlushChar.begin(), char_ptr_type);
-  ArgsFlushChar.insert(ArgsFlushChar.begin(), int8_type);
-
-  vector<Type *> ArgsFlushDelim;
-  ArgsFlushDelim.insert(ArgsFlushDelim.begin(), char_ptr_type);
-  ArgsFlushDelim.insert(ArgsFlushDelim.begin(), int8_type);
-  ArgsFlushDelim.insert(ArgsFlushDelim.begin(), int64_type);
-
-  vector<Type *> ArgsFlushOutput;
-  ArgsFlushOutput.insert(ArgsFlushOutput.begin(), char_ptr_type);
-
   vector<Type *> ArgsMemoryChunk;
   ArgsMemoryChunk.insert(ArgsMemoryChunk.begin(), int64_type);
   vector<Type *> ArgsIncrMemoryChunk;
@@ -934,32 +865,6 @@ void PipelineGen::registerFunctions() {
       FunctionType::get(int64_type, ArgsHashBoolean, false);
   FunctionType *FThashCombine =
       FunctionType::get(int64_type, ArgsHashCombine, false);
-  FunctionType *FTflushInt = FunctionType::get(void_type, ArgsFlushInt, false);
-  FunctionType *FTflushDString =
-      FunctionType::get(void_type, ArgsFlushDString, false);
-  FunctionType *FTflushInt64 =
-      FunctionType::get(void_type, ArgsFlushInt64, false);
-  FunctionType *FTflushDate =
-      FunctionType::get(void_type, ArgsFlushDate, false);
-  FunctionType *FTflushDouble =
-      FunctionType::get(void_type, ArgsFlushDouble, false);
-  FunctionType *FTflushStringC =
-      FunctionType::get(void_type, ArgsFlushStringC, false);
-  FunctionType *FTflushStringCv2 =
-      FunctionType::get(void_type, ArgsFlushStringCv2, false);
-  FunctionType *FTflushStringObj =
-      FunctionType::get(void_type, ArgsFlushStringObj, false);
-  FunctionType *FTflushBoolean =
-      FunctionType::get(void_type, ArgsFlushBoolean, false);
-  FunctionType *FTflushPtr = FunctionType::get(void_type, ArgsFlushPtr, false);
-  FunctionType *FTflushStartEnd =
-      FunctionType::get(void_type, ArgsFlushStartEnd, false);
-  FunctionType *FTflushChar =
-      FunctionType::get(void_type, ArgsFlushChar, false);
-  FunctionType *FTflushDelim =
-      FunctionType::get(void_type, ArgsFlushDelim, false);
-  FunctionType *FTflushOutput =
-      FunctionType::get(void_type, ArgsFlushOutput, false);
 
   FunctionType *FTmemoryChunk =
       FunctionType::get(void_ptr_type, ArgsMemoryChunk, false);
@@ -1036,7 +941,7 @@ void PipelineGen::registerFunctions() {
                        "combineHashesNoOrder", TheModule);
 
 #if 0
-    /**
+  /**
      * Debug (TMP)
      */
     vector<Type*> ArgsDebug;
@@ -1045,47 +950,6 @@ void PipelineGen::registerFunctions() {
     Function *debug_ = Function::Create(FTdebug, Function::ExternalLinkage,
                 "debug", TheModule);
 #endif
-
-  /**
-   * Flushing
-   */
-  Function *flushInt_ = Function::Create(FTflushInt, Function::ExternalLinkage,
-                                         "flushInt", TheModule);
-  Function *flushDString_ = Function::Create(
-      FTflushDString, Function::ExternalLinkage, "flushDString", TheModule);
-  Function *flushInt64_ = Function::Create(
-      FTflushInt64, Function::ExternalLinkage, "flushInt64", TheModule);
-  Function *flushDate_ = Function::Create(
-      FTflushDate, Function::ExternalLinkage, "flushDate", TheModule);
-  Function *flushDouble_ = Function::Create(
-      FTflushDouble, Function::ExternalLinkage, "flushDouble", TheModule);
-  Function *flushStringC_ = Function::Create(
-      FTflushStringC, Function::ExternalLinkage, "flushStringC", TheModule);
-  Function *flushStringCv2_ =
-      Function::Create(FTflushStringCv2, Function::ExternalLinkage,
-                       "flushStringReady", TheModule);
-  Function *flushStringObj_ =
-      Function::Create(FTflushStringObj, Function::ExternalLinkage,
-                       "flushStringObject", TheModule);
-  Function *flushBoolean_ = Function::Create(
-      FTflushBoolean, Function::ExternalLinkage, "flushBoolean", TheModule);
-  Function *flushPtr_ = Function::Create(FTflushPtr, Function::ExternalLinkage,
-                                         "flushPtr", TheModule);
-  Function *flushObjectStart_ =
-      Function::Create(FTflushStartEnd, Function::ExternalLinkage,
-                       "flushObjectStart", TheModule);
-  Function *flushArrayStart_ = Function::Create(
-      FTflushStartEnd, Function::ExternalLinkage, "flushArrayStart", TheModule);
-  Function *flushObjectEnd_ = Function::Create(
-      FTflushStartEnd, Function::ExternalLinkage, "flushObjectEnd", TheModule);
-  Function *flushArrayEnd_ = Function::Create(
-      FTflushStartEnd, Function::ExternalLinkage, "flushArrayEnd", TheModule);
-  Function *flushChar_ = Function::Create(
-      FTflushChar, Function::ExternalLinkage, "flushChar", TheModule);
-  Function *flushDelim_ = Function::Create(
-      FTflushDelim, Function::ExternalLinkage, "flushDelim", TheModule);
-  Function *flushOutput_ = Function::Create(
-      FTflushOutput, Function::ExternalLinkage, "flushOutput", TheModule);
 
   /* Memory Management */
   Function *getMemoryChunk_ = Function::Create(
@@ -1104,109 +968,6 @@ void PipelineGen::registerFunctions() {
   if (memcpy_ == nullptr) {
     throw runtime_error(string("Could not find memcpy intrinsic"));
   }
-
-  /**
-   * HASHTABLES FOR JOINS / AGGREGATIONS
-   */
-  // Last type is needed to capture file size. Tentative
-  Type *ht_int_types[] = {int32_type, int32_type, void_ptr_type, int32_type};
-  FunctionType *FTintHT = FunctionType::get(void_type, ht_int_types, false);
-  Function *insertIntKeyToHT_ = Function::Create(
-      FTintHT, Function::ExternalLinkage, "insertIntKeyToHT", TheModule);
-
-  Type *ht_types[] = {char_ptr_type, int64_type, void_ptr_type, int32_type};
-  FunctionType *FT_HT = FunctionType::get(void_type, ht_types, false);
-  Function *insertToHT_ = Function::Create(FT_HT, Function::ExternalLinkage,
-                                           "insertToHT", TheModule);
-
-  Type *ht_int_probe_types[] = {int32_type, int32_type, int32_type};
-  PointerType *void_ptr_ptr_type = context->getPointerType(void_ptr_type);
-  FunctionType *FTint_probeHT =
-      FunctionType::get(void_ptr_ptr_type, ht_int_probe_types, false);
-  Function *probeIntHT_ = Function::Create(
-      FTint_probeHT, Function::ExternalLinkage, "probeIntHT", TheModule);
-  probeIntHT_->addFnAttr(llvm::Attribute::AlwaysInline);
-
-  Type *ht_probe_types[] = {char_ptr_type, int64_type};
-  FunctionType *FT_probeHT =
-      FunctionType::get(void_ptr_ptr_type, ht_probe_types, false);
-  Function *probeHT_ = Function::Create(FT_probeHT, Function::ExternalLinkage,
-                                        "probeHT", TheModule);
-  probeHT_->addFnAttr(llvm::Attribute::AlwaysInline);
-
-  Type *ht_get_metadata_types[] = {char_ptr_type};
-  StructType *metadataType = Context::getHashtableMetadataType(ctx);
-  PointerType *metadataArrayType = PointerType::get(metadataType, 0);
-  FunctionType *FTget_metadata_HT =
-      FunctionType::get(metadataArrayType, ht_get_metadata_types, false);
-  Function *getMetadataHT_ = Function::Create(
-      FTget_metadata_HT, Function::ExternalLinkage, "getMetadataHT", TheModule);
-
-  /**
-   * Radix
-   */
-  /* What the type of HT buckets is */
-  vector<Type *> htBucketMembers;
-  // int *bucket;
-  htBucketMembers.push_back(int32_ptr_type);
-  // int *next;
-  htBucketMembers.push_back(int32_ptr_type);
-  // uint32_t mask;
-  htBucketMembers.push_back(int32_type);
-  // int count;
-  htBucketMembers.push_back(int32_type);
-  StructType *htBucketType = StructType::get(ctx, htBucketMembers);
-  PointerType *htBucketPtrType = PointerType::get(htBucketType, 0);
-
-  /* JOIN!!! */
-  /* What the type of HT entries is */
-  /* (int32, void*) */
-  vector<Type *> htEntryMembers;
-  htEntryMembers.push_back(int32_type);
-  htEntryMembers.push_back(int64_type);
-  StructType *htEntryType = StructType::get(ctx, htEntryMembers);
-  PointerType *htEntryPtrType = PointerType::get(htEntryType, 0);
-
-  Type *radix_partition_types[] = {int64_type, htEntryPtrType};
-  FunctionType *FTradix_partition =
-      FunctionType::get(int32_ptr_type, radix_partition_types, false);
-  Function *radix_partition =
-      Function::Create(FTradix_partition, Function::ExternalLinkage,
-                       "partitionHTLLVM", TheModule);
-
-  Type *bucket_chaining_join_prepare_types[] = {htEntryPtrType, int32_type,
-                                                htBucketPtrType};
-  FunctionType *FTbucket_chaining_join_prepare =
-      FunctionType::get(void_type, bucket_chaining_join_prepare_types, false);
-  Function *bucket_chaining_join_prepare = Function::Create(
-      FTbucket_chaining_join_prepare, Function::ExternalLinkage,
-      "bucket_chaining_join_prepareLLVM", TheModule);
-
-  /* AGGR! */
-  /* What the type of HT entries is */
-  /* (int64, void*) */
-  vector<Type *> htAggEntryMembers;
-  htAggEntryMembers.push_back(int64_type);
-  htAggEntryMembers.push_back(int64_type);
-  StructType *htAggEntryType = StructType::get(ctx, htAggEntryMembers);
-  PointerType *htAggEntryPtrType = PointerType::get(htAggEntryType, 0);
-  Type *radix_partition_agg_types[] = {int64_type, htAggEntryPtrType};
-  FunctionType *FTradix_partition_agg =
-      FunctionType::get(int32_ptr_type, radix_partition_agg_types, false);
-  Function *radix_partition_agg =
-      Function::Create(FTradix_partition_agg, Function::ExternalLinkage,
-                       "partitionAggHTLLVM", TheModule);
-
-  Type *bucket_chaining_agg_prepare_types[] = {htAggEntryPtrType, int32_type,
-                                               htBucketPtrType};
-  FunctionType *FTbucket_chaining_agg_prepare =
-      FunctionType::get(void_type, bucket_chaining_agg_prepare_types, false);
-  Function *bucket_chaining_agg_prepare =
-      Function::Create(FTbucket_chaining_agg_prepare, Function::ExternalLinkage,
-                       "bucket_chaining_agg_prepareLLVM", TheModule);
-  /**
-   * End of Radix
-   */
 
   /**
    * Parsing
@@ -1248,7 +1009,7 @@ void PipelineGen::registerFunctions() {
   for (auto t :
        std::vector<llvm::Type *>{int1_bool_type, int8_type, int16_type,
                                  int32_type, int64_type, char_ptr_type}) {
-    auto fName = "log" + convertTypeToFuncSuffix(t);
+    auto fName = "log" + pipelineGen->convertTypeToFuncSuffix(t);
 
     auto fType =
         FunctionType::get(void_type, {t, char_ptr_type, int32_type}, false);
@@ -1256,7 +1017,7 @@ void PipelineGen::registerFunctions() {
     auto f =
         Function::Create(fType, Function::ExternalLinkage, fName, TheModule);
 
-    registerFunction(fName, f);
+    pipelineGen->registerFunction(fName, f);
   }
 
   FunctionType *intrcallPipRegistered = FunctionType::get(
@@ -1264,89 +1025,60 @@ void PipelineGen::registerFunctions() {
       false);
   Function *intr_pcallPipRegisteredOpen =
       Function::Create(intrcallPipRegistered, Function::ExternalLinkage,
-                       "callPipRegisteredOpen", getModule());
+                       "callPipRegisteredOpen", TheModule);
   Function *intr_pcallPipRegisteredClose =
       Function::Create(intrcallPipRegistered, Function::ExternalLinkage,
-                       "callPipRegisteredClose", getModule());
-  registerFunction("callPipRegisteredOpen", intr_pcallPipRegisteredOpen);
-  registerFunction("callPipRegisteredClose", intr_pcallPipRegisteredClose);
+                       "callPipRegisteredClose", TheModule);
+  pipelineGen->registerFunction("callPipRegisteredOpen",
+                                intr_pcallPipRegisteredOpen);
+  pipelineGen->registerFunction("callPipRegisteredClose",
+                                intr_pcallPipRegisteredClose);
 
   FunctionType *intrget_dev_buffer =
       FunctionType::get(char_ptr_type, std::vector<Type *>{}, false);
   Function *intr_pget_dev_buffer =
       Function::Create(intrget_dev_buffer, Function::ExternalLinkage,
-                       "get_dev_buffer", getModule());
-  registerFunction("get_dev_buffer", intr_pget_dev_buffer);
+                       "get_dev_buffer", TheModule);
+  pipelineGen->registerFunction("get_dev_buffer", intr_pget_dev_buffer);
 
   FunctionType *intrprintptr =
       FunctionType::get(void_type, std::vector<Type *>{char_ptr_type}, false);
   Function *intr_pprintptr = Function::Create(
-      intrprintptr, Function::ExternalLinkage, "printptr", getModule());
-  registerFunction("printptr", intr_pprintptr);
+      intrprintptr, Function::ExternalLinkage, "printptr", TheModule);
+  pipelineGen->registerFunction("printptr", intr_pprintptr);
 
-  registerFunction("printi", printi_);
-  registerFunction("printi64", printi64_);
-  registerFunction("printFloat", printFloat_);
-  registerFunction("printShort", printShort_);
-  registerFunction("printBoolean", printBoolean_);
-  registerFunction("printc", printc_);
+  pipelineGen->registerFunction("printi", printi_);
+  pipelineGen->registerFunction("printi64", printi64_);
+  pipelineGen->registerFunction("printFloat", printFloat_);
+  pipelineGen->registerFunction("printShort", printShort_);
+  pipelineGen->registerFunction("printBoolean", printBoolean_);
+  pipelineGen->registerFunction("printc", printc_);
 
-  registerFunction("atoi", atoi_);
-  registerFunction("atois", atois_);
-  registerFunction("atof", atof_);
+  pipelineGen->registerFunction("atoi", atoi_);
+  pipelineGen->registerFunction("atois", atois_);
+  pipelineGen->registerFunction("atof", atof_);
 
-  registerFunction("insertInt", insertIntKeyToHT_);
-  registerFunction("probeInt", probeIntHT_);
-  registerFunction("insertHT", insertToHT_);
-  registerFunction("probeHT", probeHT_);
-  registerFunction("getMetadataHT", getMetadataHT_);
+  pipelineGen->registerFunction("compareTokenString", compareTokenString_);
+  pipelineGen->registerFunction("compareTokenString64", compareTokenString64_);
+  pipelineGen->registerFunction("convertBoolean", convertBoolean_);
+  pipelineGen->registerFunction("convertBoolean64", convertBoolean64_);
+  pipelineGen->registerFunction("equalStringObjs", stringObjEquality);
+  pipelineGen->registerFunction("equalStrings", stringEquality);
 
-  registerFunction("compareTokenString", compareTokenString_);
-  registerFunction("compareTokenString64", compareTokenString64_);
-  registerFunction("convertBoolean", convertBoolean_);
-  registerFunction("convertBoolean64", convertBoolean64_);
-  registerFunction("equalStringObjs", stringObjEquality);
-  registerFunction("equalStrings", stringEquality);
+  pipelineGen->registerFunction("hashInt", hashInt_);
+  pipelineGen->registerFunction("hashInt64", hashInt64_);
+  pipelineGen->registerFunction("hashDouble", hashDouble_);
+  pipelineGen->registerFunction("hashStringC", hashStringC_);
+  pipelineGen->registerFunction("hashStringObject", hashStringObj_);
+  pipelineGen->registerFunction("hashBoolean", hashBoolean_);
+  pipelineGen->registerFunction("combineHashes", hashCombine_);
+  pipelineGen->registerFunction("combineHashesNoOrder", hashCombineNoOrder_);
 
-  registerFunction("hashInt", hashInt_);
-  registerFunction("hashInt64", hashInt64_);
-  registerFunction("hashDouble", hashDouble_);
-  registerFunction("hashStringC", hashStringC_);
-  registerFunction("hashStringObject", hashStringObj_);
-  registerFunction("hashBoolean", hashBoolean_);
-  registerFunction("combineHashes", hashCombine_);
-  registerFunction("combineHashesNoOrder", hashCombineNoOrder_);
+  pipelineGen->registerFunction("getMemoryChunk", getMemoryChunk_);
+  pipelineGen->registerFunction("increaseMemoryChunk", increaseMemoryChunk_);
+  pipelineGen->registerFunction("releaseMemoryChunk", releaseMemoryChunk_);
+  pipelineGen->registerFunction("memcpy", memcpy_);
 
-  registerFunction("flushInt", flushInt_);
-  registerFunction("flushDString", flushDString_);
-  registerFunction("flushInt64", flushInt64_);
-  registerFunction("flushDate", flushDate_);
-  registerFunction("flushDouble", flushDouble_);
-  registerFunction("flushStringC", flushStringC_);
-  registerFunction("flushStringCv2", flushStringCv2_);
-  registerFunction("flushStringObj", flushStringObj_);
-  registerFunction("flushBoolean", flushBoolean_);
-  registerFunction("flushPtr", flushPtr_);
-  registerFunction("flushChar", flushChar_);
-  registerFunction("flushDelim", flushDelim_);
-  registerFunction("flushOutput", flushOutput_);
-
-  registerFunction("flushObjectStart", flushObjectStart_);
-  registerFunction("flushArrayStart", flushArrayStart_);
-  registerFunction("flushObjectEnd", flushObjectEnd_);
-  registerFunction("flushArrayEnd", flushArrayEnd_);
-  registerFunction("flushArrayEnd", flushArrayEnd_);
-
-  registerFunction("getMemoryChunk", getMemoryChunk_);
-  registerFunction("increaseMemoryChunk", increaseMemoryChunk_);
-  registerFunction("releaseMemoryChunk", releaseMemoryChunk_);
-  registerFunction("memcpy", memcpy_);
-
-  registerFunction("partitionHT", radix_partition);
-  registerFunction("bucketChainingPrepare", bucket_chaining_join_prepare);
-  registerFunction("partitionAggHT", radix_partition_agg);
-  registerFunction("bucketChainingAggPrepare", bucket_chaining_agg_prepare);
-
-  registerFunction("newline", newline);
-  registerFunction("parseLineJSON", parse_line_json);
+  pipelineGen->registerFunction("newline", newline);
+  pipelineGen->registerFunction("parseLineJSON", parse_line_json);
 }
