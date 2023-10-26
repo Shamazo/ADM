@@ -95,16 +95,8 @@ set(olap_cxx
   lib/util/demangle.cpp
   lib/util/flush-operator-tree.cpp
   lib/util/functions.cpp
-  lib/util/gpu/gpu-intrinsics.cpp
   lib/util/jit/control-flow/if-statement.cpp
-  lib/util/jit/cpu-module.cpp
-  lib/util/jit/cpu-pipeline.cpp
-  lib/util/jit/gpu-module.cpp
-  lib/util/jit/gpu-pipeline.cpp
-  lib/util/jit/jit-module.cpp
   lib/util/jit/olap-pipeline.cpp
-  lib/util/jit/pipeline.cpp
-  lib/util/parallel-context.cpp
   lib/util/project-record.cpp
   lib/util/slack-limiter.cpp
   )
