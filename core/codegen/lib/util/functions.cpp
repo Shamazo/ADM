@@ -20,10 +20,9 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-#include "functions.hpp"
-
 #include <glog/logging.h>
 
+#include <codegen/util/functions.hpp>
 #include <cstdio>
 #include <cstring>
 #include <platform/common/common.hpp>
@@ -264,6 +263,12 @@ size_t hashStringC(char *toHash, size_t start, size_t end) {
   std::hash<std::string> hasher;
   size_t result = hasher(toHash + start);
   toHash[end] = tmp;
+  return result;
+}
+
+size_t hashString(string toHash) {
+  std::hash<string> hasher;
+  size_t result = hasher(toHash);
   return result;
 }
 

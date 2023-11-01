@@ -23,6 +23,7 @@
 
 #include "expressions-hasher.hpp"
 
+#include <codegen/util/functions.hpp>
 #include <lib/util/project-record.hpp>
 #include <olap/expressions/expressions/ref-expression.hpp>
 

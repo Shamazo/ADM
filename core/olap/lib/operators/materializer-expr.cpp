@@ -25,6 +25,8 @@
 
 #include <llvm/Support/Alignment.h>
 
+#include <codegen/util/functions.hpp>
+
 using namespace llvm;
 
 ExprMaterializer::ExprMaterializer(expressions::Expression *toMat,

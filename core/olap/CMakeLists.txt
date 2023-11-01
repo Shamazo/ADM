@@ -97,6 +97,7 @@ set(olap_cxx
   lib/util/functions.cpp
   lib/util/jit/control-flow/if-statement.cpp
   lib/util/jit/olap-pipeline.cpp
+  lib/util/parallel-context.cpp
   lib/util/project-record.cpp
   lib/util/slack-limiter.cpp
   )

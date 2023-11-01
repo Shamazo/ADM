@@ -81,6 +81,8 @@ extern "C" size_t hashDouble(double toHash);
 
 extern "C" size_t hashStringC(char *toHash, size_t start, size_t end);
 
+size_t hashString(std::string toHash);
+
 extern "C" size_t hashStringObject(StringObject obj);
 
 extern "C" size_t hashBoolean(bool toHash);

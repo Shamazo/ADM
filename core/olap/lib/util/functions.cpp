@@ -53,8 +53,6 @@ namespace filesystem = std::experimental::filesystem;
 // #define JSON_TIGHT
 #include "jsmn.h"
 
-#define CACHE_CAP 1024
-
 OlapParallelContext *prepareOlapContext(string moduleName, bool gpuRoot) {
   auto *ctx = new OlapParallelContext(moduleName, gpuRoot);
   return ctx;
