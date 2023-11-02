@@ -1,0 +1,145 @@
+/*
+    Proteus -- High-performance query processing on heterogeneous hardware.
+
+                            Copyright (c) 2023
+        Data Intensive Applications and Systems Laboratory (DIAS)
+                École Polytechnique Fédérale de Lausanne
+
+                            All Rights Reserved.
+
+    Permission to use, copy, modify and distribute this software and
+    its documentation is hereby granted, provided that both the
+    copyright notice and this permission notice appear in all copies of
+    the software, derivative works or modified versions, and any
+    portions thereof, and that both notices appear in supporting
+    documentation.
+
+    This code is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. THE AUTHORS
+    DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
+    RESULTING FROM THE USE OF THIS SOFTWARE.
+*/
+#include <gtest/gtest.h>
+
+#include <codegen/context/parallel-context.hpp>
+#include <codegen/test/pipeline-environment.hpp>
+#include <memory>
+#include <platform/memory/memory-manager.hpp>
+
+::testing::Environment* const pools_env =
+    ::testing::AddGlobalTestEnvironment(new PipelineTestEnvironment);
+
+class ParallelContextTest : public ::testing::Test {
+ protected:
+  void SetUp() final {
+    // Create a context
+    parallelContext = std::unique_ptr<ParallelContext>(
+        ParallelContext::prepareParallelContext(testModuleName,
+                                                /*gpuRoot=*/false));
+  }
+
+ public:
+  const std::string testModuleName = "test";
+
+  std::unique_ptr<ParallelContext> parallelContext;
+};
+
+// Use ParallelContext to generate and empty pipeline, compile and run it
+TEST_F(ParallelContextTest, SmokeTest) {
+  // During the construction of the ParallelContext, the first PipelineGen was
+  // added as the generator of the pipelines in the ParallelContext.
+  // ParallelContext::setGlobalFunction calls prepare on the current pipeline
+  // generator, that set up the main pipeline functions.
+  // See more in the pipeline tests
+  parallelContext->setGlobalFunction(/*leaf=*/true);
+
+  // Move the latest PipelineGen from the generators to the pipelines and call
+  // PipelineGen::compileAndLoad. Also prepare the ParallelContext for the
+  // further generations.
+  // Note: we do not need to call Builder's CreateRetVoid, because it is done by
+  // compileAndLoad
+  parallelContext->compileAndLoad();
+
+  // For each leaf PipelineGen, wait for the compiled function and set up the
+  // pipeline
+  auto pipelines = parallelContext->getPipelines();
+
+  ASSERT_FALSE(pipelines.empty());
+  auto& pipeline = pipelines.front();
+
+  // Allocate a session for the pipeline
+  auto* session = MemoryManager::mallocPinned(sizeof(size_t));
+
+  // Actually execute the pipeline
+  pipeline->open(session);
+  pipeline->consume(0);
+  pipeline->close();
+
+  // Deallocate the session
+  MemoryManager::freePinned(session);
+}
+
+// Generate a pipeline using ParallelContext with an additional state variable
+// with init/deinit functions. Generate printi function call with the specified
+// state variable as an argument. Compile and run the pipeline.
+TEST_F(ParallelContextTest, CallFunction) {
+  // See PipelineTest::AppendAndAllocateStateVar
+  // Note that you must appendStateVar before calling setGlobalFunction
+  llvm::IntegerType* type =
+      llvm::Type::getInt32Ty(parallelContext->getLLVMContext());
+  auto stateVar = parallelContext->appendStateVar(
+      llvm::PointerType::getUnqual(type),
+      [=](llvm::Value* pip) -> llvm::Value* {
+        // Be careful to use CpuPipelineGen::allocateStateVar, but not
+        // Context::allocateStateVar Note that the
+        // ParallelContext::allocateStateVar redirects calls to the {Cpu,
+        // Gpu}PipelineGen, so it is safe to use it
+        auto mem = parallelContext->allocateStateVar(type);
+        parallelContext->getBuilder()->CreateStore(
+            parallelContext->createInt32(100), mem);
+        return mem;
+      },
+      [=](llvm::Value* pip, llvm::Value* state_var) {
+        parallelContext->deallocateStateVar(state_var);
+      });
+
+  parallelContext->setGlobalFunction(/*leaf=*/true);
+
+  // Fetch an argument using the id received from the appendParameter function
+  llvm::Value* argument_mem = parallelContext->getStateVar(stateVar);
+
+  // Load the payload of the argument (remember, the argument itself is a
+  // pointer)
+  llvm::Value* argumentPayload = parallelContext->getBuilder()->CreateLoad(
+      argument_mem->getType()->getPointerElementType(), argument_mem);
+
+  // Generate a print function call
+  llvm::Function* printInt = parallelContext->getFunction("printi");
+  parallelContext->gen_call(printInt, {argumentPayload});
+
+  // Move the latest PipelineGen from the generators to the pipelines and call
+  // PipelineGen::compileAndLoad. Also prepare the ParallelContext for the
+  // further generations.
+  // Note: we do not need to call Builder's CreateRetVoid, because it is done by
+  // compileAndLoad
+  parallelContext->compileAndLoad();
+
+  // For each leaf PipelineGen, wait for the compiled function and set up the
+  // pipeline
+  auto pipelines = parallelContext->getPipelines();
+
+  ASSERT_FALSE(pipelines.empty());
+  auto& pipeline = pipelines.front();
+
+  // Allocate a session for the pipeline
+  auto* session = MemoryManager::mallocPinned(sizeof(size_t));
+
+  // Actually execute the pipeline
+  pipeline->open(session);
+  pipeline->consume(0);
+  pipeline->close();
+
+  // Deallocate the session
+  MemoryManager::freePinned(session);
+}

@@ -70,7 +70,7 @@ class PipelineTest : public ::testing::Test {
 };
 
 // Make and run an empty pipeline
-TEST_F(PipelineTest, JustWorks) {
+TEST_F(PipelineTest, SmokeTest) {
   // Set up the main pipeline functions
   // Note: this is one-shot function, so you can't create more than one
   // pipeline using PipelineGen
@@ -210,7 +210,7 @@ TEST_F(PipelineTest, AppendParameter) {
 // the pipeline in the runtime.
 TEST_F(PipelineTest, AppendStateVar) {
   // Append an additional argument to the main pipeline function
-  // Note: the argument type should be a pointer type
+  // Note: the argument type must be a pointer type
   auto stateVar =
       cpuPipelineGen->appendStateVar(llvm::PointerType::get(i32Type, 0));
 
@@ -248,6 +248,84 @@ TEST_F(PipelineTest, AppendStateVar) {
 
   int32_t pipelinePayload = 15;
   pipeline->setStateVar<int32_t*>(stateVar, &pipelinePayload);
+
+  // Allocate a session for the pipeline
+  auto* session = MemoryManager::mallocPinned(sizeof(size_t));
+
+  // Actually execute the pipeline
+  pipeline->open(session);
+
+  // Create a payload for out main pipeline function and execute the function
+  pipeline->consume(0);
+
+  pipeline->close();
+
+  // Deallocate the session
+  MemoryManager::freePinned(session);
+}
+
+// Make and run a pipeline with an additional state variable which will be
+// passed to the printi function. Specify init and deinit functions for this
+// variable. This is a common way to pass an argument to the pipeline in the
+// runtime.
+TEST_F(PipelineTest, AppendAndAllocateStateVar) {
+  llvm::IntegerType* type =
+      llvm::Type::getInt32Ty(testContext->getLLVMContext());
+  // Append an additional argument to the main pipeline function
+  // Note: the argument type must be a pointer type
+  // The second argument is a function that will be called for the
+  // initialization of the state variable The third argument is a function that
+  // will be called at the end of the pipeline
+  auto stateVar = cpuPipelineGen->appendStateVar(
+      llvm::PointerType::getUnqual(type),
+      [=](llvm::Value* pip) -> llvm::Value* {
+        // Be careful to use CpuPipelineGen::allocateStateVar, but not
+        // Context::allocateStateVar Note that the
+        // ParallelContext::allocateStateVar redirects calls to the {Cpu,
+        // Gpu}PipelineGen, so it is safe to use it
+        auto mem = cpuPipelineGen->allocateStateVar(type);
+        testContext->getBuilder()->CreateStore(testContext->createInt32(100),
+                                               mem);
+        return mem;
+      },
+      [=](llvm::Value* pip, llvm::Value* state_var) {
+        cpuPipelineGen->deallocateStateVar(state_var);
+      });
+
+  // Set up main pipeline functions
+  cpuPipelineGen->prepare();
+
+  /**
+   * Pipeline code generation
+   */
+
+  // Fetch an argument using the id received from the appendParameter function
+  llvm::Value* argument_mem = cpuPipelineGen->getStateVar(stateVar);
+
+  // Load the payload of the argument (remember, the argument itself is a
+  // pointer)
+  llvm::Value* argumentPayload = cpuPipelineGen->getBuilder()->CreateLoad(
+      argument_mem->getType()->getPointerElementType(), argument_mem);
+
+  // Generate a print function call
+  llvm::Function* printInt = cpuPipelineGen->getFunction("printi");
+  testContext->gen_call(printInt, {argumentPayload});
+
+  // Generate return from the main pipeline function
+  cpuPipelineGen->getBuilder()->CreateRetVoid();
+
+  /**
+   * Pipeline compilation and execution
+   */
+
+  // Start compiling
+  cpuPipelineGen->compileAndLoad();
+
+  // Wait for the compiled function and set up the pipeline
+  auto pipeline = cpuPipelineGen->getPipeline();
+
+  //  int32_t pipelinePayload = 15;
+  //  pipeline->setStateVar<int32_t*>(stateVar, &pipelinePayload);
 
   // Allocate a session for the pipeline
   auto* session = MemoryManager::mallocPinned(sizeof(size_t));
