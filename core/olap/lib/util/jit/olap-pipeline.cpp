@@ -374,7 +374,7 @@ PipelineGen *OlapCpuPipelineGenFactory::create(Context *context,
                                                PipelineGen *copyStateFrom) {
   auto *pipelineGen =
       CpuPipelineGenFactory::create(context, pipName, copyStateFrom);
-  registerFunctions(pipelineGen);
+  OlapCpuPipelineGenFactory::registerFunctions(pipelineGen);
   return pipelineGen;
 }
 
@@ -387,6 +387,15 @@ PipelineGen *OlapGpuPipelineGenFactory::create(Context *context,
                                                PipelineGen *copyStateFrom) {
   auto *pipelineGen =
       GpuPipelineGenFactory::create(context, pipName, copyStateFrom);
-  registerFunctions(pipelineGen);
+
+  // Register olap functions for the main module
+  OlapGpuPipelineGenFactory::registerFunctions(pipelineGen);
+
+  // Register olap function for the olap module
+  auto *gpuPipelineGen = dynamic_cast<GpuPipelineGen *>(pipelineGen);
+  gpuPipelineGen->enableWrapperModule();
+  OlapGpuPipelineGenFactory::registerFunctions(pipelineGen);
+  gpuPipelineGen->disableWrapperModule();
+
   return pipelineGen;
 }

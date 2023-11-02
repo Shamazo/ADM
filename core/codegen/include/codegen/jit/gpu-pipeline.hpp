@@ -79,6 +79,10 @@ class GpuPipelineGen : public PipelineGen {
 
   void workerScopedMembar() override;
 
+  void enableWrapperModule();
+
+  void disableWrapperModule();
+
  protected:
   size_t prepareStateArgument() override;
   llvm::Value *getStateLLVMValue() override;
@@ -107,11 +111,7 @@ class GpuPipelineGenFactory : public PipelineGenFactory {
   }
 
   PipelineGen *create(Context *context, std::string pipName,
-                      PipelineGen *copyStateFrom) override {
-    auto *pipelineGen = new GpuPipelineGen(context, pipName, copyStateFrom);
-    GpuPipelineGenFactory::registerFunctions(pipelineGen);
-    return static_cast<PipelineGen *>(pipelineGen);
-  }
+                      PipelineGen *copyStateFrom) override;
 };
 
 extern "C" {

@@ -207,7 +207,7 @@ Function *GpuPipelineGen::prepareConsumeWrapper() {
 }
 
 void GpuPipelineGen::prepareInitDeinit() {
-  wrapperModuleActive = true;
+  enableWrapperModule();
 
   Type *void_type = Type::getVoidTy(context->getLLVMContext());
   Type *int32_type = Type::getInt32Ty(context->getLLVMContext());
@@ -300,7 +300,7 @@ void GpuPipelineGen::prepareInitDeinit() {
   PipelineGen::prepareInitDeinit();
 
   F = tmpF;
-  wrapperModuleActive = false;
+  disableWrapperModule();
 }
 
 void GpuPipelineGen::markAsKernel(Function *F) const {
@@ -499,6 +499,10 @@ void GpuPipelineGen::workerScopedMembar() {
   Function *membar_fun = getFunction("llvm.nvvm.membar.gl");
   getBuilder()->CreateCall(membar_fun, {});
 }
+
+void GpuPipelineGen::enableWrapperModule() { wrapperModuleActive = true; }
+
+void GpuPipelineGen::disableWrapperModule() { wrapperModuleActive = false; }
 
 void GpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
   PipelineGenFactory::registerFunctions(pipelineGen);
@@ -811,6 +815,22 @@ void GpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
       Function::Create(intrrelease_buffers, Function::ExternalLinkage,
                        "release_buffers", llvmModule);
   pipelineGen->registerFunction("release_buffers", intr_prelease_buffers);
+}
+
+PipelineGen *GpuPipelineGenFactory::create(Context *context,
+                                           std::string pipName,
+                                           PipelineGen *copyStateFrom) {
+  auto *pipelineGen = new GpuPipelineGen(context, pipName, copyStateFrom);
+
+  // Register external functions for the main GpuModule
+  GpuPipelineGenFactory::registerFunctions(pipelineGen);
+
+  // Register external functions for the wrapper Module
+  pipelineGen->enableWrapperModule();
+  GpuPipelineGenFactory::registerFunctions(pipelineGen);
+  pipelineGen->disableWrapperModule();
+
+  return static_cast<PipelineGen *>(pipelineGen);
 }
 
 extern "C" {

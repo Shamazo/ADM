@@ -60,11 +60,7 @@ class CpuPipelineGenFactory : public PipelineGenFactory {
   }
 
   PipelineGen *create(Context *context, std::string pipName,
-                      PipelineGen *copyStateFrom) override {
-    auto *pipelineGen = new CpuPipelineGen(context, pipName, copyStateFrom);
-    CpuPipelineGenFactory::registerFunctions(pipelineGen);
-    return static_cast<PipelineGen *>(pipelineGen);
-  }
+                      PipelineGen *copyStateFrom) override;
 };
 
 #endif  // PROTEUS_CPU_PIPELINE_HPP

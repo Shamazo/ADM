@@ -233,3 +233,11 @@ void CpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
       Function::Create(qsort, Function::ExternalLinkage, "qsort", llvmModule);
   pipelineGen->registerFunction("qsort", fqsort);
 }
+
+PipelineGen *CpuPipelineGenFactory::create(Context *context,
+                                           std::string pipName,
+                                           PipelineGen *copyStateFrom) {
+  auto *pipelineGen = new CpuPipelineGen(context, pipName, copyStateFrom);
+  CpuPipelineGenFactory::registerFunctions(pipelineGen);
+  return static_cast<PipelineGen *>(pipelineGen);
+}
