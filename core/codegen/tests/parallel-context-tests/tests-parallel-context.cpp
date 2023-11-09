@@ -143,3 +143,54 @@ TEST_F(ParallelContextTest, CallFunction) {
   // Deallocate the session
   MemoryManager::freePinned(session);
 }
+
+// Generate two pipelines, one is chained after another
+TEST_F(ParallelContextTest, ChainedPipelines) {
+  // Set up the second pipeline as a non-leaf pipeline
+  // (this means that the pipeline will be excluded from the
+  // ParallelContext::getPipelines() function)
+  parallelContext->setGlobalFunction(/*leaf=*/false);
+
+  // The second pipeline calls printi function with the argument = 2
+  llvm::Value* second = parallelContext->createInt32(2);
+  llvm::Function* printInt = parallelContext->getFunction("printi");
+  parallelContext->gen_call(printInt, {second});
+
+  // Move the latest PipelineGen from the generators to the pipelines and call
+  // PipelineGen::compileAndLoad. Also prepare the ParallelContext for the
+  // further generations.
+  parallelContext->compileAndLoad();
+
+  // Take the last pipeline and chain it after the current pipeline
+  auto* second_pip = parallelContext->removeLatestPipeline();
+  parallelContext->setChainedPipeline(second_pip);
+
+  // Set up the first pipeline as a leaf pipeline (it will be returned from the
+  // ParallelContext::getPipelines() function)
+  parallelContext->setGlobalFunction(true);
+
+  // The first pipeline calls printi function with the argument = 1
+  llvm::Value* first = parallelContext->createInt32(1);
+  llvm::Function* printIntSecond = parallelContext->getFunction("printi");
+  parallelContext->gen_call(printIntSecond, {first});
+
+  // Similarly move the first pipeline from the generators to the pipelines
+  parallelContext->compileAndLoad();
+
+  // For each leaf PipelineGen (in this case, the PipelineGen for the first
+  // pipeline), wait for the compiled function and set up the pipeline
+  auto pipelines = parallelContext->getPipelines();
+  ASSERT_EQ(1, pipelines.size());
+  auto& pipeline = pipelines.front();
+
+  // Allocate a session for the pipeline
+  auto* session = MemoryManager::mallocPinned(sizeof(size_t));
+
+  // Actually execute the pipeline
+  pipeline->open(session);
+  pipeline->consume(0);
+  pipeline->close();
+
+  // Deallocate the session
+  MemoryManager::freePinned(session);
+}
