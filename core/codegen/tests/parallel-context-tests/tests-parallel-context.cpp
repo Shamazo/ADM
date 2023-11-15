@@ -194,3 +194,95 @@ TEST_F(ParallelContextTest, ChainedPipelines) {
   // Deallocate the session
   MemoryManager::freePinned(session);
 }
+
+// Generate two pipelines, one is chained after another
+// Create a variable in the first pipeline, print it, multiply it by 2 and pass
+// to the next pipeline for printing
+TEST_F(ParallelContextTest, ChainedPipelinesWithArguments) {
+  llvm::IntegerType* type =
+      llvm::Type::getInt32Ty(parallelContext->getLLVMContext());
+
+  // Firstly, define the second pipeline in the chain
+  // The reason for it is that we need to provide this second pipeline as an
+  // copyStateFrom argument to the ParallelContext::pushPipeline to start the
+  // first pipeline codegen
+  size_t secondPipArgumentId = parallelContext->appendParameter(type);
+
+  // This pipeline is non-leaf, as we will call it directly from the first
+  // pipeline
+  parallelContext->setGlobalFunction(/*leaf=*/false);
+
+  // Get the first argument of the pipeline and print it
+  llvm::Value* secondPipArgument =
+      parallelContext->getArgument(secondPipArgumentId);
+  llvm::Function* printInt = parallelContext->getFunction("printi");
+  parallelContext->gen_call(printInt, {secondPipArgument});
+
+  // Save the current PipelineGen which is used for the second pipeline
+  // generation
+  auto* second_pip = parallelContext->getCurrentPipeline();
+
+  // Move the latest PipelineGen from the generators to the pipelines and call
+  // PipelineGen::compileAndLoad
+  parallelContext->popPipeline();
+
+  // Prepare for the first pipeline generation. Pass second_pip as an
+  // copyStateFrom argument, so ParallelContext will store the state of the
+  // second pipeline as the state variable in the first pipeline
+  parallelContext->pushPipeline(second_pip);
+
+  // The first pipeline is leaf, so we can get it using
+  // ParallelContext::getPipelines()
+  parallelContext->setGlobalFunction(/*leaf=*/true);
+
+  // Get the consume function of the subpipeline of the first pipeline which is
+  // the second pipeline
+  auto subPipelineConsumeFunction =
+      parallelContext->getFunction("subpipeline_consume");
+  auto subPipelineConsumeFunctionType =
+      subPipelineConsumeFunction->getFunctionType();
+
+  // The first pipeline generates the first value and print it
+  llvm::Value* firstPipArgument = parallelContext->createInt32(500);
+  llvm::Function* printIntSecond = parallelContext->getFunction("printi");
+  parallelContext->gen_call(printIntSecond, {firstPipArgument});
+
+  // Next, the first pipeline multiply it by 2 to pass it to the second pipeline
+  llvm::Value* secondPipInput = parallelContext->getBuilder()->CreateMul(
+      firstPipArgument, parallelContext->createInt32(2));
+
+  // The first pipeline need to prepare arguments for the consume function. The
+  // first argument will be our value, and the second will be the state of the
+  // second pipeline
+  vector<llvm::Value*> args{secondPipInput};
+  auto subStateType = subPipelineConsumeFunctionType->getParamType(
+      subPipelineConsumeFunctionType->getNumParams() - 1);
+  llvm::Value* subStatePtr = parallelContext->getBuilder()->CreateBitCast(
+      parallelContext->getSubStateVar(), subStateType);
+  args.emplace_back(subStatePtr);
+
+  // Call consume of the second pipeline from the first pipeline
+  parallelContext->getBuilder()->CreateCall(subPipelineConsumeFunction, args);
+
+  // Move the latest PipelineGen from the generators to the pipelines and call
+  // PipelineGen::compileAndLoad. Also prepare the ParallelContext for the
+  // further generations.
+  parallelContext->compileAndLoad();
+
+  // For each leaf PipelineGen (in this case, the PipelineGen for the first
+  // pipeline), wait for the compiled function and set up the pipeline
+  auto pipelines = parallelContext->getPipelines();
+  ASSERT_EQ(1, pipelines.size());
+  auto& pipeline = pipelines.front();
+
+  // Allocate a session for the pipeline
+  auto* session = MemoryManager::mallocPinned(sizeof(size_t));
+
+  // Actually execute the chain of pipelines
+  pipeline->open(session);
+  pipeline->consume(0);
+  pipeline->close();
+
+  // Deallocate the session
+  MemoryManager::freePinned(session);
+}
