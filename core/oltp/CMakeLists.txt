@@ -3,7 +3,7 @@ project(oltp VERSION 0.1 LANGUAGES CXX)
 add_subdirectory(adaptor)
 
 # Unit-tests
-if (UNIT_TESTS)
+if (PROTEUS_BUILD_UNIT_TESTS)
   add_subdirectory(tests)
 endif ()
 

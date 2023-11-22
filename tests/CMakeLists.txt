@@ -21,7 +21,7 @@ add_definitions(-DTEST_INPUTS="inputs")
 add_definitions(-DTEST_OUTPUTS="outputs")
 
 # Unit-tests
-if (UNIT_TESTS)
+if (PROTEUS_BUILD_UNIT_TESTS)
   add_subdirectory(olap)
   add_subdirectory(oltp)
 endif ()

@@ -1,4 +1,4 @@
-if (NOT PLATFORM_ONLY)
+if (NOT PROTEUS_PLATFORM_ONLY)
   add_subdirectory(cli-server)
   add_subdirectory(multiib)
   add_subdirectory(olap/flags)

@@ -59,7 +59,7 @@ endforeach ()
 # LSC: Hopefully we will soon be able to remove this section, where we call
 #      straight to NVCC
 
-if (USE_CUDA)
+if (PROTEUS_USE_CUDA)
   set(CUDA_WORKDIR ${CMAKE_CURRENT_BINARY_DIR}/cubin)
   file(MAKE_DIRECTORY ${CUDA_WORKDIR})
 
@@ -131,7 +131,7 @@ include(proteus-lib)
 add_library(proteus::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 # Unit-tests
-if (UNIT_TESTS)
+if (PROTEUS_BUILD_UNIT_TESTS)
   add_subdirectory(tests)
   add_subdirectory(perftests)
 endif ()

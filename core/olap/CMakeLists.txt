@@ -1,6 +1,6 @@
 project(olap VERSION 0.1 LANGUAGES CXX)
 
-if (NOT USE_CUDA)
+if (NOT PROTEUS_USE_CUDA)
   message(FATAL_ERROR "Warning: Building without support for GPUs (nvcc not detected)")
 endif ()
 
@@ -143,7 +143,7 @@ include(proteus-lib)
 add_library(proteus::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 # Unit-tests
-if (UNIT_TESTS)
+if (PROTEUS_BUILD_UNIT_TESTS)
   add_subdirectory(tests)
-  add_subdirectory(perftests)
 endif ()
+add_subdirectory(perftests)

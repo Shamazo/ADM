@@ -7,12 +7,13 @@ include(proteus-prolog)
 #-----------------------------------------------------------------------
 # Which binaries to build:
 #-----------------------------------------------------------------------
-
-# Tests
-# not too sure if we should build "main", it looks like it has the same
-# test cases as the gtests
-set(UNIT_TESTS TRUE)
-set(DUNIT_TESTS FALSE)
+# options do not modify a variable if it is already set in the cache
+# If you would like to turn these on without passing a command line argument
+# and without flushing your cmake cache:
+# use e.g. `set(PROTEUS_BUILD_UNIT_TESTS OFF)` after the option declaration
+option(PROTEUS_BUILD_UNIT_TESTS "Build unit tests. If false, proteus will also not build gtest" ON)
+option(PROTEUS_BUILD_DUNIT_TESTS "Build deprecated unit tests" OFF)
+option(PROTEUS_PLATFORM_ONLY "Build only the platform library" OFF)
 
 
 #-----------------------------------------------------------------------
@@ -22,16 +23,9 @@ set(DUNIT_TESTS FALSE)
 # Whether to build with CUDA or not
 # Note that most of Proteus heavily relies on CUDA, and this is primarily used to enable
 # building platform without cuda
-set(USE_CUDA TRUE)
+option(PROTEUS_USE_CUDA "If ON, try to find and use CUDA" ON)
 
-# Only build the platform library
-set(PLATFORM_ONLY FALSE)
-
-# Flag to control whether we should build the dependencies
-option(STANDALONE "If ON, installs required subprojects. Otherwise the parent project should provide them" ON)
-
-# Whether to enable or not VTune support, if available
-set(VTUNE_ENABLE TRUE)
+option(PROTEUS_VTUNE_ENABLE "Build with VTune support if the VTune ittnotify library is available" TRUE)
 
 # FIXME: Next command is used until we move the binaries to the bin folder
 set(CMAKE_INSTALL_BINDIR pelago)
@@ -133,18 +127,21 @@ include(warning-flags)
 
 #-----------------------------------------------------------------------
 # Various dependencies
-# Note the USE_CUDA flag is used in our cuda.cmake module
+# Note the PROTEUS_USE_CUDA flag is used in our cuda.cmake module
 include(llvm-virtual)
 include(cuda)
 include(gflags)
 include(glog)
-include(gtest)
+if (PROTEUS_BUILD_UNIT_TESTS)
+  include(gtest)
+  include(tests)
+endif ()
+
 include(googlebenchmark)
+include(perftests)
 include(magic-enum)
 include(vtune)
-include(tests)
-include(perftests)
-if (NOT PLATFORM_ONLY)
+if (NOT PROTEUS_PLATFORM_ONLY)
   include(rapidjson)
   include(cuckoo)
   include(grpc)
@@ -171,13 +168,13 @@ install(DIRECTORY "frontends/R/" DESTINATION ${CMAKE_INSTALL_PREFIX}/pelago/fron
 #-----------------------------------------------------------------------
 
 # build libjsmn
-if (NOT PLATFORM_ONLY)
+if (NOT PROTEUS_PLATFORM_ONLY)
   add_subdirectory(external/jsmn)
 endif ()
 
 # code generation library
 add_subdirectory(core/platform)
-if (NOT PLATFORM_ONLY)
+if (NOT PROTEUS_PLATFORM_ONLY)
   add_subdirectory(core/storage)
   add_subdirectory(core/planner)
   add_subdirectory(core/olap)
@@ -191,7 +188,7 @@ endif ()
 # Build our executables
 #-----------------------------------------------------------------------
 add_subdirectory(apps)
-if (NOT PLATFORM_ONLY)
+if (NOT PROTEUS_PLATFORM_ONLY)
   #  tests/ are integration tests, does not contain platform unit tests
   add_subdirectory(tests)
 endif ()

@@ -37,6 +37,6 @@ target_link_libraries(${PROJECT_NAME}
 include(proteus-lib)
 add_library(proteus::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
-if (UNIT_TESTS)
+if (PROTEUS_BUILD_UNIT_TESTS)
   add_subdirectory(tests)
 endif ()
