@@ -210,6 +210,10 @@ TEST_F(PipelineTest, AppendParameter) {
 // the pipeline in the runtime.
 TEST_F(PipelineTest, AppendStateVar) {
   // Append an additional argument to the main pipeline function
+  // appendStateVar without init/deinit functions are the simplest way to
+  // initialize a state var, but you need to keep in mind that the state var is
+  // just a pointer, so you will need to manually initialize memory for the
+  // pointer and set it via the setStateVar function call.
   // Note: the argument type must be a pointer type
   auto stateVar =
       cpuPipelineGen->appendStateVar(llvm::PointerType::get(i32Type, 0));
@@ -246,6 +250,7 @@ TEST_F(PipelineTest, AppendStateVar) {
   // Wait for the compiled function and set up the pipeline
   auto pipeline = cpuPipelineGen->getPipeline();
 
+  // Initialize the actual memory for the state var
   int32_t pipelinePayload = 15;
   pipeline->setStateVar<int32_t*>(stateVar, &pipelinePayload);
 
@@ -275,12 +280,16 @@ TEST_F(PipelineTest, AppendAndAllocateStateVar) {
   // Note: the argument type must be a pointer type
   // The second argument is a function that will be called for the
   // initialization of the state variable The third argument is a function that
-  // will be called at the end of the pipeline
+  // will be called at the end of the pipeline.
+  // In this test case, we explicitly provide init/deinit functions where we
+  // initialize a memory for the state var. This is useful in situations where
+  // you want to initialize memory behind the state var inside the generated
+  // code.
   auto stateVar = cpuPipelineGen->appendStateVar(
       llvm::PointerType::getUnqual(type),
       [=](llvm::Value* pip) -> llvm::Value* {
-        // Be careful to use CpuPipelineGen::allocateStateVar, but not
-        // Context::allocateStateVar Note that the
+        // Be careful to use ParallelContext::allocateStateVar, but not
+        // Context::allocateStateVar. Note that the
         // ParallelContext::allocateStateVar redirects calls to the {Cpu,
         // Gpu}PipelineGen, so it is safe to use it
         auto mem = cpuPipelineGen->allocateStateVar(type);

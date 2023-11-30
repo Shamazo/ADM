@@ -91,8 +91,8 @@ TEST_F(ParallelContextTest, CallFunction) {
   auto stateVar = parallelContext->appendStateVar(
       llvm::PointerType::getUnqual(type),
       [=](llvm::Value* pip) -> llvm::Value* {
-        // Be careful to use CpuPipelineGen::allocateStateVar, but not
-        // Context::allocateStateVar Note that the
+        // Be careful to use ParallelContext::allocateStateVar, but not
+        // Context::allocateStateVar. Note that the
         // ParallelContext::allocateStateVar redirects calls to the {Cpu,
         // Gpu}PipelineGen, so it is safe to use it
         auto mem = parallelContext->allocateStateVar(type);
@@ -107,12 +107,12 @@ TEST_F(ParallelContextTest, CallFunction) {
   parallelContext->setGlobalFunction(/*leaf=*/true);
 
   // Fetch an argument using the id received from the appendParameter function
-  llvm::Value* argument_mem = parallelContext->getStateVar(stateVar);
+  llvm::Value* argumentMem = parallelContext->getStateVar(stateVar);
 
   // Load the payload of the argument (remember, the argument itself is a
   // pointer)
   llvm::Value* argumentPayload = parallelContext->getBuilder()->CreateLoad(
-      argument_mem->getType()->getPointerElementType(), argument_mem);
+      argumentMem->getType()->getPointerElementType(), argumentMem);
 
   // Generate a print function call
   llvm::Function* printInt = parallelContext->getFunction("printi");
@@ -220,7 +220,7 @@ TEST_F(ParallelContextTest, ChainedPipelinesWithArguments) {
 
   // Save the current PipelineGen which is used for the second pipeline
   // generation
-  auto* second_pip = parallelContext->getCurrentPipeline();
+  auto* secondPip = parallelContext->getCurrentPipeline();
 
   // Move the latest PipelineGen from the generators to the pipelines and call
   // PipelineGen::compileAndLoad
@@ -229,7 +229,7 @@ TEST_F(ParallelContextTest, ChainedPipelinesWithArguments) {
   // Prepare for the first pipeline generation. Pass second_pip as an
   // copyStateFrom argument, so ParallelContext will store the state of the
   // second pipeline as the state variable in the first pipeline
-  parallelContext->pushPipeline(second_pip);
+  parallelContext->pushPipeline(secondPip);
 
   // The first pipeline is leaf, so we can get it using
   // ParallelContext::getPipelines()
