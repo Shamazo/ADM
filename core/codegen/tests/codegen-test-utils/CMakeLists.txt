@@ -2,6 +2,7 @@ project(codegen-test-utils VERSION 0.1 LANGUAGES CXX)
 
 add_library(${PROJECT_NAME} SHARED
   lib/context-test-utils.cpp
+  lib/expressions-test-utils.cpp
   lib/pipeline-test-utils.cpp
   )
 
