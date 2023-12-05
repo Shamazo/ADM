@@ -419,10 +419,10 @@ TEST(ParallelMatrixMultiplication, GpuRoot) {
   // Initialize variables to calculate the number of the equal cells in the
   // final matrix and expected matrix. gpuResult will be used in the generated
   // code.
-  int32_t cpuResult{0};
+  void *cpuResult = MemoryManager::mallocPinned(4);
+  std::memset(cpuResult, 0, 4);
   void *gpuResult = MemoryManager::mallocGpu(4);
-  auto copyResult =
-      cudaMemcpy(gpuResult, &cpuResult, 4, cudaMemcpyHostToDevice);
+  auto copyResult = cudaMemcpy(gpuResult, cpuResult, 4, cudaMemcpyHostToDevice);
   ASSERT_EQ(cudaSuccess, copyResult);
 
   auto parallelContext = std::unique_ptr<ParallelContext>(
@@ -513,12 +513,14 @@ TEST(ParallelMatrixMultiplication, GpuRoot) {
 
   MemoryManager::freePinned(session);
 
-  copyResult = cudaMemcpy(&cpuResult, gpuResult, 4, cudaMemcpyDeviceToHost);
+  copyResult = cudaMemcpy(cpuResult, gpuResult, 4, cudaMemcpyDeviceToHost);
   ASSERT_EQ(cudaSuccess, copyResult);
 
-  auto comparisonResult = *reinterpret_cast<int32_t *>(cpuResult);
+  int32_t comparisonResult;
+  std::memcpy(&comparisonResult, cpuResult, 4);
 
   MemoryManager::freeGpu(gpuResult);
+  MemoryManager::freePinned(cpuResult);
 
   ASSERT_EQ(kQuadraticMatrixSize * kQuadraticMatrixSize, comparisonResult);
 }
