@@ -21,35 +21,14 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef PATH_HPP_
-#define PATH_HPP_
+#ifndef EXPRESSIONS_HPP_
+#define EXPRESSIONS_HPP_
 
 #include <codegen/expressions/expressions.hpp>
-#include <platform/common/common.hpp>
+#include <olap/operators/monoids.hpp>
 
-#include "lib/util/catalog.hpp"
-#include "olap/expressions/expressions.hpp"
-#include "olap/plugins/plugins.hpp"
+expression_t toExpression(Monoid m, expression_t lhs, expression_t rhs);
+llvm::Constant *getIdentityElementIfSimple(Monoid m, const ExpressionType *type,
+                                           Context *context);
 
-class Path {
- public:
-  Path(string nestedName, const expressions::RecordProjection *desugarizedPath)
-      : desugarizedPath(desugarizedPath), nestedName(nestedName) {
-    assert(desugarizedPath && "Projection should be non-null");
-    Catalog &catalog = Catalog::getInstance();
-    string originalRelation = desugarizedPath->getOriginalRelationName();
-    pg = catalog.getPlugin(originalRelation);
-  }
-
-  const expressions::RecordProjection *get() const { return desugarizedPath; }
-  Plugin *getRelevantPlugin() const { return pg; }
-  string getNestedName() const { return nestedName; }
-  string toString() const;
-
- private:
-  const expressions::RecordProjection *const desugarizedPath;
-  string nestedName;
-  Plugin *pg;
-};
-
-#endif /* PATH_HPP_ */
+#endif /* EXPRESSIONS_HPP_ */

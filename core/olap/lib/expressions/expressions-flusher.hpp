@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,6 +24,7 @@
 #ifndef EXPRESSIONS_FLUSHER_VISITOR_HPP_
 #define EXPRESSIONS_FLUSHER_VISITOR_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <platform/common/common.hpp>
 
 #include "expressions-generator.hpp"

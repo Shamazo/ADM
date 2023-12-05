@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,17 +24,17 @@
 #ifndef EXPRESSIONS_DOT_VISITOR_HPP_
 #define EXPRESSIONS_DOT_VISITOR_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <platform/common/common.hpp>
 
 #include "expressions-generator.hpp"
 #include "expressions-hasher.hpp"
 #include "lib/util/functions.hpp"
 #include "olap/plugins/plugins.hpp"
-//#include "values/expressionTypes.hpp"
 
-//#ifdef DEBUG
+// #ifdef DEBUG
 #define DEBUG_DOT
-//#endif
+// #endif
 
 //===---------------------------------------------------------------------------===//
 // "Visitor(s)" responsible for evaluating dot equality
