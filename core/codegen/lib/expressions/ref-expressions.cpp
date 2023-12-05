@@ -21,9 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "olap/expressions/expressions/ref-expression.hpp"
-
 #include <codegen/expressions/indexed-seq.hpp>
+#include <codegen/expressions/ref-expression.hpp>
 
 namespace expressions {
 RefExpression::RefExpression(expression_t ptr)

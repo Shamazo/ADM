@@ -92,7 +92,6 @@ set(olap_cxx
   lib/util/atois.cpp
   lib/util/caching.cpp
   lib/util/catalog.cpp
-  lib/util/demangle.cpp
   lib/util/flush-operator-tree.cpp
   lib/util/functions.cpp
   lib/util/jit/control-flow/if-statement.cpp

@@ -20,6 +20,7 @@ set(platform_cxx
   lib/topology/affinity_manager.cpp
   lib/topology/device-manager.cpp
   lib/topology/topology.cpp
+  lib/util/demangle.cpp
   lib/util/interval-runner.cpp
   lib/util/percentile.cpp
   lib/util/profiling.cpp
@@ -92,7 +93,7 @@ if (PROTEUS_USE_CUDA)
     WORKING_DIRECTORY ${CUDA_WORKDIR}
     COMMENT "Building CUDA LLVM bitcode ${CUDA_WORKDIR}/buffer-manager.bc.o"
     )
-endif()
+endif ()
 #-----------------------------------------------------------------------------
 
 install(DIRECTORY DESTINATION ${CMAKE_INSTALL_BINDIR}/generated_code

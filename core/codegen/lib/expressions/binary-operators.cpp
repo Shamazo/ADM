@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,15 +21,10 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <cxxabi.h>
+#include "codegen/expressions/binary-operators.hpp"
 
-#include <memory>
-#include <olap/util/demangle.hpp>
+namespace expressions {
 
-std::string demangle(const char* name) {
-  int status = 0;
-  std::unique_ptr<char, decltype(&std::free)> res{
-      abi::__cxa_demangle(name, nullptr, nullptr, &status), std::free};
+expressions::BinaryOperator::~BinaryOperator() {}
 
-  return (status == 0) ? res.get() : name;
-}
+}  // namespace expressions

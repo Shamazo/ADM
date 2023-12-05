@@ -89,7 +89,11 @@ void printptr(void *ptr) {
 }
 
 int printc(char *X) {
+#ifdef DEBUG
   printf("[printc:] Generated code -- char read: %c\n", X[0]);
+#else
+  printf("%c\n", X[0]);
+#endif
   return 0;
 }
 

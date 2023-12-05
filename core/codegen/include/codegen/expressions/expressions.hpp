@@ -21,12 +21,10 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef EXPRESSIONS_HPP_
-#define EXPRESSIONS_HPP_
+#ifndef PROTEUS_EXPRESSIONS_HPP
+#define PROTEUS_EXPRESSIONS_HPP
 
 #include <codegen/expressions/expressionTypes.hpp>
-#include <olap/operators/monoids.hpp>
-#include <olap/plugins/plugins.hpp>
 #include <utility>
 
 #include "binary-operators.hpp"
@@ -35,6 +33,8 @@ class ExprVisitor;  // Forward declaration
 template <typename T>
 class ExprTandemVisitorT;  // Forward declaration
 using ExprTandemVisitor = ExprTandemVisitorT<ProteusValue>;
+
+class expression_t;
 
 // Careful: Using a namespace to avoid conflicts witfh LLVM namespace
 namespace expressions {
@@ -1337,16 +1337,11 @@ class ExprTandemVisitorT {
                   const expressions::XORExpression *e2) = 0;
 };
 
-expression_t toExpression(Monoid m, expression_t lhs, expression_t rhs);
-
 class Context;
 
 namespace llvm {
 class Constant;
 }
-
-llvm::Constant *getIdentityElementIfSimple(Monoid m, const ExpressionType *type,
-                                           Context *context);
 
 // FIXME: reduce cases
 expressions::EqExpression eq(const expression_t &lhs, const expression_t &rhs);
@@ -1507,15 +1502,7 @@ inline expressions::RecordProjection expression_t::operator[](
       }
     }
   }
-  if (proj.getAttrName() == activeLoop) return {*this, proj};
-  LOG(WARNING) << "Invalid record projection";
-  LOG(WARNING) << "projection: " << proj.getRelationName() << "."
-               << proj.getAttrName();
-  LOG(WARNING) << "Expr attributes: ";
-  for (const auto &e : rec->getArgs()) {
-    LOG(WARNING) << "  " << e->getRelationName() << "." << e->getAttrName();
-  }
-  throw std::runtime_error("Invalid record projection");
+  return {*this, proj};
 }
 
 inline expressions::RecordProjection expressions::InputArgument::operator[](
@@ -1676,4 +1663,4 @@ expressions::ExprVisitorVisitable<T, Interface>::operator[](
 
 std::ostream &operator<<(std::ostream &out, const expressions::Expression &e);
 
-#endif /* EXPRESSIONS_HPP_ */
+#endif  // PROTEUS_EXPRESSIONS_HPP

@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,8 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef BINARYOPERATORS_HPP_
-#define BINARYOPERATORS_HPP_
+#ifndef PROTEUS_BINARY_OPERATORS_HPP
+#define PROTEUS_BINARY_OPERATORS_HPP
 
 namespace expressions {
 
@@ -112,4 +112,4 @@ class Xor : public BinaryOperator {
 };
 }  // namespace expressions
 
-#endif /* BINARYOPERATORS_HPP_ */
+#endif  // PROTEUS_BINARY_OPERATORS_HPP

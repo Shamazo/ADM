@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2020
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -21,9 +21,11 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#ifndef PROTEUS_REF_EXPRESSION_HPP
-#define PROTEUS_REF_EXPRESSION_HPP
+#ifndef PROTEUS_DEMANGLE_HPP
+#define PROTEUS_DEMANGLE_HPP
 
-#include <olap/expressions/expressions.hpp>
+#include <string>
 
-#endif /* PROTEUS_REF_EXPRESSION_HPP */
+std::string demangle(const char* name);
+
+#endif  // PROTEUS_DEMANGLE_HPP
