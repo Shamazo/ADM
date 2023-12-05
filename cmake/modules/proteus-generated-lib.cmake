@@ -15,9 +15,12 @@ set_target_properties(${PROJECT_NAME}
   )
 
 # Error on undefined symbols in shared libraries
-set_target_properties(${PROJECT_NAME} PROPERTIES
-  LINK_FLAGS "-Wl,--no-allow-shlib-undefined -Wl,-z,defs"
-  )
+if (NOT PROTEUS_ASAN_BUILD)
+  # clang by default only links the asan runtime to executables
+  # so unresolved symbols are fine for libraries
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+    LINK_FLAGS "-Wl,--no-allow-shlib-undefined -Wl,-z,defs")
+endif ()
 
 # Define headers for this library. PUBLIC headers are used for
 # compiling the library, and will be added to consumers' build

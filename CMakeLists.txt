@@ -27,6 +27,8 @@ option(PROTEUS_USE_CUDA "If ON, try to find and use CUDA" ON)
 
 option(PROTEUS_VTUNE_ENABLE "Build with VTune support if the VTune ittnotify library is available" TRUE)
 
+option(PROTEUS_ASAN_BUILD "Build with ASAN" OFF)
+
 # FIXME: Next command is used until we move the binaries to the bin folder
 set(CMAKE_INSTALL_BINDIR pelago)
 
@@ -116,6 +118,23 @@ string(STRIP "${COMPILER_FLAGS} -fvisibility-inlines-hidden" COMPILER_FLAGS)
 string(STRIP "${COMPILER_FLAGS} -O3" COMPILER_FLAGS)
 
 string(STRIP "${COMPILER_FLAGS} -gdwarf-4" COMPILER_FLAGS)
+
+# this adds ASAN everywhere. We do this because ASAN can result in a different ABI
+# and because ASAN is most useful when everything is instrumented
+if (PROTEUS_ASAN_BUILD)
+  MESSAGE(WARNING "Building with ASAN. ASAN does not always work smoothly with CUDA."
+      "Running with 'ASAN_OPTIONS=protect_shadow_gap=0' may be necessary with GPUs."
+      "Or use `CUDA_VISIBLE_DEVICES=` if you do not need to initialize GPUs")
+  add_compile_options(-fsanitize=address)
+  add_compile_options(-fsanitize-address-use-after-scope)
+  add_compile_options(-fno-omit-frame-pointer)
+  # CUDA fixed virtual address space conflicts with ASAN
+  # see https://github.com/google/sanitizers/issues/629
+  add_compile_options(-mllvm -asan-force-dynamic-shadow=true)
+  add_link_options(-fsanitize=address)
+  add_link_options(-fsanitize-address-use-after-scope)
+  add_link_options(-fno-omit-frame-pointer)
+endif ()
 
 #-----------------------------------------------------------------------
 # Add the compiler flags
