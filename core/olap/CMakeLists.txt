@@ -9,8 +9,6 @@ set(olap_cxx
   lib/common/common.cpp
   lib/common/llvm-dump.cpp
   lib/common/symantec-config.cpp
-  lib/expressions/expressions/ref-expression.cpp
-  lib/expressions/binary-operators.cpp
   lib/expressions/expressions-dot-evaluator.cpp
   lib/expressions/expressions-flusher.cpp
   lib/expressions/expressions-generator.cpp
