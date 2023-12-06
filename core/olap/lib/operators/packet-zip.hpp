@@ -24,9 +24,9 @@
 #ifndef PACKET_ZIP_HPP_
 #define PACKET_ZIP_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <unordered_map>
 
-#include "olap/expressions/expressions.hpp"
 #include "olap/operators/gpu/gpu-materializer-expr.hpp"
 #include "olap/util/parallel-context.hpp"
 #include "operators.hpp"

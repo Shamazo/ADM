@@ -24,13 +24,13 @@
 #ifndef OPERATORS_HPP_
 #define OPERATORS_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <olap/util/parallel-context.hpp>
 #include <platform/common/common.hpp>
 #include <platform/topology/device-types.hpp>
 
 #include "lib/plugins/output/plugins-output.hpp"
 #include "llvm/IR/IRBuilder.h"
-#include "olap/expressions/expressions.hpp"
 #include "olap/plugins/plugins.hpp"
 #include "olap/routing/degree-of-parallelism.hpp"
 

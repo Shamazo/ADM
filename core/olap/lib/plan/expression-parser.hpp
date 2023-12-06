@@ -24,7 +24,9 @@
 #ifndef PROTEUS_EXPRESSION_PARSER_HPP
 #define PROTEUS_EXPRESSION_PARSER_HPP
 
-#include "olap/expressions/expressions.hpp"
+#include <codegen/expressions/expressions.hpp>
+
+#include "olap/operators/monoids.hpp"
 #include "olap/plan/catalog-parser.hpp"
 #include "olap/util/parallel-context.hpp"
 #include "rapidjson/document.h"

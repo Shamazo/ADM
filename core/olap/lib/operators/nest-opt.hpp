@@ -24,11 +24,12 @@
 #ifndef _NEST_OPT_HPP_
 #define _NEST_OPT_HPP_
 
+#include <codegen/expressions/expressions.hpp>
+
 #include "lib/expressions/expressions-generator.hpp"
 #include "lib/expressions/expressions-hasher.hpp"
 #include "lib/expressions/path.hpp"
 #include "lib/plugins/binary-internal-plugin.hpp"
-#include "olap/expressions/expressions.hpp"
 #include "olap/operators/monoids.hpp"
 #include "operators.hpp"
 

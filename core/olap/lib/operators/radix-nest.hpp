@@ -24,6 +24,7 @@
 #ifndef _NEST_RADIX_HPP_
 #define _NEST_RADIX_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <olap/expressions/expressions.hpp>
 #include <olap/operators/monoids.hpp>
 #include <olap/util/parallel-context.hpp>

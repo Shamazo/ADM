@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2023
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -24,12 +24,11 @@
 #ifndef CACHING_HPP_
 #define CACHING_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <platform/common/common.hpp>
 
-#include "olap/expressions/expressions.hpp"
-
 #define CACHING_ON
-//#define DEBUGCACHING
+// #define DEBUGCACHING
 
 #include "olap/util/cache-info.hpp"
 

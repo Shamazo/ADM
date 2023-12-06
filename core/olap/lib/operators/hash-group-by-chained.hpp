@@ -24,10 +24,10 @@
 #ifndef HASH_GROUP_BY_CHAINED_HPP_
 #define HASH_GROUP_BY_CHAINED_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <codegen/jit/pipeline.hpp>
 #include <lib/operators/gpu/gmonoids.hpp>
 
-#include "olap/expressions/expressions.hpp"
 #include "olap/operators/gpu-aggr-mat-expr.hpp"
 #include "olap/operators/monoids.hpp"
 #include "olap/util/parallel-context.hpp"

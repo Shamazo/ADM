@@ -24,11 +24,11 @@
 #ifndef GPU_HASH_GROUP_BY_CHAINED_HPP_
 #define GPU_HASH_GROUP_BY_CHAINED_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <codegen/jit/pipeline.hpp>
 
 #include "lib/operators/hash-group-by-chained.hpp"
 #include "lib/operators/operators.hpp"
-#include "olap/expressions/expressions.hpp"
 #include "olap/operators/monoids.hpp"
 #include "olap/util/parallel-context.hpp"
 

@@ -25,8 +25,8 @@
 #define IF_STATEMENT_HPP_
 
 #include <codegen/context/context.hpp>
+#include <codegen/expressions/expressions.hpp>
 #include <codegen/jit/control-flow/if-statement.hpp>
-#include <olap/expressions/expressions.hpp>
 #include <olap/operators/operator-state.hpp>
 
 if_branch gen_if(const expression_t &expr, const OperatorState &state,

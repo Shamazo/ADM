@@ -24,6 +24,7 @@
 #ifndef PLAN_PARSER_HPP_
 #define PLAN_PARSER_HPP_
 
+#include <codegen/expressions/expressions.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/routing/affinitization-factory.hpp>
@@ -31,7 +32,6 @@
 #include <utility>
 
 #include "expression-parser.hpp"
-#include "olap/expressions/expressions.hpp"
 #include "olap/plan/catalog-parser.hpp"
 #include "rapidjson/document.h"
 

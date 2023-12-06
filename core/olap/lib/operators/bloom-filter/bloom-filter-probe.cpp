@@ -23,7 +23,7 @@
 
 #include "bloom-filter-probe.hpp"
 
-#include <olap/expressions/expressions/ref-expression.hpp>
+#include <codegen/expressions/ref-expression.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 
 void BloomFilterProbe::produce_(OlapParallelContext *context) {

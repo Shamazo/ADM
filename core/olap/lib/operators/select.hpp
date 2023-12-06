@@ -21,7 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "olap/expressions/expressions.hpp"
+#include <codegen/expressions/expressions.hpp>
+
 #include "operators.hpp"
 
 class Select : public experimental::UnaryOperator {

@@ -22,9 +22,9 @@
 */
 
 #include <codegen/context/context.hpp>
+#include <codegen/expressions/binary-operators.hpp>
 #include <codegen/expressions/expressionTypes.hpp>
-#include <olap/expressions/binary-operators.hpp>
-#include <olap/expressions/expressions.hpp>
+#include <codegen/expressions/expressions.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/test/environment.hpp>

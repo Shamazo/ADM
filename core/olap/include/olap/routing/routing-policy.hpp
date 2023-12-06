@@ -24,7 +24,7 @@
 #ifndef ROUTING_POLICY_HPP_
 #define ROUTING_POLICY_HPP_
 
-#include <olap/expressions/expressions.hpp>
+#include <codegen/expressions/expressions.hpp>
 #include <olap/plugins/plugins.hpp>
 #include <olap/routing/routing-policy-types.hpp>
 #include <olap/util/parallel-context.hpp>

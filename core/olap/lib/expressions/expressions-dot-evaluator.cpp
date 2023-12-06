@@ -24,7 +24,7 @@
 #include "expressions-dot-evaluator.hpp"
 
 #include <codegen/context/context.hpp>
-#include <olap/expressions/expressions/ref-expression.hpp>
+#include <codegen/expressions/ref-expression.hpp>
 
 #include "expressions-generator.hpp"
 

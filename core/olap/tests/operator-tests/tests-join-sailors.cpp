@@ -22,9 +22,9 @@
 */
 
 #include <codegen/expressions/expressionTypes.hpp>
+#include <codegen/expressions/expressions.hpp>
 #include <lib/plugins/csv-plugin-pm.hpp>
 #include <lib/util/catalog.hpp>
-#include <olap/expressions/expressions.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/test/test-utils.hpp>
 #include <platform/common/common.hpp>
