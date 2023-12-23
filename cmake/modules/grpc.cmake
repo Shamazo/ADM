@@ -7,7 +7,12 @@ set(gRPC_BUILD_GRPC_PYTHON_PLUGIN OFF CACHE BOOL "" FORCE)
 set(gRPC_BUILD_GRPC_RUBY_PLUGIN OFF CACHE BOOL "" FORCE)
 set(RE2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(gRPC_INSTALL ON CACHE BOOL "" FORCE)
+set(ABSL_ENABLE_INSTALL ON CACHE BOOL "" FORCE)
+set(gRPC_ABSL_PROVIDER module CACHE STRING "" FORCE)
 
 include(external/CMakeLists.txt.grpc.in)
 
+# gRPC depends on abseil. We use the abseil that gRPC distributes
+# but the gRPC included abseil must be exported first
+export(EXPORT abslTargets FILE abslConfig.cmake)
 export(EXPORT gRPCTargets FILE gRPCConfig.cmake)
