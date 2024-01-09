@@ -41,6 +41,21 @@ namespace expressions {
 
 class RecordProjection;
 
+/**
+ * @enum ExpressionId
+ * is used as an identifier for the expression type
+ *
+ * Virtual method Expression::getTypeID() returns ExpressionsId of the target
+ * class. This type is used to introduce the total order on the expressions and
+ * they were used to distinguish different expression types in the
+ * JSONPlugin::readValueInterpreted and Path::toString
+ * @see JSONPlugin::readValueInterpreted, Path::toString
+ *
+ * The reason for it is that expressions could be used as a key in the set/map.
+ * This comparison was introduced in the commit
+ * https://gitlab.epfl.ch/DIAS/PROJECTS/caldera/proteus/-/commit/f76bd9e77d5c243a86a8b317a8f11c8c315f401c
+ * @see CachingService::less_map.
+ */
 enum ExpressionId {
   CONSTANT,
   RAWVALUE,
@@ -64,6 +79,16 @@ enum ExpressionId {
 class RefExpression;
 class AssignExpression;
 
+/**
+ * @class Expression
+ * is a virtual base class in the CRTP in the ExprVisitorVisitable
+ * @see ExprVisitorVisitable, BinaryExpr, Constant
+ *
+ * It provides interfaces to create a total order on the expressions via
+ * getTypeID() and to use them with ExprVisitor and ExprTandemVisitor. It also
+ * contains meta information about the relation and attribute name.
+ * @see ExprVisitor, ExprTandemVisitor
+ */
 class Expression {
  public:
   explicit Expression(const ExpressionType *type)
@@ -145,6 +170,18 @@ class Expression {
 
 class CastExpression;
 
+/**
+ * @class ExprVisitorVisitable
+ * is a base class for all expression classes. This class provides adapter to
+ * use the expression class with the visitor class via accept(ExprVisitor&) and
+ * acceptTandem(ExprTandemVisitor&, const expressions::Expression&).
+ * @see ExprVisitor, ExprTandemVisitor
+ *
+ * @tparam T the type from the CRTP child classes such as ExpressionCRTP,
+ * BinaryExpressionCRTP and ConstantExpressionCRTP
+ * @tparam Interface the base CRTP class
+ * @see ExpressionCRTP, BinaryExpressionCRTP, ConstantExpressionCRTP
+ */
 template <typename T, typename Interface = Expression>
 class ExprVisitorVisitable : public Interface {
  protected:
@@ -187,6 +224,12 @@ class ExprVisitorVisitable : public Interface {
   friend T;
 };
 
+/**
+ * @class ExpressionCRTP
+ * is a CRTP wrapper for all non-constant expressions.
+ *
+ * @tparam T is the CRTP child class
+ */
 template <typename T>
 class ExpressionCRTP : public ExprVisitorVisitable<T, Expression> {
  protected:
@@ -199,6 +242,15 @@ class RecordProjection;
 
 }  // namespace expressions
 
+/**
+ * @class expression_t
+ * is the wrapper for the Expression that can be used to easily convert C++
+ * expressions into Expression.
+ *
+ * This class has overloading functions for the implicit conversion from the
+ * primitive types. There are also overloaded arithmetic operators to work with
+ * expression_t objects.
+ */
 class [[nodiscard]] expression_t final
     : public expressions::ExpressionCRTP<expression_t> {
  public:
@@ -1182,10 +1234,24 @@ class CastExpression : public ExpressionCRTP<CastExpression> {
 
 }  // namespace expressions
 
-//===----------------------------------------------------------------------===//
-// "Visitor" responsible for generating the appropriate code per Expression
-// 'node'
-//===----------------------------------------------------------------------===//
+/**
+ * @class ExprVisitor
+ * is a virtual base class for all expression visitor implementations
+ *
+ * It is responsible for generating the appropriate code per Expression 'node'
+ * @see ExpressionGeneratorVisitor, ExpressionHasherVisitor,
+ * ExpressionFlusherVisitor
+ *
+ * If you want to add a new Expression type you need to do the following:
+ * - Add the corresponding visit function to the base ExprVisitor and implement
+ * this function for all children of ExprVisitor and ExprTandemVisitor
+ * (DefaultedExprVisitor, ExpressionFlusherVisitor, ExpressionGeneratorVisitor,
+ * ExpressionHasherVisitor, ExpressionDotVisitor, ExpressionComparatorVisitor)
+ * - Implement a child of ExpressionCRTP (for the non-const scalar expressions)
+ * or BinaryExpressionCRTP or ConstantExpressionCRTP
+ * - You can also implement different util functions to work with your new type
+ * and expression_t
+ */
 class ExprVisitor {
  public:
   ExprVisitor() = default;

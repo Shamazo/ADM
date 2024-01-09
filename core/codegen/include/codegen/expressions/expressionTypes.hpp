@@ -85,6 +85,19 @@ class ExpressionType {
   virtual void accept(ExprTypeVisitor &v) const = 0;
 };
 
+/**
+ * ExpressionTypeVisitable
+ * is an analogue of ExprVisitorVisitable but for the ExpressionType as well as
+ * other CRTP classes.
+ *
+ * Currently there is no use case for the ExpressionTypeVisitor, but we could
+ * want a type visitor in the future. For example, if we wanted a type system to
+ * express the locality of the data the type represents, we may want to visit
+ * all the base types and cast them to Remote{Int] or Local[Int].
+ * @tparam T the type from the CRTP child classes such as PrimitiveTypeCRTP and
+ * CollectionTypeCRTP
+ * @tparam Interface the base CRTP class
+ */
 template <typename T, typename Interface = ExpressionType>
 class ExpressionTypeVisitable : public Interface {
   using Interface::Interface;
