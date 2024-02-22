@@ -148,6 +148,7 @@ include(warning-flags)
 # Various dependencies
 # Note the PROTEUS_USE_CUDA flag is used in our cuda.cmake module
 include(llvm-virtual)
+include(lz4)
 include(cuda)
 include(gflags)
 include(glog)
