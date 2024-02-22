@@ -169,6 +169,13 @@ endif ()
 #-----------------------------------------------------------------------
 # Build Documentation
 #-----------------------------------------------------------------------
+# On ubuntu 22.04 the system doxygen binary links to the OS LLVM-14 libclang-cpp
+# If a user sets LD_LIBRARY_PATH to use their own LLVM-14, it may not have all the symbols
+# Doxygen linked against. Here we essentially pop LD_LIBRARY_PATH, setup doxygen and push it back
+# The doxygen target will not work if run in the same environment, but a user can manually run doxygen
+# after clearing their LD_LIBRARY_PATH
+set(users_ld_library_path ENV{LD_LIBRARY_PATH})
+unset(ENV{LD_LIBRARY_PATH})
 find_package(Doxygen)
 if (DOXYGEN_FOUND)
   doxygen_add_docs(
@@ -179,6 +186,7 @@ if (DOXYGEN_FOUND)
     COMMENT "Generate doxygen pages"
     )
 endif ()
+set(ENV{LD_LIBRARY_PATH} users_ld_library_path)
 
 install(DIRECTORY "frontends/R/" DESTINATION ${CMAKE_INSTALL_PREFIX}/pelago/frontends/R/) # Creates <..>/pelago/frontends/R
 
