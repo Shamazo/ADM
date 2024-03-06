@@ -69,12 +69,14 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
 }
 
 extern "C" {
-pb make_mem_move_device(char *src, size_t bytes, int target_device,
+void make_mem_move_device(char **src_ptrs, size_t* bytes, int target_device,
                         uint64_t srcServer,
-                        MemMoveDevice::MemMoveConf *mmc) noexcept {
-  auto x =
-      mmc->push(proteus::managed_ptr{src}, bytes, target_device, srcServer);
-  return {x.new_buff.release(), x.old_buff.release()};
+                        MemMoveDevice::MemMoveConf *mmc, int num_buffers, pb* pair_buffs) noexcept {
+  for (int i = 0; i < num_buffers; i++){
+    auto x =
+        mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i], target_device, srcServer);
+    pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
+  }
 }
 
 MemMoveDevice::workunit *acquireWorkUnit(
@@ -246,12 +248,20 @@ void MemMoveDevice::consume(OlapParallelContext *context,
 
   std::vector<llvm::Value *> pushed;
   llvm::Value *is_noop = context->createTrue();
+
+  llvm::ArrayType* int64_array_type = llvm::ArrayType::get(context->createSizeType(), wantedFields.size());
+  llvm::AllocaInst* mv_sizes_bytes = Builder->CreateAlloca(int64_array_type, nullptr, "mv_sizes_bytes");
+
+  llvm::ArrayType* charptr_array_type = llvm::ArrayType::get(charPtrType, wantedFields.size());
+  llvm::AllocaInst* mv_src_ptrs = Builder->CreateAlloca(charptr_array_type, nullptr, "mv_src_ptrs");
+
+  // store size in bytes, and src_ptr into in the above declared arrays for each field to be moved
   for (size_t i = 0; i < wantedFields.size(); ++i) {
     RecordAttribute block_attr(*(wantedFields[i]), true);
 
     ProteusValueMemory mem_valWrapper = childState[block_attr];
 
-    auto mv = Builder->CreateBitCast(
+    auto mv_src_ptr = Builder->CreateBitCast(
         Builder->CreateLoad(
             mem_valWrapper.mem->getType()->getPointerElementType(),
             mem_valWrapper.mem),
@@ -264,25 +274,48 @@ void MemMoveDevice::consume(OlapParallelContext *context,
     llvm::Value *size = llvm::ConstantInt::get(
         llvmContext, llvm::APInt(64, context->getSizeOf(mv_block_type)));
     auto Nloc = Builder->CreateZExtOrBitCast(N, size->getType());
-    size = Builder->CreateMul(size, Nloc);
-    llvm::Value *moved = mv;
-    llvm::Value *to_release = mv;
-    if (do_transfer[i]) {
-      // Do actual mem move
-      auto moved_buffpair = context->gen_call(
-          make_mem_move_device, {mv, size, device_id, srcS, memmv});
-      moved = Builder->CreateExtractValue(moved_buffpair, 0);
-      to_release = Builder->CreateExtractValue(moved_buffpair, 1);
-    } else {
-      LOG(INFO) << "Lazy: " << wantedFields[i]->getRelationName() << "."
-                << wantedFields[i]->getAttrName();
-    }
+    size = Builder->CreateMul(size, Nloc); /// now in bytes
+    llvm::Value* size_as_int64 = Builder->CreateIntCast(size, llvm::Type::getInt64Ty(llvmContext), false);
+
+    // same index into both sizes and ptrs arrays
+    llvm::Value *gepIndices[] = { llvm::ConstantInt::get( llvm::Type::getInt32Ty(llvmContext), 0),
+                                 llvm::ConstantInt::get( llvm::Type::getInt32Ty(llvmContext), i)};
+
+    llvm::Value *size_ptr = Builder->CreateGEP(int64_array_type, mv_sizes_bytes, gepIndices);
+    Builder->CreateStore(size_as_int64, size_ptr);
+
+    auto* src_ptr = Builder->CreateGEP(charptr_array_type, mv_src_ptrs, gepIndices);
+    Builder->CreateStore(mv_src_ptr, src_ptr);
+  }
+
+  // create an array of `pb` to pass to make_mem_move_device as a return argument
+  auto mv_num_bufs = context->createInt32(wantedFields.size());
+  auto* llvm_pb_type = context->toLLVM<std::remove_cv_t<pb>>();
+  llvm::ArrayType* llvm_pb_array_type = llvm::ArrayType::get(llvm_pb_type, wantedFields.size());
+  llvm::AllocaInst* pb_array = Builder->CreateAlloca(llvm_pb_array_type, nullptr, "pb_array");
+
+
+  // TODO pass selectivities to make_mem_move_device
+  context->gen_call(
+      make_mem_move_device, {mv_src_ptrs, mv_sizes_bytes, device_id, srcS, memmv, mv_num_bufs, pb_array});
+
+  for (size_t i = 0; i < wantedFields.size(); ++i) {
+    RecordAttribute block_attr(*(wantedFields[i]), true);
+    ProteusValueMemory mem_valWrapper = childState[block_attr];
+
+    llvm::Value *gep_index_moved[] = {context->createInt32(0),  context->createInt32(i),context->createInt32(0)};
+    llvm::Value *gep_index_to_release[] = {context->createInt32(0), context->createInt32(i),context->createInt32(1)};
+    llvm::Value *moved_ptr = Builder->CreateGEP(
+        pb_array->getType()->getNonOpaquePointerElementType(), pb_array, gep_index_moved, "gep_buffpair_structs_moved");
+    llvm::Value *to_release_ptr = Builder->CreateGEP(
+        pb_array->getType()->getNonOpaquePointerElementType(), pb_array, gep_index_to_release, "gep_buffpair_structs_to_release");
+    llvm::Value *moved = Builder->CreateLoad(charPtrType, moved_ptr, "load_moved");
+    llvm::Value *to_release = Builder->CreateLoad(charPtrType, to_release_ptr, "load_to_release");
 
     pushed.push_back(Builder->CreateBitCast(
         moved, mem_valWrapper.mem->getType()->getPointerElementType()));
     pushed.push_back(Builder->CreateBitCast(
         to_release, mem_valWrapper.mem->getType()->getPointerElementType()));
-
     is_noop =
         Builder->CreateAnd(is_noop, Builder->CreateICmpEQ(moved, to_release));
   }
@@ -295,6 +328,8 @@ void MemMoveDevice::consume(OlapParallelContext *context,
   }
 
   // acquire and set workunit values
+  // TODO for io, maybe aquire a workunit first, then force push with the work units themselves?
+  // using an io_uring call back to update a bool in the work unit?
   auto workunit_ptr8 = context->gen_call(acquireWorkUnit, {memmv});
   auto workunit_ptr = Builder->CreateBitCast(
       workunit_ptr8, llvm::PointerType::getUnqual(workunit_type));
@@ -423,6 +458,7 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
   if (!tran.pop(*ret)) return false;
   gpu_run(cudaEventSynchronize((*ret)->event));
+//  for io_uring, maybe ret->work_complete
   return true;
 }
 
