@@ -32,7 +32,7 @@ target_link_libraries(storage
   magic_enum::magic_enum
   )
 
-if (VTUNE AND VTUNE_ENABLE)
+if (VTUNE AND PROTEUS_VTUNE_ENABLE)
   target_link_libraries(storage PUBLIC vtune::vtune)
 endif ()
 

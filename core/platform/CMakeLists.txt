@@ -124,7 +124,7 @@ target_link_libraries(platform
   magic_enum::magic_enum
   )
 
-if (VTUNE AND VTUNE_ENABLE)
+if (VTUNE AND PROTEUS_VTUNE_ENABLE)
   target_link_libraries(platform PUBLIC vtune::vtune)
 endif ()
 

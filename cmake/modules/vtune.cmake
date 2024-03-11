@@ -6,7 +6,7 @@ find_library(VTUNE ittnotify HINTS
 		"/opt/intel/vtune_profiler/lib64"
 		"~/intel/vtune_profiler/lib64"
 		"/opt/intel/oneapi/vtune/latest/lib64")
-if(VTUNE AND VTUNE_ENABLE)
+if(VTUNE AND PROTEUS_VTUNE_ENABLE)
 	get_filename_component(VTUNE_LIBRARY_DIR ${VTUNE} DIRECTORY)
 	get_filename_component(VTUNE_ROOT ${VTUNE_LIBRARY_DIR} DIRECTORY)
 	add_library(vtune::vtune INTERFACE IMPORTED)
@@ -17,4 +17,6 @@ if(VTUNE AND VTUNE_ENABLE)
 	message(STATUS "Vtune root: ${VTUNE_ROOT}")
 	message(STATUS "Vtune lib: ${VTUNE}")
 	message(STATUS "Vtune include: ${VTUNE_ROOT}/include")
+else ()
+	message(STATUS "Building without Vtune")
 endif()
