@@ -4,6 +4,7 @@ project(${TS_NAME} VERSION 0.1 LANGUAGES CXX)
 
 add_library(${PROJECT_NAME} SHARED
   lib/main.cpp
+  lib/utils.cpp
   )
 
 target_link_libraries(${PROJECT_NAME}

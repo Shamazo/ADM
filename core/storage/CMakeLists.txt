@@ -7,6 +7,7 @@ set(storage_cxx
   lib/mmap-file.cpp
   lib/storage-load-policy-registry.cpp
   lib/storage-manager.cpp
+  lib/io_uring.cpp
   )
 
 
@@ -30,6 +31,7 @@ target_link_libraries(storage
   PUBLIC
   proteus::platform
   NVIDIA::GDS
+  liburing
   PRIVATE
   magic_enum::magic_enum
   )
@@ -44,6 +46,7 @@ add_library(proteus::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 #-----------------------------------------------------------------------------
 # Unit tests
 if (PROTEUS_BUILD_UNIT_TESTS)
+#  TODO move old tests/ to test/
 add_proteus_unit_test(unit-tests-storage proteus::storage
   test/storage-test-main.cpp
   test/test-mmap-file.cpp

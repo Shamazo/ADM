@@ -21,31 +21,34 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <glog/logging.h>
-#include <gtest/gtest.h>
+#ifndef PROTEUS_TEST_UTILS_HPP
+#define PROTEUS_TEST_UTILS_HPP
 
+#include <filesystem>
 #include <platform/common/common.hpp>
-#include <platform/memory/memory-manager.hpp>
-#include <storage/test/test-utils.hpp>
+#include <platform/memory/managed-pointer.hpp>
 
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging((argv)[0]);
-  FLAGS_logtostderr = true;
-  LOG(INFO) << "Running in: " << std::filesystem::current_path() << " \n";
+class StorageTestEnvironment : public ::testing::Environment {
+  static bool has_already_been_setup;
+  std::unique_ptr<proteus::platform> platform;
 
-  setbuf(stdout, nullptr);
+ public:
+  void SetUp() override;
+  void TearDown() override;
+};
 
-  // for reproducibility
-  srand(time(nullptr));
-  google::InstallFailureSignalHandler();
-  // for debugging:
-  set_trace_allocations(false);
+/**
+ * EXPECT_TRUE that @param input_file exists
+ */
+void validateInputFile(const std::filesystem::path& input_file);
 
-  ::testing::AddGlobalTestEnvironment(new StorageTestEnvironment);
+/**
+ * EXPECT_TRUE that the data in pointed to by blocks matches the contents of
+ * input_file
+ * @param blocks Assumed to be 2 MiB bytes
+ * @param input_file path to file
+ */
+void validateLoadedBlocks(const std::vector<proteus::managed_ptr>& blocks,
+                          const std::filesystem::path& input_file);
 
-  auto return_code = RUN_ALL_TESTS();
-  google::ShutdownGoogleLogging();
-
-  return return_code;
-}
+#endif  // PROTEUS_TEST_UTILS_HPP
