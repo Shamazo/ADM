@@ -38,9 +38,9 @@
 #include <vector>
 
 #ifndef NCUDA
-#include "cuda_profiler_api.h"
-#include "cuda_runtime_api.h"
-#include "nvToolsExt.h"
+#include <cuda_profiler_api.h>
+#include <cuda_runtime_api.h>
+#include <nvtx3/nvToolsExt.h>
 #endif
 
 // template<typename T>
@@ -208,6 +208,7 @@ static size_t fixSize(size_t bytes) {
 }
 
 void *topology::cpunumanode::alloc(size_t bytes) const {
+  profiling::ProfileRegion("topology::cpunumanode::alloc");
   bytes = fixSize(bytes);
   void *mem = mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);

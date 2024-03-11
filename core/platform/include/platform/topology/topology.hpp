@@ -31,7 +31,7 @@
 #include <vector>
 
 #ifndef NCUDA
-#include "nvml.h"
+#include <nvml.h>
 #else
 #define nvmlDevice_t void *
 #define nvmlGpuTopologyLevel_t void *

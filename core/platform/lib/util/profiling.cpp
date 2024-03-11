@@ -25,6 +25,10 @@
 #include <platform/topology/topology.hpp>
 #include <platform/util/profiling.hpp>
 
+#if __has_include("nvtx3/nvToolsExt.h")
+#include <nvtx3/nvToolsExt.h>
+#endif
+
 #if __has_include("ittnotify.h")
 #include <ittnotify.h>
 #else

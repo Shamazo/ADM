@@ -44,7 +44,7 @@ if(CUDA_FOUND AND PROTEUS_USE_CUDA)
 	# Because of how the "command" function works, we have to use a
 	# CMAKE list, and not a string for CUDA_CUFLAGS
 
-	set(CUDA_LIBS -lnvToolsExt -lcuda ${CUDA_LIBRARIES}
+	set(CUDA_LIBS -lcuda ${CUDA_LIBRARIES}
 			-lnvidia-ml
 			-lcupti
 			${CUDA_cudadevrt_LIBRARY} -lnvvm)

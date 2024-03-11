@@ -29,8 +29,8 @@
 #include <cuda_profiler_api.h>
 #include <cuda_runtime_api.h>
 #include <cupti.h>
-#include <nvToolsExt.h>
 #include <nvml.h>
+#include <nvtx3/nvToolsExt.h>
 
 #include <platform/common/common.hpp>
 #else
