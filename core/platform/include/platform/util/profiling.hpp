@@ -24,9 +24,105 @@
 #ifndef PROFILING_HPP_
 #define PROFILING_HPP_
 
+#if __has_include("ittnotify.h")
+#include <ittnotify.h>
+#else
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wreserved-macro-identifier"
+#define __itt_event void *
+#pragma clang diagnostic pop
+#endif
+
+#if __has_include("nvtx3/nvToolsExt.h")
+#include <nvtx3/nvToolsExt.h>
+#endif
+
+/**
+ * Utility wrappers around the runtime APIs of some profilers
+ * Currently VTune & Cuda profilers
+ */
 namespace profiling {
 void resume();
 void pause();
+
+/**
+ * Mark a region in a thread
+ *
+ * Region begins when ProfileRegion is constructed and ends with destructed
+ */
+class ProfileRegion {
+ public:
+#if __has_include("ittnotify.h")
+  [[nodiscard]] explicit ProfileRegion(const std::string &region_name)
+      : m_event(__itt_event_create(region_name.c_str(), region_name.length())) {
+#else
+  [[nodiscard]] explicit ProfileRegion(const std::string &region_name) {
+#endif
+
+#if __has_include("nvtx3/nvToolsExt.h")
+    nvtxRangePushA(region_name.c_str());
+#endif
+
+#if __has_include("ittnotify.h")
+    __itt_event_start(m_event);
+#endif
+  }
+
+  ~ProfileRegion() {
+#if __has_include("nvtx3/nvToolsExt.h")
+    nvtxRangePop();
+#endif
+
+#if __has_include("ittnotify.h")
+    __itt_event_end(m_event);
+#endif
+  }
+
+ private:
+#if __has_include("ittnotify.h")
+  const __itt_event m_event;
+#endif
+};
+
+/**
+ * Mark a single point in time in a thread
+ */
+class ProfileMarkPoint {
+ public:
+  /**
+   * Constructor does not mark a point. Points can be marked with @see
+   * ProfileMarkPoint::mark
+   */
+#if __has_include("ittnotify.h")
+  ProfileMarkPoint(std::string point_name)
+      : m_point_name(std::move(point_name)),
+        m_event(__itt_event_create(point_name.c_str(), point_name.length())) {}
+#else
+  ProfileMarkPoint(std::string point_name)
+      : m_point_name(std::move(point_name)) {}
+#endif
+
+  /**
+   * Mark a point in time. This can be called multiple times on the same
+   * ProfileMarkPoint
+   */
+  inline void mark() {
+#if __has_include("nvtx3/nvToolsExt.h")
+    nvtxMarkA(m_point_name.c_str());
+#endif
+
+#if __has_include("ittnotify.h")
+    __itt_event_start(m_event);
+#endif
+  }
+
+ private:
+  const std::string m_point_name;
+#if __has_include("ittnotify.h")
+  const __itt_event m_event;
+#endif
+};
+
 }  // namespace profiling
 
 #endif /* PROFILING_HPP_ */

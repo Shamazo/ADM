@@ -32,6 +32,7 @@
 #include <mutex>
 #include <platform/common/common.hpp>
 #include <platform/topology/affinity_manager.hpp>
+#include <platform/util/profiling.hpp>
 #include <queue>
 #include <thread>
 
@@ -100,8 +101,11 @@ class ThreadPool {
             }
 
             pthread_setname_np(pthread_self(), "working");
-
-            task();
+            {
+              auto region =
+                  profiling::ProfileRegion("ThreadPool::executing-task");
+              task();
+            }
           }
         },
         workers.size());

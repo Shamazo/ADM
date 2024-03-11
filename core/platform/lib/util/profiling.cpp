@@ -25,10 +25,6 @@
 #include <platform/topology/topology.hpp>
 #include <platform/util/profiling.hpp>
 
-#if __has_include("nvtx3/nvToolsExt.h")
-#include <nvtx3/nvToolsExt.h>
-#endif
-
 #if __has_include("ittnotify.h")
 #include <ittnotify.h>
 #else
@@ -38,18 +34,23 @@
 
 namespace profiling {
 void resume() {
+#if __has_include("nvtx3/nvToolsExt.h")
   for (const auto &gpu : topology::getInstance().getGpus()) {
     set_exec_location_on_scope d{gpu};
     gpu_run(cudaProfilerStart());
   }
+#endif
   __itt_resume();
 }
 
 void pause() {
-  __itt_pause();
+#if __has_include("nvtx3/nvToolsExt.h")
   for (const auto &gpu : topology::getInstance().getGpus()) {
     set_device_on_scope d{gpu};
     gpu_run(cudaProfilerStop());
   }
+#endif
+  __itt_pause();
 }
+
 }  // namespace profiling

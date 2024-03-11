@@ -32,6 +32,7 @@
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
 #include <platform/util/logging.hpp>
+#include <platform/util/profiling.hpp>
 #include <platform/util/topology_parser.hpp>
 #include <regex>
 #include <stdexcept>
@@ -208,7 +209,7 @@ static size_t fixSize(size_t bytes) {
 }
 
 void *topology::cpunumanode::alloc(size_t bytes) const {
-  profiling::ProfileRegion("topology::cpunumanode::alloc");
+  auto prof_range = profiling::ProfileRegion("topology::cpunumanode::alloc");
   bytes = fixSize(bytes);
   void *mem = mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
