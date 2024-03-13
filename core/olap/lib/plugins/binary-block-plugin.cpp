@@ -326,6 +326,15 @@ void BinaryBlockPlugin::skipLLVM(OlapParallelContext *context,
   Builder->CreateStore(val_new_pos, mem_pos);
 }
 
+/**
+ * Updates the loop control variables to point to the next data entry.
+ * This method inserts code into the increment block (IncBB) during the scan
+ * process. It handles incrementing the partition index or resetting it and
+ * advancing block_i if necessary,
+ *
+ * @param blockSize The size of the data block, used to increment the block
+ * index.
+ */
 void BinaryBlockPlugin::nextEntry(OlapParallelContext *context,
                                   llvm::Value *blockSize) {
   // Prepare
@@ -357,36 +366,51 @@ void BinaryBlockPlugin::nextEntry(OlapParallelContext *context,
   Value *cond = Builder->CreateICmpULT(part_i, part_N);
   Builder->CreateCondBr(cond, stepBB, wrapBB);
 
-  Builder->SetInsertPoint(stepBB);
-  Builder->CreateStore(
-      Builder->CreateAdd(part_i, ConstantInt::get(size_type, 1)), part_i_ptr);
+  {
+    // IfThen
+    // increment part_i (which partition we are accessing)
+    Builder->SetInsertPoint(stepBB);
 
-  Builder->CreateBr(afterBB);
+    Builder->CreateStore(
+        Builder->CreateAdd(part_i, ConstantInt::get(size_type, 1)), part_i_ptr);
 
-  Builder->SetInsertPoint(wrapBB);
+    Builder->CreateBr(afterBB);
+  }
 
-  Builder->CreateStore(ConstantInt::get(size_type, 0), part_i_ptr);
+  {
+    // IfElse
+    // wrap around back to partition 0 and advance block_i by the blocksize
+    Builder->SetInsertPoint(wrapBB);
 
-  Value *block_i = Builder->CreateLoad(
-      block_i_ptr->getType()->getPointerElementType(), block_i_ptr, "block_i");
-  Builder->CreateStore(Builder->CreateAdd(block_i, blockSize), block_i_ptr);
+    Builder->CreateStore(ConstantInt::get(size_type, 0), part_i_ptr);
 
-  Builder->CreateBr(afterBB);
+    Value *block_i =
+        Builder->CreateLoad(block_i_ptr->getType()->getPointerElementType(),
+                            block_i_ptr, "block_i");
+    Builder->CreateStore(Builder->CreateAdd(block_i, blockSize), block_i_ptr);
 
-  Builder->SetInsertPoint(afterBB);
+    Builder->CreateBr(afterBB);
+  }
 
-  // itemCtr = block_i_ptr * Nparts + part_i_ptr * blockSize
-  Value *itemCtr = Builder->CreateAdd(
-      Builder->CreateMul(
-          Builder->CreateLoad(block_i_ptr->getType()->getPointerElementType(),
-                              block_i_ptr),
-          ConstantInt::get(size_type, Nparts)),
-      Builder->CreateMul(
-          Builder->CreateLoad(part_i_ptr->getType()->getPointerElementType(),
-                              part_i_ptr),
-          blockSize));
+  {
+    // IfAfter
+    // In both cases update itemCtr which is used for the tuple ID
+    Builder->SetInsertPoint(afterBB);
 
-  Builder->CreateStore(itemCtr, mem_itemCtr);
+    // itemCtr = block_i_ptr * Nparts + part_i_ptr * blockSize
+    Value *itemCtr = Builder->CreateAdd(
+        Builder->CreateMul(
+            Builder->CreateLoad(block_i_ptr->getType()->getPointerElementType(),
+                                block_i_ptr),
+            ConstantInt::get(size_type, Nparts)),
+        Builder->CreateMul(
+            Builder->CreateLoad(part_i_ptr->getType()->getPointerElementType(),
+                                part_i_ptr),
+            blockSize));
+    itemCtr->setName("itemCtr");
+
+    Builder->CreateStore(itemCtr, mem_itemCtr);
+  }
 }
 
 /* Operates over int*! */
@@ -597,6 +621,10 @@ void BinaryBlockPlugin::freeDataPointersForFile(OlapParallelContext *context,
                     {context->createSizeT(i), casted, this_ptr});
 }
 
+/**
+ * @return a ptr to an array of length Nparts storing the number of tuples in
+ * each partition, and the size in tuples of the largest partition
+ */
 std::pair<llvm::Value *, llvm::Value *> BinaryBlockPlugin::getPartitionSizes(
     OlapParallelContext *context, llvm::Value *) const {
   IRBuilder<> *Builder = context->getBuilder();
@@ -632,6 +660,11 @@ void BinaryBlockPlugin::freePartitionSizes(OlapParallelContext *context,
   context->gen_call(&::freeTuplesPerPartition, {v, this_ptr});
 }
 
+/**
+ * Iterates over all partitions of the binary input a round-robin manner.
+ * Each iteration sets the OperatorState that will be used by producer
+ * @param producer The operator that is producing tuples. (scan.hpp)
+ */
 void BinaryBlockPlugin::scan(const ::Operator &producer,
                              OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
@@ -664,7 +697,8 @@ void BinaryBlockPlugin::scan(const ::Operator &producer,
 
   auto partsizes = getPartitionSizes(context, session);
   Value *N_parts_ptr = partsizes.first;
-  Value *maxPackCnt = partsizes.second;
+  N_parts_ptr->setName("N_parts_ptr");
+  Value *maxPackCnt = partsizes.second;  /// size of largest partition in tuples
   maxPackCnt->setName("maxPackCnt");
 
   size_t max_field_size = 0;
@@ -734,14 +768,16 @@ void BinaryBlockPlugin::scan(const ::Operator &producer,
   Value *block_i_loc = Builder->CreateLoad(
       block_i_ptr->getType()->getPointerElementType(), block_i_ptr, "block_i");
 
-  auto tupleCntPtr = Builder->CreateInBoundsGEP(
+  auto partTupleCntPtr = Builder->CreateInBoundsGEP(
       N_parts_ptr->getType()->getNonOpaquePointerElementType(), N_parts_ptr,
       std::vector<Value *>{context->createInt64(0), part_i_loc});
-  Value *tupleCnt = Builder->CreateLoad(
-      tupleCntPtr->getType()->getPointerElementType(), tupleCntPtr);
+  Value *partTupleCnt = Builder->CreateLoad(
+      partTupleCntPtr->getType()->getPointerElementType(), partTupleCntPtr);
+  partTupleCnt->setName("partTupleCnt");
 
-  Value *part_unfinished = Builder->CreateICmpULT(block_i_loc, tupleCnt);
+  Value *part_unfinished = Builder->CreateICmpULT(block_i_loc, partTupleCnt);
 
+  // If we are already at the end of this block jump to IncBB
   Builder->CreateCondBr(part_unfinished, MainBB, IncBB);
 
   Builder->SetInsertPoint(MainBB);
@@ -787,9 +823,9 @@ void BinaryBlockPlugin::scan(const ::Operator &producer,
   }
 
   AllocaInst *blockN_ptr =
-      context->CreateEntryBlockAlloca(F, "blockN", tupleCnt->getType());
+      context->CreateEntryBlockAlloca(F, "blockN", partTupleCnt->getType());
 
-  Value *remaining = Builder->CreateSub(tupleCnt, block_i_loc);
+  Value *remaining = Builder->CreateSub(partTupleCnt, block_i_loc);
   Value *blockN = Builder->CreateSelect(
       Builder->CreateICmpULT(blockSize, remaining), blockSize, remaining);
   Builder->CreateStore(blockN, blockN_ptr);
@@ -826,6 +862,7 @@ void BinaryBlockPlugin::scan(const ::Operator &producer,
   //  Finish up with end (the AfterLoop)
   //  Any new code will be inserted in AfterBB.
   Builder->SetInsertPoint(context->getEndingBlock());
+  // Builder->SetInsertPoint(AfterBB);
 
   freePartitionSizes(context, N_parts_ptr);
   for (size_t i = 0; i < wantedFields.size(); ++i) {
@@ -833,7 +870,6 @@ void BinaryBlockPlugin::scan(const ::Operator &producer,
   }
 
   releaseSession(context, session);
-  // Builder->SetInsertPoint(AfterBB);
 }
 
 RecordType BinaryBlockPlugin::getRowType() const {
@@ -989,7 +1025,7 @@ void BinaryBlockPlugin::forEachInCollection(
     // Check whether we reached the end
     lhs = Builder->CreateLoad(
         mem_itemCtr->getType()->getNonOpaquePointerElementType(), mem_itemCtr,
-        "i");
+        "forEachInCollection_i");
 
     return ProteusValue{Builder->CreateICmpSLT(lhs, cnt),
                         context->createFalse()};
