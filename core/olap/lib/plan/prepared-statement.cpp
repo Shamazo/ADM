@@ -146,7 +146,7 @@ QueryResult PreparedStatement::execute(
 
   if (freePtr) MemoryManager::freePinned(const_cast<void *>(session));
 
-  return {outputFile};
+  return QueryResult{outputFile};
 }
 
 PreparedStatement PreparedStatement::from(const std::string &planPath,

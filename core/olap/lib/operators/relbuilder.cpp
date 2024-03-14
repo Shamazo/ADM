@@ -32,6 +32,7 @@
 #include <lib/operators/router/generalized-router.hpp>
 #include <lib/plugins/vector/vector-plugin.hpp>
 #include <lib/util/flush-operator-tree.hpp>
+#include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <utility>
 
 #include "block-to-tuples.hpp"
@@ -839,6 +840,29 @@ RelBuilder RelBuilder::scan(
   auto pg = new VectorPlugin(ctx, data);
 
   auto fileName = data[0].first->getRelationName();
+  auto &catalog = CatalogParser::getInstance();
+  auto ii = catalog.getInputInfoIfKnown(fileName);
+  if (!ii) {
+    ii = new InputInfo;
+    ii->exprType = new BagType(pg->getRowType());
+    ii->path = fileName;
+
+    catalog.setInputInfo(fileName, ii);
+  }
+
+  ii->oidType = new RecordType(pg->getRowType());
+
+  Catalog::getInstance().registerPlugin(fileName, pg);
+  return scan(*pg);
+}
+
+RelBuilder RelBuilder::scan(
+    const std::vector<
+        std::pair<RecordAttribute *, std::vector<std::filesystem::path>>>
+        &fields) const {
+  auto pg = new NvmePlugin(ctx, fields);
+
+  auto fileName = fields[0].first->getRelationName();
   auto &catalog = CatalogParser::getInstance();
   auto ii = catalog.getInputInfoIfKnown(fileName);
   if (!ii) {

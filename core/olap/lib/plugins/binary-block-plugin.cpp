@@ -334,8 +334,8 @@ void BinaryBlockPlugin::skipLLVM(OlapParallelContext *context,
  * process. It handles incrementing the partition index or resetting it and
  * advancing block_i if necessary,
  *
- * @param blockSize The size of the data block, used to increment the block
- * index.
+ * @param blockSize The size of the data block in tuples, used to increment the
+ * block index.
  */
 void BinaryBlockPlugin::nextEntry(OlapParallelContext *context,
                                   llvm::Value *blockSize) {

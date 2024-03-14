@@ -176,6 +176,11 @@ class RelBuilder {
           std::pair<RecordAttribute*, std::shared_ptr<proteus_any_vector>>>&
           data) const;
 
+  [[nodiscard]] RelBuilder scan(
+      const std::vector<
+          std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>&
+          fields) const;
+
   template <typename Tplugin>
   [[deprecated]] RelBuilder scan(std::string relName,
                                  std::vector<std::string> relAttrs,

@@ -41,6 +41,8 @@ class BinaryBlockPlugin : public Plugin {
                     const std::vector<RecordAttribute *> &whichFields,
                     bool load);
 
+  static constexpr auto bufVar = "buf";
+
  public:
   BinaryBlockPlugin(OlapParallelContext *context, const string &fnamePrefix,
                     RecordType rec,
@@ -232,7 +234,6 @@ class BinaryBlockPlugin : public Plugin {
 
  private:
   static constexpr auto posVar = "offset";
-  static constexpr auto bufVar = "buf";
   static constexpr auto itemCtrVar = "itemCtr";
 
   // Used to generate code

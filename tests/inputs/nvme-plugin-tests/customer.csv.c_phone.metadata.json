@@ -1,0 +1,8 @@
+{
+  "data_format": "",
+  "_comment": "We expect the standard ssbm100 data to be linked as usual for tests",
+  "data_file" : "../ssbm100/customer.csv.c_phone",
+  "num_blocks" : 6,
+  "block_sizes" : [2097152, 2097152, 2097152, 2097152, 2097152, 1514240],
+  "block_offsets" : [0, 2097152, 4194304, 6291456, 8388608, 10485760]
+}

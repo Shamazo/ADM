@@ -119,7 +119,7 @@ std::ostream &operator<<(std::ostream &out, const QueryResult &qr) {
   return out;
 }
 
-QueryResult::QueryResult(QueryResult &&o)
+QueryResult::QueryResult(QueryResult &&o) noexcept
     : fsize(o.fsize), resultBuf(o.resultBuf), outputfile(o.outputfile) {
   o.resultBuf = nullptr;
 }
