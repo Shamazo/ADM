@@ -102,6 +102,16 @@ class NvmePlugin : public BinaryBlockPlugin {
 
   ~NvmePlugin() override;
 
+  /**
+   * Retrieves the IO information for a given page.
+   * @param page_id The PageId_t of the page for which to retrieve the IO
+   * information.
+   * @return A tuple containing the file descriptor, offset, and size in bytes
+   * of the page.
+   */
+  std::tuple<int, uint64_t, size_t> getPageIoInfo(
+      const PageId_t &page_id) const;
+
  protected:
   llvm::Value *getDataPointersForFile(OlapParallelContext *context, size_t i,
                                       llvm::Value *session_ptr) const override {

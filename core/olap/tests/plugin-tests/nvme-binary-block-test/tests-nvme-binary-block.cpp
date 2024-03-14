@@ -263,3 +263,39 @@ TEST_F(NvmePluginTest, scan_one_col_two_part) {
 #pragma clang diagnostic pop
   validate_page_id_result_n_part_per_col(res, 2);
 }
+
+TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
+  using namespace dangling_attr;
+  RecordType my_record_type = rel("ssbm100")(Int64("customer.csv.c_custkey"));
+
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/customer.csv.c_custkey.metadata.json";
+  std::vector<std::filesystem::path> attr_md{md_path, md_path};
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.push_back(
+      std::make_pair(meta_data_records_map["customer.csv.c_custkey"], attr_md));
+  auto context = OlapParallelContext("test");
+  NvmePlugin testPlugin(&context, relation_md);
+
+  // Assuming the second block of the first attribute for testing
+  NvmePlugin::PageId_t testPageId(0,   // CPU NUMA affinity,
+                                  0,   // attribute number,
+                                  0,   // partition number,
+                                  1);  //  block number
+
+  // Retrieve IO information for the test page
+  auto [fd, offset, size] = testPlugin.getPageIoInfo(testPageId);
+
+  // Load expected values from the metadata file
+  NvmePlugin::AttributePartMetaData partMetaData(md_path);
+  const uint64_t expected_offset = partMetaData.block_offsets[1];
+  const size_t expected_size = static_cast<size_t>(partMetaData.block_sizes[1]);
+
+  // Can't test FD easily without a real file, but we can test the offset and
+  // expected size
+  EXPECT_EQ(offset, expected_offset);
+  EXPECT_EQ(size, expected_size);
+}

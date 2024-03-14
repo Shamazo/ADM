@@ -105,6 +105,31 @@ NvmePlugin::NvmePlugin(
 
 NvmePlugin::~NvmePlugin() {}
 
+std::tuple<int, uint64_t, size_t> NvmePlugin::getPageIoInfo(
+    const PageId_t &page_id) const {
+  if (page_id.getAttributeNo() >= m_attribute_metadata.size() ||
+      page_id.getPartitionNo() >=
+          m_attribute_metadata[page_id.getAttributeNo()].size()) {
+    LOG(WARNING) << "PageId_t references non-existent attribute or partition";
+    throw std::out_of_range(
+        "PageId_t references non-existent attribute or partition");
+  }
+
+  const auto &partMetaData =
+      m_attribute_metadata[page_id.getAttributeNo()][page_id.getPartitionNo()];
+  if (page_id.getBlockNo() >= partMetaData.num_blocks) {
+    LOG(WARNING) << "PageId_t references non-existent block";
+    throw std::out_of_range("PageId_t references non-existent block");
+  }
+
+  int fd = partMetaData.fd;
+  uint64_t offset = partMetaData.block_offsets[page_id.getBlockNo()];
+  size_t size =
+      static_cast<size_t>(partMetaData.block_sizes[page_id.getBlockNo()]);
+
+  return std::make_tuple(fd, offset, size);
+}
+
 std::pair<llvm::Value *, llvm::Value *> NvmePlugin::getPartitionSizes(
     OlapParallelContext *context, llvm::Value *session_ptr) const {
   uint64_t max_blocks_in_partition = 0;
