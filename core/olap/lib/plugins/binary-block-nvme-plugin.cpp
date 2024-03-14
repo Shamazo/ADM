@@ -35,9 +35,11 @@ using namespace llvm;
 extern "C" {
 void *getNvmePageIdPtr(uint8_t cpu_numa_affinity, uint8_t attribute_no,
                        uint8_t partition_no, uint32_t block_no) noexcept {
-  uint64_t page_id = (uint64_t)cpu_numa_affinity << 56 |
-                     (uint64_t)attribute_no << 48 |
-                     (uint64_t)partition_no << 40 | (uint64_t)block_no;
+  uint64_t page_id =
+      (uint64_t)(cpu_numa_affinity | NvmePlugin::PageId_t::page_id_bit_in_numa)
+          << 56 |
+      (uint64_t)attribute_no << 48 | (uint64_t)partition_no << 40 |
+      (uint64_t)block_no;
   return reinterpret_cast<void *>(page_id);
 }
 }

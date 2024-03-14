@@ -31,18 +31,52 @@
 class NvmePlugin : public BinaryBlockPlugin {
  public:
   struct PageId_t {
-    const uint8_t cpu_numa_affinity;
-    const uint8_t attribute_no;
-    const uint8_t partition_no;
-    const uint8_t _padding;
-    const uint32_t block_no;
-    static PageId_t from_ptr(void *ptr) {
+    static constexpr uint8_t cpu_numa_mask = 0b01111111;
+    static constexpr uint8_t page_id_bit_in_numa = 0b10000000;
+    static_assert((cpu_numa_mask | page_id_bit_in_numa) == 0b11111111,
+                  "cpu_numa_mask and page_id_mask overlap");
+
+    static constexpr uint64_t page_id_mask = 1ULL << 63;
+
+    PageId_t(uint8_t cpu_numa_affinity, uint8_t attribute_no,
+             uint8_t partition_no, uint32_t block_no) noexcept
+        : cpu_numa_affinity(cpu_numa_affinity | page_id_bit_in_numa),
+          attribute_no(attribute_no),
+          partition_no(partition_no),
+          _(0),
+          block_no(block_no) {}
+
+    static PageId_t from_ptr(void *ptr) noexcept {
       auto page_id = reinterpret_cast<uint64_t>(ptr);
-      return PageId_t{static_cast<uint8_t>(page_id >> 56),
+      return PageId_t{static_cast<uint8_t>((page_id >> 56)),
                       static_cast<uint8_t>(page_id >> 48),
-                      static_cast<uint8_t>(page_id >> 40), 0,
+                      static_cast<uint8_t>(page_id >> 40),
                       static_cast<uint32_t>(page_id)};
     }
+    static bool isPageIdPtr(void *ptr) noexcept {
+      return reinterpret_cast<uint64_t>(ptr) & page_id_mask;
+    }
+    static bool isPageIdPtr(uintptr_t ptr) noexcept {
+      return reinterpret_cast<uint64_t>(ptr) & page_id_mask;
+    }
+
+    [[nodiscard]] inline uint8_t getCpuNumaAffinity() const {
+      return cpu_numa_affinity & cpu_numa_mask;
+    }
+    [[nodiscard]] inline uint8_t getAttributeNo() const { return attribute_no; }
+    [[nodiscard]] inline uint8_t getPartitionNo() const { return partition_no; }
+    [[nodiscard]] inline uint32_t getBlockNo() const { return block_no; }
+
+   private:
+    const uint8_t
+        cpu_numa_affinity;  /// this is cpu_numa node in the lower bits and the
+                            /// first bit indicates that this is whole struct is
+                            /// a page id when stored as a ptr type
+    const uint8_t attribute_no;
+    const uint8_t partition_no;
+    __attribute__((unused)) const uint8_t _;  /// padding
+    const uint32_t block_no;
+
     friend std::ostream &operator<<(std::ostream &out, const PageId_t &page_id);
   };
   static_assert(sizeof(PageId_t) == sizeof(void *));

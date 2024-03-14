@@ -43,15 +43,39 @@ TEST(NvmePluginAttributePartMetaDataTest, from_file_small) {
   EXPECT_EQ(x.block_offsets.back(), 10485760);
 }
 
+TEST(PageId_t, ptr_tagging) {
+  void* page_id_as_ptr = getNvmePageIdPtr(1, 2, 3, 4);
+
+  EXPECT_TRUE(NvmePlugin::PageId_t::isPageIdPtr(page_id_as_ptr));
+  constexpr uintptr_t full_mask = 1ULL << 63;
+  static_assert(sizeof(uintptr_t) == 8, "uintptr_t is not 8 bytes");
+  EXPECT_TRUE(reinterpret_cast<uintptr_t>(page_id_as_ptr) & full_mask);
+
+  auto page_id_from_ptr = NvmePlugin::PageId_t::from_ptr(page_id_as_ptr);
+
+  constexpr int8_t numa_mask = 1u << 7;
+  EXPECT_FALSE(
+      reinterpret_cast<uint8_t>(page_id_from_ptr.getCpuNumaAffinity()) &
+      numa_mask);
+}
+
 TEST(PageId_t, invertable) {
-  NvmePlugin::PageId_t x{1, 2, 3, 4, 5};
-  void* page_id_as_ptr = getNvmePageIdPtr(x.cpu_numa_affinity, x.attribute_no,
-                                          x.partition_no, x.block_no);
+  const uint8_t expected_cpu_numa_affinity = 1;
+  const uint8_t expected_attribute_no = 2;
+  const uint8_t expected_partition_no = 3;
+  const uint32_t expected_block_no = 4;
+
+  NvmePlugin::PageId_t from_cpp_cons{expected_cpu_numa_affinity,
+                                     expected_attribute_no,
+                                     expected_partition_no, expected_block_no};
+  void* page_id_as_ptr = getNvmePageIdPtr(
+      from_cpp_cons.getCpuNumaAffinity(), from_cpp_cons.getAttributeNo(),
+      from_cpp_cons.getPartitionNo(), from_cpp_cons.getBlockNo());
   NvmePlugin::PageId_t y = NvmePlugin::PageId_t::from_ptr(page_id_as_ptr);
-  EXPECT_EQ(x.cpu_numa_affinity, y.cpu_numa_affinity);
-  EXPECT_EQ(x.attribute_no, y.attribute_no);
-  EXPECT_EQ(x.partition_no, y.partition_no);
-  EXPECT_EQ(x.block_no, y.block_no);
+  EXPECT_EQ(from_cpp_cons.getCpuNumaAffinity(), y.getCpuNumaAffinity());
+  EXPECT_EQ(from_cpp_cons.getAttributeNo(), y.getAttributeNo());
+  EXPECT_EQ(from_cpp_cons.getPartitionNo(), y.getPartitionNo());
+  EXPECT_EQ(from_cpp_cons.getBlockNo(), y.getBlockNo());
 }
 
 uintptr_t hex_to_uintptr(const std::string& hex_str) {
@@ -85,19 +109,21 @@ class NvmePluginTest : public ::testing::Test {
     std::string out_tuple;
     int tuple_count = 0;
     while (std::getline(res_str, out_tuple)) {
-      LOG(INFO) << out_tuple;
       std::istringstream iss(out_tuple);
       std::string page_id_as_ptr;
       int attr = 0;
       while (std::getline(iss, page_id_as_ptr, ',')) {
+        auto page_id_as_uintptr = hex_to_uintptr(page_id_as_ptr);
         auto page_id = NvmePlugin::PageId_t::from_ptr(
-            reinterpret_cast<void*>(hex_to_uintptr(page_id_as_ptr)));
-        ASSERT_EQ(page_id.attribute_no, attr)
+            reinterpret_cast<void*>(page_id_as_uintptr));
+        ASSERT_TRUE(NvmePlugin::PageId_t::isPageIdPtr(page_id_as_uintptr));
+        ASSERT_EQ(page_id.getAttributeNo(), attr)
             << "tuple#: " << tuple_count << " " << page_id;
-        ASSERT_EQ(page_id.partition_no, 0)
+        ASSERT_EQ(page_id.getPartitionNo(), 0)
             << "tuple#: " << tuple_count << " " << page_id;
-        ASSERT_EQ(page_id.block_no, tuple_count)
+        ASSERT_EQ(page_id.getBlockNo(), tuple_count)
             << "tuple#: " << tuple_count << " " << page_id;
+
         attr += 1;
       }
       tuple_count += 1;
@@ -126,11 +152,11 @@ class NvmePluginTest : public ::testing::Test {
       while (std::getline(iss, page_id_as_ptr, ',')) {
         auto page_id = NvmePlugin::PageId_t::from_ptr(
             reinterpret_cast<void*>(hex_to_uintptr(page_id_as_ptr)));
-        ASSERT_EQ(page_id.attribute_no, attr)
+        ASSERT_EQ(page_id.getAttributeNo(), attr)
             << "tuple#: " << tuple_count << " " << page_id;
-        ASSERT_EQ(page_id.partition_no, expected_partition)
+        ASSERT_EQ(page_id.getPartitionNo(), expected_partition)
             << "tuple#: " << tuple_count << " " << page_id;
-        ASSERT_EQ(page_id.block_no, expected_block_no)
+        ASSERT_EQ(page_id.getBlockNo(), expected_block_no)
             << "tuple#: " << tuple_count << " " << page_id;
         attr += 1;
       }
