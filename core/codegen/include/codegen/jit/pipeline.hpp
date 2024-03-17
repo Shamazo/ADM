@@ -46,13 +46,12 @@ typedef void(closer_t)(Pipeline *);
 typedef llvm::Value *(init_func_t)(llvm::Value *);
 typedef void(deinit_func_t)(llvm::Value *, llvm::Value *);
 
-// __device__ void devprinti64(uint64_t x);
-
 class PipelineGen {
  protected:
-  // Last (current) basic block. This changes every time a new scan is triggered
+  /// Last (current) basic block. This changes every time a new scan is
+  /// triggered
   llvm::BasicBlock *codeEnd;
-  // Current entry basic block. This changes every time a new scan is triggered
+  /// Current entry basic block. This changes every time a new scan is triggered
   llvm::BasicBlock *currentCodeEntry;
 
   std::vector<std::pair<std::function<init_func_t>, size_t>> open_var;
@@ -74,27 +73,17 @@ class PipelineGen {
   std::string pipName;
   [[deprecated]] Context *context;
 
-  std::shared_future<void *> func;
+  std::shared_future<void *> compiledFunctionFuture;
 
   llvm::Value *state;
   llvm::StructType *state_type;
-  size_t state_size;
+  size_t state_size;  /// in bytes
 
   llvm::IRBuilder<> *TheBuilder;
 
   PipelineGen *copyStateFrom;
 
   PipelineGen *execute_after_close;
-
-  //     //Used to include optimization passes
-  //     legacy::FunctionPassManager * TheFPM        ;
-  // #if MODULEPASS
-  //     ModulePassManager           * TheMPM        ;
-  // #endif
-
-  //     legacy::PassManager         * ThePM         ;
-
-  // ExecutionEngine             * TheExecutionEngine;
 
   map<string, llvm::Function *> availableFunctions;
 
@@ -110,7 +99,7 @@ class PipelineGen {
   PipelineGen(Context *context, std::string pipName = "pip",
               PipelineGen *copyStateFrom = nullptr);
 
-  virtual ~PipelineGen() { func.wait(); }
+  virtual ~PipelineGen() { compiledFunctionFuture.wait(); }
 
  public:
   virtual size_t appendParameter(llvm::Type *ptype, bool noalias = false,
@@ -176,7 +165,7 @@ class PipelineGen {
 
   [[deprecated]] virtual llvm::Function *getFunction() const;
 
-  virtual llvm::Module *getModule() const = 0;  //{return TheModule ;}
+  virtual llvm::Module *getModule() const = 0;
   virtual const llvm::DataLayout &getDataLayout() const {
     return getModule()->getDataLayout();
   }
@@ -239,6 +228,25 @@ class Pipeline {
   };
 
  public:
+  /**
+   * @brief Constructor for Pipeline.
+   * @param cons Pointer to the function representing the pipeline. @see
+   * PipelineGen::getKernel
+   * @param state_size Size in bytes of the state required by the pipeline.
+   * @param gen Pointer to the PipelineGen that generated this pipeline. @see
+   * PipelineGen::getPipeline
+   * @param state_type LLVM type of the pipeline's state. @see
+   * PipelineGen::prepareStateArgument
+   * @param openers Function to be called when opening the pipeline.
+   * @param closers Functions to be called when closing the pipeline.
+   * @param init_state Pointer to the function for initializing the pipeline's
+   * state. @see PipelineGen::prepareInitDeinit
+   * @param deinit_state Pointer to the function for deinitializing the
+   * pipeline's state.
+   * @param group_id Identifier for the group to which the pipeline belongs.
+   * @param execute_after_close Pointer to another pipeline to be executed after
+   * this one closes.
+   */
   Pipeline(guard, void *cons, size_t state_size, PipelineGen *gen,
            llvm::StructType *state_type,
            const std::vector<std::pair<const void *, std::function<opener_t>>>
@@ -283,6 +291,9 @@ class Pipeline {
 
   void *getState() const { return state; }
 
+  /**
+   * @brief Get the size in bytes of the given LLVM type.
+   */
   size_t getSizeOf(llvm::Type *t) const;
 
   template <typename T>
@@ -312,18 +323,35 @@ class Pipeline {
     return execution_conf{};
   }
 
+  /**
+   * @brief Opens the pipeline for execution and acquires resources.
+   * @param session Pointer to the session associated with the pipeline
+   * execution. The session is currently always a pointer to int64_t. The
+   * session is shared with any chained pipelines and any pipelines that
+   * copyStateFrom this pipeline. Sessions can be useful for passing constants
+   * to a pipeline.
+   * @see ExpressionGeneratorVisitor::visit(const
+   * expressions::PlaceholderExpression *e) for an example
+   */
   virtual void open(const void *session);
 
+  /**
+   * Invoke the compiled pipeline function with the given arguments.
+   *
+   * @tparam Tin types of the arguments
+   * @param src pointers to the arguments
+   */
   template <typename... Tin>
-  void consume(size_t N,
-               const Tin *...src) {  // FIXME: cleanup + remove synchronization
-    // ((void (*)(const Tin * ..., size_t, void *)) cons)(src..., N, state);
+  void consume(const Tin *...src) {
     assert(this);
     assert(cons);
     assert(getSession());
     ((void (*)(const Tin *..., void *))cons)(src..., state);
-  }  //;// cnt_t N, vid_t v, cid_t c){
+  }
 
+  /**
+   * @brief Closes the pipeline after execution and free resources.
+   */
   virtual void close();
 };
 

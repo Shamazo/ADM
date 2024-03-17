@@ -73,7 +73,7 @@ TEST_F(ParallelContextTest, SmokeTest) {
 
   // Actually execute the pipeline
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session
@@ -137,7 +137,7 @@ TEST_F(ParallelContextTest, CallFunction) {
 
   // Actually execute the pipeline
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session
@@ -188,7 +188,7 @@ TEST_F(ParallelContextTest, ChainedPipelines) {
 
   // Actually execute the pipeline
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session
@@ -280,7 +280,7 @@ TEST_F(ParallelContextTest, ChainedPipelinesWithArguments) {
 
   // Actually execute the chain of pipelines
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session

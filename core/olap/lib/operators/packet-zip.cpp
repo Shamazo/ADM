@@ -248,14 +248,14 @@ void ZipInitiate::ctrl(Pipeline *pip) {
     *(partition_ptr[pip->getGroup()]) = partitions[pip->getGroup()][i];
 
     lpip->open(pip->getSession());
-    lpip->consume(0);
+    lpip->consume();
     lpip->close();
 
     rpip->open(pip->getSession());
-    rpip->consume(0);
+    rpip->consume();
     rpip->close();
 
-    jpip->consume(0);
+    jpip->consume();
   }
 
   jpip->close();

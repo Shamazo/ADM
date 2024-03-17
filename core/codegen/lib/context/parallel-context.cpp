@@ -30,105 +30,21 @@
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/util/timing.hpp>
 
-void ParallelContext::createJITEngine() {
-  //     LLVMLinkInMCJIT();
-  //     LLVMInitializeNativeTarget();
-  //     LLVMInitializeNativeAsmPrinter();
-  //     LLVMInitializeNativeAsmParser();
-
-  //     // Create the JIT.  This takes ownership of the module.
-  //     std::string ErrStr;
-  //     TheCPUExecutionEngine =
-  //         EngineBuilder(std::unique_ptr<Module>(TheModule)).setErrorStr(&ErrStr).create();
-  //     if (TheCPUExecutionEngine == nullptr) {
-  //         fprintf(stderr, "Could not create ExecutionEngine: %s\n",
-  //                 ErrStr.c_str());
-  //         exit(1);
-  //     }
-
-  //     // LLVMLinkInMCJIT();
-  //     LLVMInitializeNVPTXTarget();
-  //     LLVMInitializeNVPTXTargetInfo();
-  //     LLVMInitializeNVPTXTargetMC();
-  //     LLVMInitializeNVPTXAsmPrinter();
-  //     // LLVMInitializeNVPTXAsmParser();
-
-  //     Triple TheTriple("nvptx64-nvidia-cuda");
-
-  //     std::string error_msg;
-  //     const Target *target =
-  //     TargetRegistry::lookupTarget(TheTriple.getTriple(),
-  //                                                         error_msg);
-  //     if (!target) {
-  //         std::cout << error_msg << std::endl;
-  //         throw runtime_error(error_msg);
-  //     }
-
-  //     std::string FeaturesStr = getFeaturesStr();
-
-  //     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
-
-  //     TargetOptions Options = InitTargetOptionsFromCodeGenFlags();
-  //     Options.DisableIntegratedAS             = 1;
-  //     Options.MCOptions.ShowMCEncoding        = 1;
-  //     Options.MCOptions.MCUseDwarfDirectory   = 1;
-  //     // Options.MCOptions.AsmVerbose            = 1;
-  //     Options.MCOptions.PreserveAsmComments   = 1;
-
-  //     TheTargetMachine.reset(target->createTargetMachine(
-  //                                     TheTriple.getTriple(),
-  //                                     "sm_61",
-  //                                     FeaturesStr,
-  //                                     Options,
-  //                                     getRelocModel(),
-  //                                     CMModel,
-  //                                     OLvl));
-
-  //     assert(TheTargetMachine && "Could not allocate target machine!");
-
-  //     TheFPM->add(new TargetLibraryInfoWrapperPass(TheTriple));
-  // //LinkLibdeviceIfNecessary(module, compute_capability, libdevice_dir_path)
-
-  //     // Create the JIT.  This takes ownership of the module.
-  //     // std::string ErrStr;
-  //     // const auto &eng_bld =
-  //     EngineBuilder(std::unique_ptr<Module>(TheModule)).setErrorStr(&ErrStr);
-
-  //     // std::string FeaturesStr = getFeaturesStr();
-
-  //     // TargetMachine * target_machine = eng_bld.selectTarget(
-  //     // TheTriple.getTriple(),
-  //     //                                                     "sm_61",
-  //     //                                                     FeaturesStr,
-  //     //                                                     vector<
-  //     std::string >{}
-  //     //                                                 );
-
-  //     TheExecutionEngine = EngineBuilder(std::unique_ptr<Module>(TheModule))
-  //                                 .setErrorStr(&ErrStr)
-  //                                 .create(TheTargetMachine.get());
-
-  //     if (!TheExecutionEngine) {
-  //         std::cout << ErrStr << std::endl;
-  //         // fprintf(stderr, "Could not create ExecutionEngine: %s\n",
-  //         ErrStr.c_str()); throw runtime_error(error_msg);
-  //     }
-}
-
-size_t ParallelContext::appendParameter(llvm::Type *ptype, bool noalias,
+size_t ParallelContext::appendParameter(llvm::Type *ptrType, bool noalias,
                                         bool readonly) {
-  return getCurrentPipeline()->appendParameter(ptype, noalias, readonly);
+  return getCurrentPipeline()->appendParameter(ptrType, noalias, readonly);
 }
 
-StateVar ParallelContext::appendStateVar(llvm::Type *ptype, std::string name) {
-  return generators.back()->appendStateVar(ptype);
+StateVar ParallelContext::appendStateVar(llvm::Type *ptrType,
+                                         std::string name) {
+  return generators.back()->appendStateVar(ptrType);
 }
 
-StateVar ParallelContext::appendStateVar(llvm::Type *ptype,
+StateVar ParallelContext::appendStateVar(llvm::Type *ptrType,
                                          std::function<init_func_t> init,
                                          std::function<deinit_func_t> deinit,
                                          std::string name) {
-  return generators.back()->appendStateVar(ptype, init, deinit);
+  return generators.back()->appendStateVar(ptrType, init, deinit);
 }
 
 [[nodiscard]] llvm::Value *ParallelContext::getSessionParametersPtr() const {
@@ -206,9 +122,7 @@ ParallelContext *ParallelContext::prepareParallelContext(
 }
 
 ParallelContext::ParallelContext(const std::string &moduleName)
-    : Context(moduleName), kernelName(moduleName), pip_cnt(0) {
-  createJITEngine();
-}
+    : Context(moduleName), kernelName(moduleName) {}
 
 ParallelContext::~ParallelContext() {
   popDeviceProvider();
@@ -245,20 +159,6 @@ void ParallelContext::setGlobalFunction(llvm::Function *F, bool leaf) {
   // Context::setGlobalFunction(getCurrentPipeline()->prepare());
 }
 
-// void ParallelContext::pushNewPipeline   (PipelineGen * copyStateFrom){
-//     time_block t("TregpipsG: ");
-//     TheFunction = nullptr;
-//     generators.emplace_back(new GpuPipelineGen(this, kernelName + "_pip" +
-//     std::to_std::string(pip_cnt++), copyStateFrom));
-// }
-
-// void ParallelContext::pushNewCpuPipeline(PipelineGen * copyStateFrom){
-//     time_block t("TregpipsC: ");
-//     TheFunction = nullptr;
-//     generators.emplace_back(new CpuPipelineGen(this, kernelName + "_pip" +
-//     std::to_std::string(pip_cnt++), copyStateFrom));
-// }
-
 void ParallelContext::pushDeviceProvider(PipelineGenFactory *factory) {
   pipFactories.emplace_back(factory);
 }
@@ -266,6 +166,7 @@ void ParallelContext::pushDeviceProvider(PipelineGenFactory *factory) {
 void ParallelContext::popDeviceProvider() { pipFactories.pop_back(); }
 
 void ParallelContext::pushPipeline(PipelineGen *copyStateFrom) {
+  // static so that each pipeline has a unique name
   static size_t pip_cnt = 0;
   TheFunction = nullptr;
   generators.emplace_back(pipFactories.back()->create(

@@ -454,7 +454,7 @@ void MemMoveDevice::catcher(MemMoveConf *mmc, int group_id,
       }
 
       nvtxRangePushA("memmove::catch_cons");
-      pip->consume(0, p->data);
+      pip->consume(p->data);
       nvtxRangePop();
 
       mmc->release(p);

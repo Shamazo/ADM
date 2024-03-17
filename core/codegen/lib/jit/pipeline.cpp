@@ -500,42 +500,40 @@ Function *PipelineGen::getFunction() const {
 void *PipelineGen::getKernel() {
   time_block t(TimeRegistry::Key{
       "Compile and Load (CPU, waiting - critical - getKernel)"});
-  auto ret = func.get();
+  auto ret = compiledFunctionFuture.get();
   assert(ret != nullptr);
   // assert(!F);
   return (void *)ret;
 }
 
 std::unique_ptr<Pipeline> PipelineGen::getPipeline(int group_id) {
-  auto ssize = state_size;
+  const auto ssize = state_size;
   void *func = getKernel();
 
   std::vector<std::pair<const void *, std::function<opener_t>>>
-      openers{};  // this->openers};
+      actual_openers{};
   std::vector<std::pair<const void *, std::function<closer_t>>>
-      closers{};  // this->closers};
+      actual_closers{};
 
   if (copyStateFrom) {
     std::shared_ptr<Pipeline> copyFrom = copyStateFrom->getPipeline(group_id);
 
-    openers.insert(openers.begin(),
-                   std::make_pair(this, [copyFrom, this](Pipeline *pip) {
-                     copyFrom->open(pip->getSession());
-                     pip->setStateVar({0, this}, copyFrom->state);
-                   }));
-    // closers.emplace_back([copyFrom](Pipeline *
-    // pip){pip->copyStateBackTo(copyFrom);});
-    closers.insert(
-        closers.begin(),
+    actual_openers.insert(actual_openers.begin(),
+                          std::make_pair(this, [copyFrom, this](Pipeline *pip) {
+                            copyFrom->open(pip->getSession());
+                            pip->setStateVar({0, this}, copyFrom->state);
+                          }));
+    actual_closers.insert(
+        actual_closers.begin(),
         std::make_pair(this, [copyFrom](Pipeline *pip) { copyFrom->close(); }));
   } else {
-    openers.insert(openers.begin(), std::make_pair(this, [](Pipeline *pip) {}));
-    // closers.emplace_back([copyFrom](Pipeline *
-    // pip){pip->copyStateBackTo(copyFrom);});
-    closers.insert(closers.begin(), std::make_pair(this, [](Pipeline *pip) {}));
+    actual_openers.insert(actual_openers.begin(),
+                          std::make_pair(this, [](Pipeline *pip) {}));
+    actual_closers.insert(actual_closers.begin(),
+                          std::make_pair(this, [](Pipeline *pip) {}));
   }
-  return Pipeline::create(func, ssize, this, state_type, openers, closers,
-                          getCompiledFunction(open__function),
+  return Pipeline::create(func, ssize, this, state_type, actual_openers,
+                          actual_closers, getCompiledFunction(open__function),
                           getCompiledFunction(close_function), group_id,
                           execute_after_close
                               ? execute_after_close->getPipeline(group_id)
@@ -592,14 +590,6 @@ Pipeline::Pipeline(
   //+ 7) / 8);
   assert(state);
 }
-
-// GpuRawPipeline::GpuRawPipeline(void * f, size_t state_size, PipelineGen *
-// gen, StructType * state_type,
-//         const std::vector<std::function<void (Pipeline * pip)>> &openers,
-//         const std::vector<std::function<void (Pipeline * pip)>> &closers,
-//         int32_t group_id):
-//             Pipeline(f, state_size, gen, state_type, openers, closers,
-//             group_id){}
 
 Pipeline::~Pipeline() { MemoryManager::freePinned(state); }
 
@@ -685,7 +675,7 @@ void Pipeline::close() {
 
   if (execute_after_close) {
     execute_after_close->open(getSession());
-    execute_after_close->consume(0);
+    execute_after_close->consume();
     execute_after_close->close();
   }
 }

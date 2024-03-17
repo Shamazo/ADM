@@ -158,7 +158,7 @@ class ExpressionsTestParallelContext
 
     pipeline->open(session);
     // Provide the result memory as a parameter of the pipeline
-    pipeline->consume(0, resultMemory);
+    pipeline->consume(resultMemory);
     pipeline->close();
 
     // Release the memory for the result variable
@@ -507,7 +507,7 @@ TEST(ParallelMatrixMultiplication, GpuRoot) {
   pipeline->open(session);
 
   auto *comparisonResultGPU = reinterpret_cast<int32_t *>(gpuResult);
-  pipeline->consume(0, comparisonResultGPU);
+  pipeline->consume(comparisonResultGPU);
 
   pipeline->close();
 

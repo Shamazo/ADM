@@ -271,7 +271,7 @@ void Router::fire(int target, PipelineGen *pipGen, const void *session) {
       try {
         //          time_block t{"Tfire_" + std::to_string(pip->getGroup()) +
         //          "_" + std::to_string((uintptr_t) this) + ": "};
-        pip->consume(0, (void *)(((uintptr_t)p.get()) & ~uintptr_t(1)));
+        pip->consume((void *)(((uintptr_t)p.get()) & ~uintptr_t(1)));
       } catch (std::exception &e) {
         // FIXME: to whom should we throw it?
         LOG(INFO) << "Got an exception here!" << e.what() << " "

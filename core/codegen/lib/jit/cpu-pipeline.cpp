@@ -49,10 +49,10 @@ const llvm::DataLayout &CpuPipelineGen::getDataLayout() const {
 
 void CpuPipelineGen::compileAndLoad() {
   module->compileAndLoad();
-  func = std::async(std::launch::async,
-                    [m = module.get(), fname = F->getName().str()]() {
-                      return m->getCompiledFunction(fname);
-                    });
+  compiledFunctionFuture = std::async(
+      std::launch::async, [m = module.get(), fname = F->getName().str()]() {
+        return m->getCompiledFunction(fname);
+      });
 }
 
 void CpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {

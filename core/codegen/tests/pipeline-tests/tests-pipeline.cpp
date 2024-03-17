@@ -98,7 +98,7 @@ TEST_F(PipelineTest, SmokeTest) {
 
   // Actually execute the pipeline
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session
@@ -139,7 +139,7 @@ TEST_F(PipelineTest, CallFunction) {
 
   // Actually execute the pipeline
   pipeline->open(session);
-  pipeline->consume(0);
+  pipeline->consume();
   pipeline->close();
 
   // Deallocate the session
@@ -197,7 +197,7 @@ TEST_F(PipelineTest, AppendParameter) {
 
   // Create a payload for out main pipeline function and execute the function
   int32_t pipelinePayload = 10;
-  pipeline->consume(0, &pipelinePayload);
+  pipeline->consume(&pipelinePayload);
 
   pipeline->close();
 
@@ -261,7 +261,7 @@ TEST_F(PipelineTest, AppendStateVar) {
   pipeline->open(session);
 
   // Create a payload for out main pipeline function and execute the function
-  pipeline->consume(0);
+  pipeline->consume();
 
   pipeline->close();
 
@@ -343,7 +343,7 @@ TEST_F(PipelineTest, AppendAndAllocateStateVar) {
   pipeline->open(session);
 
   // Create a payload for out main pipeline function and execute the function
-  pipeline->consume(0);
+  pipeline->consume();
 
   pipeline->close();
 

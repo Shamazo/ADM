@@ -103,7 +103,7 @@ class JSONTest : public ::testing::Test {
           time_block t("T: ");
 
           p->open((void *)&session);
-          p->consume(0);
+          p->consume();
           p->close();
         }
       }

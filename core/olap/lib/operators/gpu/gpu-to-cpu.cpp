@@ -574,7 +574,7 @@ void kick_start(std::unique_ptr<Pipeline> cpip, int device,
   cpip->open(session);
   nvtxRangePop();
   nvtxRangePushA("gpu2cpu_cons");
-  cpip->consume(0);
+  cpip->consume();
   nvtxRangePop();
   nvtxRangePushA("gpu2cpu_close");
   cpip->close();

@@ -120,7 +120,7 @@ QueryResult PreparedStatement::execute(
           time_block t = f("T: ");
 
           p->open(session);
-          p->consume(0);
+          p->consume();
           p->close();
 
           std::cout << std::dec;

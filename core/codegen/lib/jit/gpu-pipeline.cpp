@@ -443,7 +443,7 @@ void GpuPipelineGen::compileAndLoad() {
   ThreadPool::getInstance().enqueue(
       [this, name]() { return wrapper_module.getCompiledFunction(name); });
   module.compileAndLoad();
-  func = ThreadPool::getInstance().enqueue(
+  compiledFunctionFuture = ThreadPool::getInstance().enqueue(
       [this]() { return getCompiledFunction(F); });
 }
 
