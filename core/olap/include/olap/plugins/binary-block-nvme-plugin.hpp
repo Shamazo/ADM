@@ -135,13 +135,22 @@ class NvmePlugin : public BinaryBlockPlugin {
 
  private:
   static constexpr auto blockCtrVar = "blockCtr";
+  uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx);
+
   // Generates a for loop that emits a PageId_t for each block in each iteration
   void scan(const Operator &producer, OlapParallelContext *context);
 
   std::vector<std::vector<AttributePartMetaData>> m_attribute_metadata;
   std::vector<uint64_t> part_sizes;  /// in blocks
   void nextEntry(OlapParallelContext *context);
+
+  friend uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
+                                        NvmePlugin *pg);
 };
+
+uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
+                               NvmePlugin *pg);
+
 extern "C" {
 void *getNvmePageIdPtr(uint8_t cpu_numa_affinity, uint8_t attribute_no,
                        uint8_t partition_no, uint32_t block_no) noexcept;

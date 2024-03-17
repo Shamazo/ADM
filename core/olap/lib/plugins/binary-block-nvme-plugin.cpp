@@ -85,8 +85,11 @@ NvmePlugin::NvmePlugin(
         << field.first->getAttrName();
   }
 
+  // TODO fix m_attribute_metadata move / copy constructors
+  m_attribute_metadata.reserve(whichFields.size());
   for (auto &field : whichFields) {
     m_attribute_metadata.push_back({});
+    m_attribute_metadata.back().reserve(Nparts);
     for (auto &attr_part_meta : field.second) {
       m_attribute_metadata.back().emplace_back(attr_part_meta);
     }
@@ -123,6 +126,14 @@ std::tuple<int, uint64_t, size_t> NvmePlugin::getPageIoInfo(
   }
 
   int fd = partMetaData.fd;
+  DCHECK_GE(fd, 0) << "File descriptor is not valid";
+#ifndef NDEBUG
+  auto res = fcntl(fd, F_GETFD);
+  PCHECK(res != -1) << "File descriptor is not valid for part no: "
+                    << page_id.getPartitionNo()
+                    << ", block no: " << page_id.getBlockNo()
+                    << partMetaData.data_file_path;
+#endif
   uint64_t offset = partMetaData.block_offsets[page_id.getBlockNo()];
   size_t size =
       static_cast<size_t>(partMetaData.block_sizes[page_id.getBlockNo()]);
@@ -424,10 +435,22 @@ void NvmePlugin::scan(const ::Operator &producer,
   mem_blockCntWrapper.isNull = context->createFalse();
   variableBindings[blockCnt] = mem_blockCntWrapper;
 
-  ProteusValueMemory mem_cntWrapper;
-  mem_cntWrapper.mem = blockN_ptr;
-  mem_cntWrapper.isNull = context->createFalse();
-  variableBindings[blockCnt] = mem_cntWrapper;
+  AllocaInst *tupleCnt_ptr =
+      context->CreateEntryBlockAlloca(F, "tupleCnt", partBlockCnt->getType());
+  Builder->CreateStore(ConstantInt::get(size_type, 1), tupleCnt_ptr);
+
+  RecordAttribute tupleCnt{fnamePrefix, "tupleCnt", this->getOIDType()};
+  Value *this_ptr = context->getBuilder()->CreateIntToPtr(
+      context->createInt64((uintptr_t)this),
+      Type::getInt8PtrTy(context->getLLVMContext()));
+
+  Builder->CreateStore(context->gen_call(&::getRowGroupTupleCount,
+                                         {part_idx, block_idx, this_ptr}),
+                       tupleCnt_ptr);
+  ProteusValueMemory mem_tupleCntWrapper;
+  mem_tupleCntWrapper.mem = tupleCnt_ptr;
+  mem_tupleCntWrapper.isNull = context->createFalse();
+  variableBindings[tupleCnt] = mem_tupleCntWrapper;
 
   // // Start insertion in IncBB.
   Builder->SetInsertPoint(IncBB);
@@ -516,5 +539,20 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
 
   fd = open(data_file_path.c_str(), O_DIRECT);
   PCHECK(fd > 0);
+#ifndef NDEBUG
+  auto res = fcntl(fd, F_GETFD);
+  PCHECK(res != -1) << "File descriptor is not valid";
+#endif
 }
 NvmePlugin::AttributePartMetaData::~AttributePartMetaData() { close(fd); }
+
+uint64_t NvmePlugin::getRowGroupTupleCount(uint64_t partIdx,
+                                           uint64_t blockIdx) {
+  // fixme integrate with catalog properly. Assuming all 4 byte sizes for now
+  return m_attribute_metadata[0][partIdx].block_sizes[blockIdx] / 4;
+}
+
+uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
+                               NvmePlugin *pg) {
+  return pg->getRowGroupTupleCount(partIdx, blockIdx);
+}

@@ -28,9 +28,11 @@
 #include <platform/memory/managed-pointer.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/util/async_containers.hpp>
+#include <storage/io_uring.hpp>
 #include <thread>
 
 #include "lib/operators/operators.hpp"
+#include "olap/plugins/binary-block-nvme-plugin.hpp"
 
 struct buff_pair {
   proteus::managed_ptr new_buff;
@@ -45,6 +47,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
   struct workunit {
     void *data;
     cudaEvent_t event;
+    std::atomic<int> complete;  // 0 for complete, positive number for remaining
     [[maybe_unused]] bool unused;  // FIXME: remove
   };
 
@@ -73,16 +76,22 @@ class MemMoveDevice : public experimental::UnaryOperator {
     size_t cnt = 0;
     // The pinned data backing the workunits
     void *data_buffs;
+    std::unique_ptr<proteus::storage::IoUringThreadUnsafe> io_uring;
+    NvmePlugin *nvme_plugin;  // TODO something neater
 
    public:
     virtual ~MemMoveConf() = default;
 
     virtual buff_pair push(proteus::managed_ptr src, size_t bytes,
-                           int target_device, uint64_t srcServer);
+                           int target_device, uint64_t srcServer, workunit *wu);
     virtual proteus::managed_ptr force_push(const proteus::managed_ptr &src,
                                             size_t bytes, int target_device,
                                             uint64_t srcServer,
                                             cudaStream_t movestrm);
+    proteus::managed_ptr force_push_from_nvme(const proteus::managed_ptr &src,
+                                              int target_device,
+                                              cudaStream_t movestrm,
+                                              workunit *wu);
     virtual proteus::managed_ptr pull(proteus::managed_ptr buff) {
       return buff;
     }

@@ -64,7 +64,7 @@ void MemMoveScaleOut::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
 
 buff_pair MemMoveScaleOut::MemMoveConf::push(proteus::managed_ptr src,
                                              size_t bytes, int target_device,
-                                             uint64_t srcServer) {
+                                             uint64_t srcServer, workunit *wu) {
   if (srcServer == InfiniBandManager::server_id()) {
     //    BlockManager::share_host_buffer((int32_t *)src);
     //    BlockManager::share_host_buffer((int32_t *)src);

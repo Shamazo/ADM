@@ -23,6 +23,7 @@
 
 #include "mem-move-device.hpp"
 
+#include <atomic>
 #include <codegen/jit/pipeline.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
@@ -31,6 +32,7 @@
 #include <platform/util/tracing.hpp>
 
 #include "lib/util/catalog.hpp"
+#include "olap/plugins/binary-block-nvme-plugin.hpp"
 
 buff_pair buff_pair::not_moved(proteus::managed_ptr buff) {
   return {std::move(buff), nullptr};
@@ -53,29 +55,72 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push(
   return buff;
 }
 
+proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
+    const proteus::managed_ptr &src, int target_device, cudaStream_t movestrm,
+    workunit *wu) {
+  auto buff = BlockManager::h_get_buffer(target_device);
+  auto page_id = NvmePlugin::PageId_t::from_ptr(src.get());
+  DCHECK_NE(nvme_plugin, nullptr);
+  // TODO handle compression and moving to the GPU
+  auto [fd, offset, size] = nvme_plugin->getPageIoInfo(page_id);
+  DCHECK_LE(size, BlockManager::block_size);
+  wu->complete += 1;
+
+  // TODO really should probably pass the result of IO to the callback
+  proteus::storage::IoUringThreadUnsafe::CompletionCallBack cb = [wu] {
+    std::atomic_fetch_add_explicit(&wu->complete, -1,
+                                   std::memory_order_relaxed);
+  };
+
+  size += size % 512;  // align to 512 bytes for O_DIRECT
+
+  io_uring->read(fd, buff.get(), size, offset, cb);
+  return buff;
+}
+
 buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
                                            size_t bytes, int target_device,
-                                           uint64_t srcServer) {
-  assert(srcServer == 0);
-  const auto *d = topology::getInstance().getGpuAddressed(src.get());
-  int dev = d ? static_cast<int>(d->id) : -1;
+                                           uint64_t srcServer, workunit *wu) {
+  DCHECK_EQ(srcServer, 0);
+  if (NvmePlugin::PageId_t::isPageIdPtr(src.get())) {
+    auto buff = force_push_from_nvme(src, target_device, strm, wu);
+    src.release();
+    return buff_pair::not_moved(
+        std::move(buff));  // src is not a pointer and does not need freeing
+  } else {
+    // currently only used do NVMe to CPU IO
+    // TODO: is pass the fact we are doing IO to the operator constructor
+    wu->complete = true;
+    const auto *d = topology::getInstance().getGpuAddressed(src.get());
+    int dev = d ? static_cast<int>(d->id) : -1;
 
-  if (dev == target_device) {
-    return buff_pair::not_moved(std::move(src));  // block in correct device
+    if (dev == target_device) {
+      return buff_pair::not_moved(std::move(src));  // block in correct device
+    }
+
+    auto buff = force_push(src, bytes, target_device, srcServer, strm);
+    return buff_pair{std::move(buff), std::move(src)};
   }
-
-  auto buff = force_push(src, bytes, target_device, srcServer, strm);
-  return buff_pair{std::move(buff), std::move(src)};
 }
 
 extern "C" {
-void make_mem_move_device(char **src_ptrs, size_t* bytes, int target_device,
-                        uint64_t srcServer,
-                        MemMoveDevice::MemMoveConf *mmc, int num_buffers, pb* pair_buffs) noexcept {
-  for (int i = 0; i < num_buffers; i++){
-    auto x =
-        mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i], target_device, srcServer);
+void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
+                          uint64_t srcServer, MemMoveDevice::MemMoveConf *mmc,
+                          int num_buffers, pb *pair_buffs,
+                          MemMoveDevice::workunit *wu) noexcept {
+  wu->complete = 0;
+  for (int i = 0; i < num_buffers; i++) {
+    auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
+                       target_device, srcServer, wu);
     pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
+  }
+  if (NvmePlugin::PageId_t::isPageIdPtr(src_ptrs[0])) {
+    mmc->io_uring->submit();
+    /// poll until there are (probably) enough buffers for the next iteration
+    while (mmc->idle.size_unsafe() < num_buffers) {
+      mmc->io_uring->poll();
+      std::this_thread::yield();
+    }
   }
 }
 
@@ -221,13 +266,12 @@ void MemMoveDevice::consume(OlapParallelContext *context,
                            pg->getOIDType()};  // FIXME: OID type for blocks ?
 
   ProteusValueMemory mem_cntWrapper = childState[tupleCnt];
-
   ProteusValueMemory mem_srcServer = getServerId(context, childState);
-
   Builder->SetInsertPoint(context->getCurrentEntryBlock());
 
   auto device_id = ((OlapParallelContext *)context)->getStateVar(device_id_var);
 
+  // Begin inserting code
   Builder->SetInsertPoint(insBB);
   auto N = Builder->CreateLoad(
       mem_cntWrapper.mem->getType()->getPointerElementType(),
@@ -249,13 +293,23 @@ void MemMoveDevice::consume(OlapParallelContext *context,
   std::vector<llvm::Value *> pushed;
   llvm::Value *is_noop = context->createTrue();
 
-  llvm::ArrayType* int64_array_type = llvm::ArrayType::get(context->createSizeType(), wantedFields.size());
-  llvm::AllocaInst* mv_sizes_bytes = Builder->CreateAlloca(int64_array_type, nullptr, "mv_sizes_bytes");
+  auto *F = context->getGlobalFunction();
+  llvm::ArrayType *int64_array_type =
+      llvm::ArrayType::get(context->createSizeType(), wantedFields.size());
+  llvm::AllocaInst *mv_sizes_bytes = context->CreateEntryBlockAlloca(
+      F, "mv_sizes_bytes", int64_array_type, nullptr);
 
-  llvm::ArrayType* charptr_array_type = llvm::ArrayType::get(charPtrType, wantedFields.size());
-  llvm::AllocaInst* mv_src_ptrs = Builder->CreateAlloca(charptr_array_type, nullptr, "mv_src_ptrs");
+  llvm::ArrayType *charptr_array_type =
+      llvm::ArrayType::get(charPtrType, wantedFields.size());
+  llvm::AllocaInst *mv_src_ptrs = context->CreateEntryBlockAlloca(
+      F, "mv_src_ptrs", charptr_array_type, nullptr);
 
-  // store size in bytes, and src_ptr into in the above declared arrays for each field to be moved
+  // store size in bytes, and src_ptr into in the above declared arrays for each
+  // field to be moved
+  auto *page_id_mask = llvm::ConstantInt::get(context->createSizeType(),
+                                              llvm::APInt(64, 1).shl(63));
+  llvm::Value *any_ptr_is_page_id = context->createFalse();
+
   for (size_t i = 0; i < wantedFields.size(); ++i) {
     RecordAttribute block_attr(*(wantedFields[i]), true);
 
@@ -274,65 +328,108 @@ void MemMoveDevice::consume(OlapParallelContext *context,
     llvm::Value *size = llvm::ConstantInt::get(
         llvmContext, llvm::APInt(64, context->getSizeOf(mv_block_type)));
     auto Nloc = Builder->CreateZExtOrBitCast(N, size->getType());
-    size = Builder->CreateMul(size, Nloc); /// now in bytes
-    llvm::Value* size_as_int64 = Builder->CreateIntCast(size, llvm::Type::getInt64Ty(llvmContext), false);
+    size = Builder->CreateMul(size, Nloc);  /// now in bytes
+    llvm::Value *size_as_int64 = Builder->CreateIntCast(
+        size, llvm::Type::getInt64Ty(llvmContext), false);
 
     // same index into both sizes and ptrs arrays
-    llvm::Value *gepIndices[] = { llvm::ConstantInt::get( llvm::Type::getInt32Ty(llvmContext), 0),
-                                 llvm::ConstantInt::get( llvm::Type::getInt32Ty(llvmContext), i)};
+    llvm::Value *gepIndices[] = {
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmContext), 0),
+        llvm::ConstantInt::get(llvm::Type::getInt32Ty(llvmContext), i)};
 
-    llvm::Value *size_ptr = Builder->CreateGEP(int64_array_type, mv_sizes_bytes, gepIndices);
+    llvm::Value *size_ptr =
+        Builder->CreateGEP(int64_array_type, mv_sizes_bytes, gepIndices);
     Builder->CreateStore(size_as_int64, size_ptr);
 
-    auto* src_ptr = Builder->CreateGEP(charptr_array_type, mv_src_ptrs, gepIndices);
+    auto *src_ptr =
+        Builder->CreateGEP(charptr_array_type, mv_src_ptrs, gepIndices);
+
+    //    check if any src_ptr is a page_id
+    auto *intPtr = Builder->CreatePtrToInt(
+        mv_src_ptr, llvm::Type::getInt64Ty(context->getLLVMContext()));
+    auto *and_res = Builder->CreateAnd(intPtr, page_id_mask);
+    any_ptr_is_page_id = Builder->CreateOr(
+        any_ptr_is_page_id, Builder->CreateICmpEQ(and_res, page_id_mask));
     Builder->CreateStore(mv_src_ptr, src_ptr);
   }
 
-  // create an array of `pb` to pass to make_mem_move_device as a return argument
+  {
+    // if we have anyPage Ids we need to update tupleCnt to store a tupleCnt
+    // instead of blockCnt, which the NvmePlugin stores in `tupleCnt`
+    auto ifAnyPageId = context->gen_if({any_ptr_is_page_id});
+    auto thenAnyIsPageId = std::move(ifAnyPageId)([&]() {  // NOLINT
+      RecordAttribute actualTupleCnt{wantedFields[0]->getRelationName(),
+                                     "tupleCnt", pg->getOIDType()};
+      ProteusValueMemory mem_tupleCntWrapper = childState[actualTupleCnt];
+      llvm::Value *mem_tupleCnt = Builder->CreateLoad(
+          mem_tupleCntWrapper.mem->getType()->getPointerElementType(),
+          mem_tupleCntWrapper.mem);
+      Builder->CreateStore(mem_tupleCnt, mem_cntWrapper.mem);
+    });
+    // note, all of this is a bit hacky, we ignore size in the above and below
+    // loops for page ids, but we could actually just store the size/fd/offset
+    // in the Operator state
+  }
+
+  // create an array of `pb` to pass to make_mem_move_device as a return
+  // argument
   auto mv_num_bufs = context->createInt32(wantedFields.size());
-  auto* llvm_pb_type = context->toLLVM<std::remove_cv_t<pb>>();
-  llvm::ArrayType* llvm_pb_array_type = llvm::ArrayType::get(llvm_pb_type, wantedFields.size());
-  llvm::AllocaInst* pb_array = Builder->CreateAlloca(llvm_pb_array_type, nullptr, "pb_array");
+  auto *llvm_pb_type = context->toLLVM<std::remove_cv_t<pb>>();
+  llvm::ArrayType *llvm_pb_array_type =
+      llvm::ArrayType::get(llvm_pb_type, wantedFields.size());
+  llvm::AllocaInst *pb_array =
+      Builder->CreateAlloca(llvm_pb_array_type, nullptr, "pb_array");
 
-
+  auto workunit_ptr8 = context->gen_call(acquireWorkUnit, {memmv});
+  auto workunit_ptr = Builder->CreateBitCast(
+      workunit_ptr8, llvm::PointerType::getUnqual(workunit_type));
   // TODO pass selectivities to make_mem_move_device
-  context->gen_call(
-      make_mem_move_device, {mv_src_ptrs, mv_sizes_bytes, device_id, srcS, memmv, mv_num_bufs, pb_array});
+  context->gen_call(make_mem_move_device,
+                    {mv_src_ptrs, mv_sizes_bytes, device_id, srcS, memmv,
+                     mv_num_bufs, pb_array, workunit_ptr});
 
   for (size_t i = 0; i < wantedFields.size(); ++i) {
     RecordAttribute block_attr(*(wantedFields[i]), true);
     ProteusValueMemory mem_valWrapper = childState[block_attr];
 
-    llvm::Value *gep_index_moved[] = {context->createInt32(0),  context->createInt32(i),context->createInt32(0)};
-    llvm::Value *gep_index_to_release[] = {context->createInt32(0), context->createInt32(i),context->createInt32(1)};
+    llvm::Value *gep_index_moved[] = {context->createInt32(0),
+                                      context->createInt32(i),
+                                      context->createInt32(0)};
+    llvm::Value *gep_index_to_release[] = {context->createInt32(0),
+                                           context->createInt32(i),
+                                           context->createInt32(1)};
     llvm::Value *moved_ptr = Builder->CreateGEP(
-        pb_array->getType()->getNonOpaquePointerElementType(), pb_array, gep_index_moved, "gep_buffpair_structs_moved");
+        pb_array->getType()->getNonOpaquePointerElementType(), pb_array,
+        gep_index_moved, "gep_buffpair_structs_moved");
     llvm::Value *to_release_ptr = Builder->CreateGEP(
-        pb_array->getType()->getNonOpaquePointerElementType(), pb_array, gep_index_to_release, "gep_buffpair_structs_to_release");
-    llvm::Value *moved = Builder->CreateLoad(charPtrType, moved_ptr, "load_moved");
-    llvm::Value *to_release = Builder->CreateLoad(charPtrType, to_release_ptr, "load_to_release");
+        pb_array->getType()->getNonOpaquePointerElementType(), pb_array,
+        gep_index_to_release, "gep_buffpair_structs_to_release");
+    llvm::Value *moved =
+        Builder->CreateLoad(charPtrType, moved_ptr, "load_moved");
+    llvm::Value *to_release =
+        Builder->CreateLoad(charPtrType, to_release_ptr, "load_to_release");
 
     pushed.push_back(Builder->CreateBitCast(
         moved, mem_valWrapper.mem->getType()->getPointerElementType()));
     pushed.push_back(Builder->CreateBitCast(
         to_release, mem_valWrapper.mem->getType()->getPointerElementType()));
-    is_noop =
-        Builder->CreateAnd(is_noop, Builder->CreateICmpEQ(moved, to_release));
+    //    TODO handle not actually a noop for nvme
+    is_noop = context->createFalse();
+    //        Builder->CreateAnd(is_noop, Builder->CreateICmpEQ(moved,
+    //        to_release));
   }
-  pushed.push_back(N);
+
+  // This is now definitely number of tuples
+  auto *num_tuples = Builder->CreateLoad(
+      mem_cntWrapper.mem->getType()->getPointerElementType(),
+      mem_cntWrapper.mem);
+  pushed.push_back(num_tuples);
   pushed.push_back(oid);
 
   llvm::Value *d = llvm::UndefValue::get(data_type);
   for (size_t i = 0; i < pushed.size(); ++i) {
     d = Builder->CreateInsertValue(d, pushed[i], i);
   }
-
-  // acquire and set workunit values
-  // TODO for io, maybe aquire a workunit first, then force push with the work units themselves?
-  // using an io_uring call back to update a bool in the work unit?
-  auto workunit_ptr8 = context->gen_call(acquireWorkUnit, {memmv});
-  auto workunit_ptr = Builder->CreateBitCast(
-      workunit_ptr8, llvm::PointerType::getUnqual(workunit_type));
 
   auto workunit_dat = Builder->CreateLoad(
       workunit_ptr->getType()->getPointerElementType(), workunit_ptr);
@@ -372,6 +469,12 @@ void MemMoveDevice::open(Pipeline *pip) {
 #endif
   mmc->slack = slack;
   mmc->data_buffs = MemoryManager::mallocPinned(data_size * slack);
+  auto *pg =
+      Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
+  if (dynamic_cast<NvmePlugin *>(pg)) {
+    mmc->nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+    mmc->io_uring = std::make_unique<proteus::storage::IoUringThreadUnsafe>(32);
+  }
   char *data_buff = (char *)mmc->data_buffs;
   for (size_t i = 0; i < slack; ++i) {
     wu[i].data = ((void *)(data_buff + i * data_size));
@@ -405,6 +508,9 @@ void MemMoveDevice::close(Pipeline *pip) {
   {
     event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
                                                 pip->getGroup()};
+    if (mmc->io_uring) {
+      mmc->io_uring->flush();
+    }
     mmc->tran.close();
 
     nvtxRangePop();
@@ -458,7 +564,9 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
   if (!tran.pop(*ret)) return false;
   gpu_run(cudaEventSynchronize((*ret)->event));
-//  for io_uring, maybe ret->work_complete
+  while ((*ret)->complete != 0) {
+    std::this_thread::yield();
+  }
   return true;
 }
 

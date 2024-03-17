@@ -30,9 +30,15 @@
 #include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <platform/common/common.hpp>
 
+// `SCOPED_TRACE("")` raises this error
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+
+using namespace dangling_attr;
+
 TEST(NvmePluginAttributePartMetaDataTest, from_file_small) {
   const std::filesystem::path md_path =
-      "inputs/nvme-plugin-tests/customer.csv.c_phone.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
   NvmePlugin::AttributePartMetaData x{md_path};
   EXPECT_EQ(x.num_blocks, 6);
   EXPECT_EQ(x.block_sizes.size(), 6);
@@ -88,11 +94,17 @@ uintptr_t hex_to_uintptr(const std::string& hex_str) {
 }
 
 class NvmePluginTest : public ::testing::Test {
+ public:
+  static void TearDownTestSuite() {
+    auto& sm = StorageManager::getInstance();
+    sm.unloadAll();
+  }
+
  protected:
   void SetUp() override {}
   void TearDown() override {}
 
-  RelBuilderFactory getRelBuilderFactory() {
+  static RelBuilderFactory getRelBuilderFactory() {
     auto* test_info = ::testing::UnitTest::GetInstance()->current_test_info();
     return RelBuilderFactory{std::string(test_info->test_suite_name()) + "." +
                              test_info->name()};
@@ -103,7 +115,7 @@ class NvmePluginTest : public ::testing::Test {
    * single partition per column. Assumes single threaded execution so that the
    * page_ids in the result are the same order as emitted by the scan
    */
-  void validate_page_id_result_1_part_per_col(const QueryResult& res) {
+  static void validate_page_id_result_1_part_per_col(const QueryResult& res) {
     std::stringstream res_str;
     res_str << res;
     std::string out_tuple;
@@ -136,8 +148,8 @@ class NvmePluginTest : public ::testing::Test {
    * threaded execution so that the page_ids in the result are the same order as
    * emitted by the scan
    */
-  void validate_page_id_result_n_part_per_col(const QueryResult& res,
-                                              size_t n_parts_per_col) {
+  static void validate_page_id_result_n_part_per_col(const QueryResult& res,
+                                                     size_t n_parts_per_col) {
     std::stringstream res_str;
     res_str << res;
     std::string out_tuple;
@@ -168,22 +180,56 @@ class NvmePluginTest : public ::testing::Test {
       }
     }
   }
+
+  static std::tuple<int32_t, int32_t, int32_t> calculate_min_max_count_int32(
+      const std::filesystem::path& data_file) {
+    std::ifstream file(data_file, std::ios::binary);
+    int32_t max_value = std::numeric_limits<int32_t>::min();
+    int32_t min_value = std::numeric_limits<int32_t>::max();
+    int32_t count = 0;
+    while (file) {
+      int32_t value;
+      file.read(reinterpret_cast<char*>(&value), sizeof(value));
+      if (file.gcount() != sizeof(value)) {
+        break;
+      }
+      count += 1;
+      if (value > max_value) {
+        max_value = value;
+      }
+      if (value < min_value) {
+        min_value = value;
+      }
+    }
+    return {min_value, max_value, count};
+  }
+
+  static std::vector<int32_t> splitStringToInt32(const std::string& str) {
+    std::vector<int32_t> result;
+    std::stringstream ss(str);
+    std::string token;
+
+    while (std::getline(ss, token, ',')) {
+      result.push_back(std::stoi(token));
+    }
+
+    return result;
+  }
 };
 
 TEST_F(NvmePluginTest, scan_one_col_one_part) {
   set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
-  using namespace dangling_attr;
-  RecordType my_record_type = rel("ssbm100")(Int64("customer.csv.c_custkey"));
+
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
 
   const std::filesystem::path md_path =
-      "inputs/nvme-plugin-tests/customer.csv.c_custkey.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
   std::vector<std::filesystem::path> attr_md{md_path};
 
   auto meta_data_records_map = my_record_type.getArgsMap();
   std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
       relation_md;
-  relation_md.push_back(
-      std::make_pair(meta_data_records_map["customer.csv.c_custkey"], attr_md));
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
 
   RelBuilderFactory factory = getRelBuilderFactory();
   //  res should hold the page_ids in csv format for the 6 blocks
@@ -192,34 +238,30 @@ TEST_F(NvmePluginTest, scan_one_col_one_part) {
                  .print(pg("pm-csv"))
                  .prepare()
                  .execute();
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+
   SCOPED_TRACE("");
-#pragma clang diagnostic pop
   validate_page_id_result_1_part_per_col(res);
 }
 
 TEST_F(NvmePluginTest, scan_two_col_one_part) {
   set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
-  using namespace dangling_attr;
-  RecordType my_record_type = rel("ssbm100")(Int64("customer.csv.c_phone"),
-                                             Int64("customer.csv.c_custkey"));
+
+  RecordType my_record_type =
+      rel("customer.csv")(Int("c_phone"), Int("c_custkey"));
 
   const std::filesystem::path md_path_c_phone =
-      "inputs/nvme-plugin-tests/customer.csv.c_phone.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
   const std::filesystem::path md_path_c_custkey =
-      "inputs/nvme-plugin-tests/customer.csv.c_phone.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
 
   auto meta_data_records_map = my_record_type.getArgsMap();
   std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
       relation_md;
-  relation_md.push_back(
-      std::make_pair(meta_data_records_map["customer.csv.c_phone"],
-                     std::vector{md_path_c_phone}));
+  relation_md.emplace_back(meta_data_records_map["c_phone"],
+                           std::vector{md_path_c_phone});
 
-  relation_md.push_back(
-      std::make_pair(meta_data_records_map["customer.csv.c_custkey"],
-                     std::vector{md_path_c_custkey}));
+  relation_md.emplace_back(meta_data_records_map["c_custkey"],
+                           std::vector{md_path_c_custkey});
 
   RelBuilderFactory factory = getRelBuilderFactory();
   //  res should hold the page_ids in csv format for the 6 blocks
@@ -228,27 +270,24 @@ TEST_F(NvmePluginTest, scan_two_col_one_part) {
                  .print(pg("pm-csv"))
                  .prepare()
                  .execute();
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+
   SCOPED_TRACE("");
-#pragma clang diagnostic pop
   validate_page_id_result_1_part_per_col(res);
 }
 
 TEST_F(NvmePluginTest, scan_one_col_two_part) {
   set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
-  using namespace dangling_attr;
-  RecordType my_record_type = rel("ssbm100")(Int64("customer.csv.c_custkey"));
+
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
 
   const std::filesystem::path md_path =
-      "inputs/nvme-plugin-tests/customer.csv.c_custkey.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
   std::vector<std::filesystem::path> attr_md{md_path, md_path};
 
   auto meta_data_records_map = my_record_type.getArgsMap();
   std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
       relation_md;
-  relation_md.push_back(
-      std::make_pair(meta_data_records_map["customer.csv.c_custkey"], attr_md));
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
 
   RelBuilderFactory factory = getRelBuilderFactory();
   //  res should hold the page_ids in csv format for the 6 blocks
@@ -257,26 +296,22 @@ TEST_F(NvmePluginTest, scan_one_col_two_part) {
                  .print(pg("pm-csv"))
                  .prepare()
                  .execute();
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wused-but-marked-unused"
+
   SCOPED_TRACE("");
-#pragma clang diagnostic pop
   validate_page_id_result_n_part_per_col(res, 2);
 }
 
 TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
-  using namespace dangling_attr;
-  RecordType my_record_type = rel("ssbm100")(Int64("customer.csv.c_custkey"));
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
 
   const std::filesystem::path md_path =
-      "inputs/nvme-plugin-tests/customer.csv.c_custkey.metadata.json";
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
   std::vector<std::filesystem::path> attr_md{md_path, md_path};
 
   auto meta_data_records_map = my_record_type.getArgsMap();
   std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
       relation_md;
-  relation_md.push_back(
-      std::make_pair(meta_data_records_map["customer.csv.c_custkey"], attr_md));
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
   auto context = OlapParallelContext("test");
   NvmePlugin testPlugin(&context, relation_md);
 
@@ -292,10 +327,151 @@ TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
   // Load expected values from the metadata file
   NvmePlugin::AttributePartMetaData partMetaData(md_path);
   const uint64_t expected_offset = partMetaData.block_offsets[1];
-  const size_t expected_size = static_cast<size_t>(partMetaData.block_sizes[1]);
+  const auto expected_size = static_cast<size_t>(partMetaData.block_sizes[1]);
 
   // Can't test FD easily without a real file, but we can test the offset and
   // expected size
   EXPECT_EQ(offset, expected_offset);
   EXPECT_EQ(size, expected_size);
 }
+
+TEST_F(NvmePluginTest, scan_and_move_one_col_one_part) {
+  set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
+
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
+
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+  std::vector<std::filesystem::path> attr_md{md_path};
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  //  res should hold the page_ids in csv format for the 6 blocks
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .memmove(32, DeviceType::CPU)
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "min"),
+                               arg["c_custkey"].as("tmp", "max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  auto split_output = splitStringToInt32(output.str());
+  EXPECT_EQ(split_output.size(), 3);
+  auto [expected_min, expected_max, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_custkey");
+  EXPECT_EQ(split_output[0], expected_min);
+  EXPECT_EQ(split_output[1], expected_max);
+  EXPECT_EQ(split_output[2], expected_count);
+}
+
+TEST_F(NvmePluginTest, scan_and_move_one_col_two_part) {
+  set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
+
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
+
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+  std::vector<std::filesystem::path> attr_md{md_path, md_path};
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  //  res should hold the page_ids in csv format for the 6 blocks
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .memmove(32, DeviceType::CPU)
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "min"),
+                               arg["c_custkey"].as("tmp", "max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  auto split_output = splitStringToInt32(output.str());
+  EXPECT_EQ(split_output.size(), 3)
+      << "expected a single tuple with 3 aggregates";
+  auto [expected_min, expected_max, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_custkey");
+  EXPECT_EQ(split_output[0], expected_min);
+  EXPECT_EQ(split_output[1], expected_max);
+  // 2 partitions that are the same base data
+  EXPECT_EQ(split_output[2], 2 * expected_count);
+}
+
+TEST_F(NvmePluginTest, scan_and_move_two_col_two_part) {
+  set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
+
+  RecordType my_record_type =
+      rel("customer.csv")(Int("c_phone"), Int("c_custkey"));
+
+  const std::filesystem::path md_path_c_phone =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
+  const std::filesystem::path md_path_c_custkey =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_phone"],
+                           std::vector{md_path_c_phone, md_path_c_phone});
+
+  relation_md.emplace_back(meta_data_records_map["c_custkey"],
+                           std::vector{md_path_c_custkey, md_path_c_custkey});
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  //  res should hold the page_ids in csv format for the 6 blocks
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .memmove(32, DeviceType::CPU)
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "key_min"),
+                               arg["c_custkey"].as("tmp", "key_max"),
+                               arg["c_phone"].as("tmp", "phone_min"),
+                               arg["c_phone"].as("tmp", "phone_max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  auto split_output = splitStringToInt32(output.str());
+  EXPECT_EQ(split_output.size(), 5)
+      << "expected a single tuple with 5 aggregates";
+  auto [expected_min_key, expected_max_key, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_custkey");
+  auto [expected_min_phone, expected_max_phone, _] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_phone");
+  EXPECT_EQ(split_output[0], expected_min_key);
+  EXPECT_EQ(split_output[1], expected_max_key);
+  EXPECT_EQ(split_output[2], expected_min_phone);
+  EXPECT_EQ(split_output[3], expected_max_phone);
+  // 2 partitions that are the same base data
+  EXPECT_EQ(split_output[4], 2 * expected_count);
+}
+
+#pragma clang diagnostic pop

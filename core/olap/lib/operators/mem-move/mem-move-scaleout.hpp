@@ -39,7 +39,7 @@ class MemMoveScaleOut : public MemMoveDevice {
     void propagate(MemMoveDevice::workunit *buff, bool is_noop) override;
 
     buff_pair push(proteus::managed_ptr src, size_t bytes, int target_device,
-                   uint64_t srcServer) override;
+                   uint64_t srcServer, workunit *wu) override;
     proteus::managed_ptr pull(proteus::managed_ptr buff) override;
 
     bool getPropagated(MemMoveDevice::workunit **ret) override;
