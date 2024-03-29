@@ -147,3 +147,7 @@ DanglingAttr Bool(std::string attrName, bool make_block) {
 RelWithAttributes rel::operator()(std::initializer_list<DanglingAttr> attrs) {
   return {*this, attrs};
 }
+
+RelWithAttributes rel::operator()(std::vector<DanglingAttr> attrs) {
+  return {*this, attrs};
+}

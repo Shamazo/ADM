@@ -520,6 +520,7 @@ class rel {
   explicit rel(std::string relName) : relName(std::move(relName)) {}
 
   RelWithAttributes operator()(std::initializer_list<DanglingAttr>);
+  RelWithAttributes operator()(std::vector<DanglingAttr>);
   template <typename... T>
   RelWithAttributes operator()(T... x);
 
