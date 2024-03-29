@@ -130,6 +130,18 @@ DanglingAttr Float(std::string attrName, bool make_block) {
 DanglingAttr String(std::string attrName, bool make_block) {
   return attr(std::move(attrName), new StringType(), make_block);
 }
+
+DanglingAttr DString(std::string attrName, bool make_block) {
+  return attr(std::move(attrName), new DStringType(), make_block);
+}
+
+DanglingAttr Date(std::string attrName, bool make_block) {
+  return attr(std::move(attrName), new DateType(), make_block);
+}
+
+DanglingAttr Bool(std::string attrName, bool make_block) {
+  return attr(std::move(attrName), new BoolType(), make_block);
+}
 }  // namespace dangling_attr
 
 RelWithAttributes rel::operator()(std::initializer_list<DanglingAttr> attrs) {

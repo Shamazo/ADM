@@ -539,6 +539,13 @@ DanglingAttr Int64(std::string attrName, bool make_block = false);
 DanglingAttr Float(std::string attrName, bool makeBlock = false);
 
 DanglingAttr String(std::string attrName, bool makeBlock = false);
+
+DanglingAttr DString(std::string attrName, bool makeBlock = false);
+
+DanglingAttr Date(std::string attrName, bool makeBlock = false);
+
+DanglingAttr Bool(std::string attrName, bool makeBlock = false);
+
 }  // namespace dangling_attr
 
 /**
