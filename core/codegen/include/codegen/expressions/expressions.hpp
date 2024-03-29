@@ -1575,7 +1575,7 @@ inline expressions::IfThenElse cond(expression_t cond, expression_t lhs,
 inline expressions::RecordProjection expression_t::operator[](
     const RecordAttribute &proj) const {
   auto rec = dynamic_cast<const RecordType *>(getExpressionType());
-  assert(rec);
+  CHECK_NE(rec, nullptr) << "Expression is not a record type";
   auto p = rec->getArg(proj.getAttrName());
   if (p) {
     if (p->getRelationName() == proj.getRelationName()) return {*this, *p};
@@ -1588,7 +1588,8 @@ inline expressions::RecordProjection expression_t::operator[](
       cnt += p2->getAttrName() == proj.getAttrName();
 #endif
     }
-    assert(cnt == 1 && "Same attrName but not relName AND multiple such attrs");
+    DCHECK_EQ(cnt, 1)
+        << "Same attrName but not relName AND multiple such attrs";
     return {*this, *p};
   }
   if (!proj.getAttrName().empty() && proj.getAttrName()[0] == '$') {
@@ -1612,6 +1613,19 @@ inline expressions::RecordProjection expression_t::operator[](
       } catch (std::runtime_error &) {
       }
     }
+  }
+  // This is slightly leaky, activeLoop is a static const global variable in
+  // olap used by plugins which stores the value "activeTuple" the activeTuple
+  // is not stored in the record type, but perhaps it should be
+  if (proj.getAttrName() != "activeTuple") {
+    LOG(WARNING) << "Possible invalid record projection";
+    LOG(WARNING) << "projection: " << proj.getRelationName() << "."
+                 << proj.getAttrName();
+    LOG(WARNING) << "Expr attributes: ";
+    for (const auto &e : rec->getArgs()) {
+      LOG(WARNING) << "  " << e->getRelationName() << "." << e->getAttrName();
+    }
+    throw std::runtime_error("Invalid record projection");
   }
   return {*this, proj};
 }

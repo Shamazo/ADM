@@ -339,6 +339,7 @@ class RecordAttribute {
   //    }
 
   [[nodiscard]] string getType() const {
+    DCHECK_NE(type, nullptr);
     return attrName + " " + type->getType();
   }
   [[nodiscard]] const ExpressionType *getOriginalType() const { return type; }
@@ -394,6 +395,7 @@ class RecordType : public ExpressionTypeVisitable<RecordType, ExpressionType> {
     int count = 0;
     int size = args.size();
     for (auto arg : args) {
+      DCHECK_NE(arg, nullptr);
       ss << arg->getType();
       count++;
       if (count != size) {
