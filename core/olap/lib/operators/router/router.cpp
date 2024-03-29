@@ -61,6 +61,9 @@ void Router::generate_catch(OlapParallelContext *context) {
   Plugin *pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  const bool is_nvme_plugin = nvme_plugin != nullptr;
+
   const ExpressionType *ptoid = pg->getOIDType();
 
   Type *oidType = ptoid->getLLVMType(llvmContext);
@@ -82,6 +85,13 @@ void Router::generate_catch(OlapParallelContext *context) {
   param_typelist.push_back(oidType);                        // oid
   param_typelist.push_back(Type::getInt64Ty(llvmContext));  // srcServer
   if (need_cnt) param_typelist.push_back(oidType);          // cnt
+  // This currently assumes that if we are routing blocks (need_cnt) and using
+  // the nvme plugin, then we need to add tupleCnt as a param. This may not
+  // always be true, e.g. pack intermediate results on GPU and route the blocks
+  // to the CPU. TBD if this breaks things
+  if (is_nvme_plugin)
+    param_typelist.push_back(oidType);  // the real tupleCnt. For NvmePlugin cnt
+                                        // is the number of blocks
 
   // param_typelist.push_back(subStatePtr->getType());
 
@@ -89,8 +99,11 @@ void Router::generate_catch(OlapParallelContext *context) {
   buf_size = context->getSizeOf(params_type);
   // context->SetInsertPoint(insBB);
 
+  // blockCnt for NvmePlugin
   RecordAttribute tupleCnt(wantedFields[0]->getRelationName(), "activeCnt",
                            pg->getOIDType());  // FIXME: OID type for blocks ?
+  RecordAttribute realTupleCnt(wantedFields[0]->getRelationName(), "tupleCnt",
+                               pg->getOIDType());
   RecordAttribute tupleIdentifier(wantedFields[0]->getRelationName(),
                                   activeLoop, pg->getOIDType());
   RecordAttribute srcServer{wantedFields[0]->getRelationName(), "srcServer",
@@ -139,6 +152,13 @@ void Router::generate_catch(OlapParallelContext *context) {
     Value *cnt = Builder->CreateExtractValue(params, wantedFields.size() + 2);
 
     variableBindings[tupleCnt] = context->toMem(cnt, context->createFalse());
+
+    if (is_nvme_plugin) {
+      Value *tuple_cnt =
+          Builder->CreateExtractValue(params, wantedFields.size() + 3);
+      variableBindings[realTupleCnt] =
+          context->toMem(tuple_cnt, context->createFalse());
+    }
   }
 
   Builder->SetInsertPoint(mainBB);
@@ -367,6 +387,9 @@ void Router::consume(OlapParallelContext *const context,
   Plugin *pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  const bool is_nvme_plugin = nvme_plugin != nullptr;
+
   auto rec = childState.getProducer().getRowType();
   ExpressionGeneratorVisitor vis{context, childState};
   for (size_t i = 0; i < wantedFields.size(); ++i) {
@@ -425,6 +448,27 @@ void Router::consume(OlapParallelContext *const context,
             mem_cntWrapper.mem->getType()->getPointerElementType(),
             mem_cntWrapper.mem),
         wantedFields.size() + 2);
+    if (is_nvme_plugin) {
+      RecordAttribute realTupleCnt(wantedFields[0]->getRelationName(),
+                                   "tupleCnt", pg->getOIDType());
+      bool have_tuple_count = true;
+      try {
+        childState[{realTupleCnt}];
+      } catch (const std::out_of_range &) {
+        have_tuple_count = false;
+      }
+      if (have_tuple_count) {
+        ProteusValueMemory mem_realTupleCntWrapper = childState[realTupleCnt];
+        params = Builder->CreateInsertValue(
+            params,
+            Builder->CreateLoad(
+                mem_realTupleCntWrapper.mem->getType()->getPointerElementType(),
+                mem_realTupleCntWrapper.mem),
+            wantedFields.size() + 3);
+      }
+      // TODO if we have issues with routing blocks that are not page IDS
+      // we may need to insert a dummy tupleCnt here.
+    }
   }
 
   Value *exchangePtr =
