@@ -605,4 +605,73 @@ TEST_F(NvmePluginTest, scan_and_router_then_move_two_col_two_part) {
   EXPECT_EQ(split_output[4], 2 * expected_count);
 }
 
+TEST_F(NvmePluginTest, scan_and_membrdcst_two_col_two_part) {
+  GTEST_SKIP_("membrdcst is not yet supported");
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunreachable-code"
+  set_exec_location_on_scope exec(topology::getInstance().getCpuNumaNodes()[0]);
+
+  RecordType my_record_type =
+      rel("customer.csv")(Int("c_phone"), Int("c_custkey"));
+
+  const std::filesystem::path md_path_c_phone =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
+  const std::filesystem::path md_path_c_custkey =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_phone"],
+                           std::vector{md_path_c_phone, md_path_c_phone});
+
+  relation_md.emplace_back(meta_data_records_map["c_custkey"],
+                           std::vector{md_path_c_custkey, md_path_c_custkey});
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .router(DegreeOfParallelism(4), 4, RoutingPolicy::LOCAL,
+                         DeviceType::CPU)
+                 .membrdcst(DegreeOfParallelism(2), true)
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "key_min"),
+                               arg["c_custkey"].as("tmp", "key_max"),
+                               arg["c_phone"].as("tmp", "phone_min"),
+                               arg["c_phone"].as("tmp", "phone_max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .router(DegreeOfParallelism{1}, 32, RoutingPolicy::RANDOM,
+                         DeviceType::CPU)
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["key_min"], arg["key_max"], arg["phone_min"],
+                               arg["phone_max"], arg["count"]};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  auto split_output = splitStringToInt32(output.str());
+  EXPECT_EQ(split_output.size(), 5)
+      << "expected a single tuple with 5 aggregates";
+  auto [expected_min_key, expected_max_key, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_custkey");
+  auto [expected_min_phone, expected_max_phone, _] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_phone");
+  EXPECT_EQ(split_output[0], expected_min_key);
+  EXPECT_EQ(split_output[1], expected_max_key);
+  EXPECT_EQ(split_output[2], expected_min_phone);
+  EXPECT_EQ(split_output[3], expected_max_phone);
+  // 2 partitions that are the same base data, which are then broadcasted to 2
+  // threads
+  EXPECT_EQ(split_output[4], 4 * expected_count);
+#pragma clang diagnostic pop
+}
+
 #pragma clang diagnostic pop

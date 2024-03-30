@@ -45,7 +45,13 @@ IoUringThreadUnsafe::IoUringThreadUnsafe(size_t max_inflight_requests)
 
   // this is how we actually control inflight requests
   for (size_t i = 0; i < max_inflight_requests; i++) {
-    m_IoInfo_free_set.emplace(m_IoInfo_allocator.allocate(sizeof(IoInfo)));
+    IoInfo *io_info = new IoInfo;
+    // Something weird is happening between the allocator and the std::function
+    // leading to a segfault when the callback is destructed
+    //        static_cast<IoInfo
+    //        *>(m_IoInfo_allocator.allocate(sizeof(IoInfo)));
+    io_info->call_back = []() {};
+    m_IoInfo_free_set.emplace(io_info);
   }
 }
 
@@ -60,6 +66,7 @@ void IoUringThreadUnsafe::read(int fd, void *buf, size_t size, off_t start,
   struct io_uring_sqe *sqe = io_uring_get_sqe(&m_ring);
   DCHECK_NE(sqe, nullptr)
       << "This should never happen because we restrict inflight IO";
+  DCHECK_EQ(start % 512, 0) << "we only support O_DIRECT";
   DCHECK_EQ(size % 512, 0) << "we only support O_DIRECT";
   DCHECK_EQ(reinterpret_cast<uintptr_t>(buf) % 512, 0);
   io_uring_prep_readv(sqe, fd, &user_info->iov, 1, start);
@@ -99,6 +106,7 @@ void IoUringThreadUnsafe::poll() {
     CHECK(cqe->res >= 0) << "io_uring request failed with: "
                          << strerror(-cqe->res);
     io_info->call_back();
+    io_info->call_back = []() {};  // forcibly destruct the callback
     m_IoInfo_free_set.emplace(io_info);
     i++;
   }
@@ -126,7 +134,8 @@ IoUringThreadUnsafe::~IoUringThreadUnsafe() {
 
   for (size_t i = 0; i < m_max_inflight_requests; i++) {
     auto *io_info_ptr = m_IoInfo_free_set.pop();
-    m_IoInfo_allocator.deallocate(io_info_ptr, sizeof(io_info_ptr));
+    delete io_info_ptr;
+    //    m_IoInfo_allocator.deallocate(io_info_ptr, sizeof(io_info_ptr));
   }
 }
 void IoUringThreadUnsafe::flush() {

@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <platform/topology/device-types.hpp>
 #include <platform/topology/gpu-index.hpp>
 #include <platform/topology/topology.hpp>
@@ -118,8 +119,10 @@ class CpuNumaNodeAffinitizer : public Affinitizer {
     const auto *g = topo.getGpuAddressed(p);
     if (g) return g->getLocalCPUNumaNode().index_in_topo;
     auto *c = topo.getCpuNumaNodeAddressed(p);
-    assert(c);
-    return c->index_in_topo;
+    if (c) return c->index_in_topo;
+    DCHECK(NvmePlugin::PageId_t::isPageIdPtr(p));
+    auto page_id = NvmePlugin::PageId_t::from_ptr(p);
+    return page_id.getCpuNumaAffinity();
   }
 };
 

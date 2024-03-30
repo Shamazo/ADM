@@ -72,7 +72,9 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
                                    std::memory_order_relaxed);
   };
 
-  size += size % 512;  // align to 512 bytes for O_DIRECT
+  if (size % 512 != 0) {
+    size += 512 - (size % 512);  // align to 512 bytes for O_DIRECT
+  }
 
   io_uring->read(fd, buff.get(), size, offset, cb);
   return buff;
@@ -90,7 +92,6 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
   } else {
     // currently only used do NVMe to CPU IO
     // TODO: is pass the fact we are doing IO to the operator constructor
-    wu->complete = true;
     const auto *d = topology::getInstance().getGpuAddressed(src.get());
     int dev = d ? static_cast<int>(d->id) : -1;
 

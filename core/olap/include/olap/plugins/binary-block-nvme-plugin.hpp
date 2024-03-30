@@ -30,6 +30,8 @@
 
 class NvmePlugin : public BinaryBlockPlugin {
  public:
+  static constexpr auto type = "nvme-block";
+
   struct PageId_t {
     static constexpr uint8_t cpu_numa_mask = 0b01111111;
     static constexpr uint8_t page_id_bit_in_numa = 0b10000000;
