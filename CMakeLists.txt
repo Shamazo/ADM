@@ -123,8 +123,8 @@ string(STRIP "${COMPILER_FLAGS} -gdwarf-4" COMPILER_FLAGS)
 # and because ASAN is most useful when everything is instrumented
 if (PROTEUS_ASAN_BUILD)
   MESSAGE(WARNING "Building with ASAN. ASAN does not always work smoothly with CUDA."
-      "Running with 'ASAN_OPTIONS=protect_shadow_gap=0' may be necessary with GPUs."
-      "Or use `CUDA_VISIBLE_DEVICES=` if you do not need to initialize GPUs")
+    "Running with 'ASAN_OPTIONS=protect_shadow_gap=0' may be necessary with GPUs."
+    "Or use `CUDA_VISIBLE_DEVICES=` if you do not need to initialize GPUs")
   add_compile_options(-fsanitize=address)
   add_compile_options(-fsanitize-address-use-after-scope)
   add_compile_options(-fno-omit-frame-pointer)
@@ -147,7 +147,9 @@ include(warning-flags)
 #-----------------------------------------------------------------------
 # Various dependencies
 # Note the PROTEUS_USE_CUDA flag is used in our cuda.cmake module
+# llvm-virtual must be first, as it determines if we use libstdc++ or libcxx
 include(llvm-virtual)
+include(jemalloc)
 include(lz4)
 include(cuda)
 include(gflags)
@@ -187,7 +189,7 @@ if (DOXYGEN_FOUND)
     ${CMAKE_CURRENT_SOURCE_DIR}/core
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime
     COMMENT "Generate doxygen pages"
-    )
+  )
 endif ()
 set(ENV{LD_LIBRARY_PATH} users_ld_library_path)
 

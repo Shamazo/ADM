@@ -5,6 +5,7 @@ include(external/CMakeLists.txt.liburing.in)
 # ExternalProject_Add wont work because we need to compile this at configure time to have the location of the header file
 # FetchContent_* and friends don't seem to let you specify build and configure commands, though it may work for header only libs, e.g https://stackoverflow.com/questions/65586352/is-it-possible-to-use-fetchcontent-or-an-equivalent-to-add-a-library-that-has-no
 # there may be a neater way to do this to not rebuild it every time
+# update TODO: follow the approach used for jemalloc
 
 set(OLD_CPPFLAGS_EV $ENV{CPPFLAGS})
 set(ENV{CPPFLAGS} ${CMAKE_CXX_FLAGS})
