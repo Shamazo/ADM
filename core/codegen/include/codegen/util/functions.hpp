@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <platform/util/string-object.hpp>
+#include <string>
 
 // #define JSON_TIGHT
 #include "jsmn.h"

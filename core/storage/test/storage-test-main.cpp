@@ -21,9 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <glog/logging.h>
-
 #include <filesystem>
+#include <platform/util/glog.hpp>
 
 #include "gtest/gtest.h"
 #include "platform/common/common.hpp"

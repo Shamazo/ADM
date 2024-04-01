@@ -22,7 +22,6 @@
 */
 
 #include <arpa/inet.h>
-#include <glog/logging.h>
 #include <malloc.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -35,6 +34,7 @@
 #include <platform/memory/memory-manager.hpp>
 #include <platform/network/infiniband/infiniband-handler.hpp>
 #include <platform/threadpool/threadpool.hpp>
+#include <platform/util/glog.hpp>
 #include <platform/util/tracing.hpp>
 #include <thread>
 
@@ -533,8 +533,7 @@ subscription *IBHandler::read(proteus::remote_managed_ptr data, size_t bytes) {
 
     // create promise before submitting the work request
     return create_promise(std::move(buff), std::move(data));
-  }
-  ();
+  }();
   linux_run(send(wr));
 
   //  eventlogger.log(this, IB_CREATE_RDMA_READ_END);

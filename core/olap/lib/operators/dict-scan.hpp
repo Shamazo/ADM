@@ -32,14 +32,15 @@ class DictMatchIter;
 
 class DictScan : public UnaryOperator {
  public:
+  // unclear why this constructor takes a context given produce_ takes one
   DictScan(Context *const context, RecordAttribute attr, std::string rex,
            RecordAttribute regAs)
       : UnaryOperator(nullptr),
-        context(dynamic_cast<OlapParallelContext *const>(context)),
+        _context(dynamic_cast<OlapParallelContext *const>(context)),
         attr(attr),
         regex(rex),
         regAs(regAs) {
-    assert(this->context && "Only OlapParallelContext supported");
+    CHECK(this->_context) << "Only OlapParallelContext supported";
   }
   ~DictScan() override { LOG(INFO) << "Collapsing dictscan operator"; }
   [[nodiscard]] Operator *getChild() const final {
@@ -92,7 +93,7 @@ class DictScan : public UnaryOperator {
 
   friend class DictMatchIter;
 
-  OlapParallelContext *const context;
+  OlapParallelContext *const _context;
   const RecordAttribute attr;
   const RecordAttribute regAs;
   const std::string regex;

@@ -411,7 +411,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
                 << "-buffers in GPU " << gpu.id
                 << " (Total: " << bytes{size * buffer_size} << "/"
                 << bytes{gpu.getMemorySize()} << ")";
-      assert(buff_buffer_size < size);
+      CHECK_LT(buff_buffer_size, size);
       uint32_t j = gpu.id;
 
       set_exec_location_on_scope d(gpu);
@@ -429,7 +429,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
         buffs.push_back(m);
 
         // cout << "Device " << j << " : data = " << m << endl;
-        assert(topology::getInstance().getGpuAddressed(m)->id == j);
+        CHECK_EQ(topology::getInstance().getGpuAddressed(m)->id, j);
       }
 
       pool_t *tmp = cuda_new<pool_t>(gpu, size, buffs, gpu);
@@ -478,7 +478,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
 
           size_t bytes = h_vector_size * sizeof(T) * cpu_h_size;
           T *mem = (T *)MemoryManager::mallocPinned(bytes);
-          assert(mem);
+          CHECK(mem);
 
           // T * mem;
           // gpu_run(cudaMallocHost(&mem, h_vector_size*sizeof(T)*h_size));
@@ -571,7 +571,7 @@ __host__ void buffer_manager<T>::destroy() {
   // assert(cores > 0);
 
   // int cpu_numa_nodes = numa_num_task_nodes();
-  assert(!terminating && "Already terminated");
+  CHECK(!terminating) << "Already terminated";
   terminating = true;
 
   if (buffer_logger) buffer_logger->join();

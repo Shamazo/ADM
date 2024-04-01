@@ -24,11 +24,14 @@
 
 #pragma push_macro("NDEBUG")
 #define NDEBUG
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-macros"
 #if LLVM_VERSION_MAJOR >= 13
 #define dumpDispatchInfo(x) (5)
 #else
 #define dumpDispatchInfo(x, y) (5)
 #endif
+#pragma clang diagnostic pop
 #include <llvm/Analysis/BasicAliasAnalysis.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>

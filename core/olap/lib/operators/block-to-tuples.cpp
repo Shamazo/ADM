@@ -139,7 +139,7 @@ void BlockToTuples::consume(OlapParallelContext *context,
           return t.first.getRelationName();
         }
       }
-      assert(false);
+      LOG(FATAL) << "cannot determine relation name";
     } else {
       return wantedFields[0].getRegisteredRelName();
     }

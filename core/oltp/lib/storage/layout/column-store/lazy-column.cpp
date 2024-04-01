@@ -126,7 +126,7 @@ static inline void* getElemByOffset(std::deque<oltp::common::mem_chunk>& data,
     }
     data_idx -= chunk.size;
   }
-  assert(false && "Out-of-Bound-Access");
+  LOG(FATAL) << "Out-of-Bound-Access";
 }
 
 void* LazyColumn::getElem(rowid_t vid) {

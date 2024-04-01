@@ -21,8 +21,9 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <glog/logging.h>
 #include <gtest/gtest.h>
+
+#include <platform/util/glog.hpp>
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);

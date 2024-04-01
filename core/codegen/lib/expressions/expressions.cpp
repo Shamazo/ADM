@@ -305,10 +305,11 @@ bool expressions::Expression::operator<(
 }
 
 int probeDictionary(void *dict, const std::string &v) {
-  auto d = (std::map<int, std::string> *)dict;
+  DCHECK_NE(dict, nullptr);
+  auto d = static_cast<std::map<int, std::string> *>(dict);
   auto it = std::find_if(d->begin(), d->end(),
                          [v](const auto &o) { return v == o.second; });
-  assert(it != d->end() && "String not found in dictionary");
+  CHECK(it != d->end()) << "String not found in dictionary: " << v;
   return it->first;
 }
 

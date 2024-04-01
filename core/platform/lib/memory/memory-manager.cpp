@@ -21,16 +21,13 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <execinfo.h>
+
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
-#include <platform/util/tracing.hpp>
-
-#ifndef NDEBUG
-#include <execinfo.h>
-
 #include <platform/util/timing.hpp>
-#endif
+#include <platform/util/tracing.hpp>
 
 #ifndef NDEBUG
 static bool trace_allocations;
@@ -45,7 +42,6 @@ void set_trace_allocations(bool val, bool silent_set_fail) {
   if ((!silent_set_fail) && val) {
     auto msg = "Can not enable memory & leak tracing in a NDEBUG build";
     LOG(FATAL) << msg;
-    throw runtime_error(msg);
   }
 #endif
 }
@@ -322,9 +318,9 @@ SingleDeviceMemoryManager<allocator, unit_cap>::~SingleDeviceMemoryManager() {
 #endif
 
   assert(allocations.empty());
-  //#ifndef NDEBUG
-  //  assert(mappings.empty());
-  //#endif
+  // #ifndef NDEBUG
+  //   assert(mappings.empty());
+  // #endif
   assert(units.empty());
   assert(big_units.empty());
   assert(free_cache.empty());
@@ -345,13 +341,13 @@ SingleDeviceMemoryManager<allocator, unit_cap>::create_allocation() {
   }
 
   {
-    time_block t([](auto ms) {
+    time_block t1([](auto ms) {
       LOG_IF(INFO, ms.count() > 0) << "Tlong_emplace: " << ms.count();
     });
     auto &al = allocations.emplace(ptr);
 
     if (trace_allocations) {
-      time_block t("trace_allocations: ");
+      time_block t2("trace_allocations: ");
       al.backtrace_size =
           backtrace(al.backtrace, allocation_t::backtrace_limit);
     }
@@ -415,9 +411,9 @@ void *SingleDeviceMemoryManager<allocator, unit_cap>::malloc(size_t bytes) {
     info->fill += bytes;
     info->sub_units += 1;
 
-    //#ifndef NDEBUG
-    //    mappings.emplace(ptr, info->base);
-    //#endif
+    // #ifndef NDEBUG
+    //     mappings.emplace(ptr, info->base);
+    // #endif
 
     //    {
     //      void ** bt = new void*[32];
@@ -454,20 +450,20 @@ void SingleDeviceMemoryManager<allocator, unit_cap>::free(void *ptr) {
     alloc_unit_info &info = fu->second;
     auto base = info.base;
 
-    //#ifndef NDEBUG
-    //    {
-    //      auto f = mappings.find(ptr);
-    //      if (f == mappings.end()) {
-    //        for (auto &t : mappings) {
-    //          std::cout << t.first << " " << t.second << std::endl;
-    //        }
-    //      }
-    //      assert(f != mappings.end() && "Mapping does not exist!");
+    // #ifndef NDEBUG
+    //     {
+    //       auto f = mappings.find(ptr);
+    //       if (f == mappings.end()) {
+    //         for (auto &t : mappings) {
+    //           std::cout << t.first << " " << t.second << std::endl;
+    //         }
+    //       }
+    //       assert(f != mappings.end() && "Mapping does not exist!");
     //
-    //      assert(base == f->second);
-    //      mappings.erase(f);
-    //    }
-    //#endif
+    //       assert(base == f->second);
+    //       mappings.erase(f);
+    //     }
+    // #endif
 
     //    dmappings.erase(dmappings.find(ptr));
 

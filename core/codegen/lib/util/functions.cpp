@@ -20,13 +20,12 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-#include <glog/logging.h>
-
 #include <codegen/util/functions.hpp>
 #include <cstdio>
 #include <cstring>
 #include <platform/common/common.hpp>
 #include <platform/memory/memory-allocator.hpp>
+#include <platform/util/glog.hpp>
 #include <string>
 
 #ifdef __AVX2__

@@ -21,10 +21,10 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <cli-flags.hpp>
+#include <platform/util/glog.hpp>
 #include <storage/storage-manager.hpp>
 
 int main(int argc, char** argv) {

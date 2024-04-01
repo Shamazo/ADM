@@ -138,12 +138,12 @@ class DStringType : public PrimitiveTypeCRTP<DStringType, DSTRING> {
   explicit DStringType(void *dictionary = nullptr) : dictionary(dictionary) {}
 
   [[nodiscard]] void *getDictionary() const {
-    assert(dictionary);
+    CHECK_NE(dictionary, nullptr);
     return dictionary;
   }
 
   void setDictionary(void *dict) {
-    assert(dict);
+    CHECK_NE(dict, nullptr);
     dictionary = dict;
   }
 
@@ -417,10 +417,7 @@ class RecordType : public ExpressionTypeVisitable<RecordType, ExpressionType> {
   [[nodiscard]] bool isPrimitive() const override { return false; }
 
   void appendAttribute(RecordAttribute *attr) {
-#ifndef NDEBUG
-    auto inserted =
-#endif
-        argsMap.emplace(attr->getAttrName(), attr);
+    auto inserted = argsMap.emplace(attr->getAttrName(), attr);
     if (!inserted.second) {
       // assert(*(attr->getType()) == inserted.first->getTypeID());
       return;

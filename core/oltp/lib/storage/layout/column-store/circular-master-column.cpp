@@ -195,7 +195,7 @@ void CircularMasterColumn::getElem(rowid_t vid, void* copy_location) {
       return;
     }
   }
-  assert(false && "Out-of-Bound-Access");
+  LOG(FATAL) << "Out-of-Bound-Access";
 }
 
 void CircularMasterColumn::updateElem(rowid_t vid, void* elem) {

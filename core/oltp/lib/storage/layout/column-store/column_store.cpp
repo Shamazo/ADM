@@ -697,7 +697,7 @@ ColumnStore::snapshot_get_data(size_t scan_idx,
         }
       }
 
-      assert(unit_size != 0);
+      DCHECK(unit_size != 0);
       for (const auto& ofs : elastic_offsets) {
         bool added = false;
         for (auto& sy : getit) {
@@ -707,14 +707,14 @@ ColumnStore::snapshot_get_data(size_t scan_idx,
             added = true;
           }
         }
-        assert(added == true);
+        DCHECK(added);
       }
       // added all offsets, now add extra
       for (size_t i = ret.size() - 1; i < num_to_return; i++) {
         ret.emplace_back(std::make_pair(getit[0].first, 0));
       }
     }
-    assert(ret.size() == num_to_return);
+    DCHECK_EQ(ret.size(), num_to_return);
     return ret;
   }
 
@@ -741,7 +741,7 @@ ColumnStore::snapshot_get_data(size_t scan_idx,
       }
     }
 
-    assert(false && "Snapshot -- Unknown Column.");
+    LOG(FATAL) << "Snapshot -- Unknown Column.";
   }
 }
 

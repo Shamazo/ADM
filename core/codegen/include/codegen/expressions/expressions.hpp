@@ -1586,10 +1586,10 @@ inline expressions::RecordProjection expression_t::operator[](
       if (*p2 == proj) return {*this, *p2};
 #ifndef NDEBUG
       cnt += p2->getAttrName() == proj.getAttrName();
+      DCHECK_EQ(cnt, 1)
+          << "Same attrName but not relName AND multiple such attrs";
 #endif
     }
-    DCHECK_EQ(cnt, 1)
-        << "Same attrName but not relName AND multiple such attrs";
     return {*this, *p};
   }
   if (!proj.getAttrName().empty() && proj.getAttrName()[0] == '$') {

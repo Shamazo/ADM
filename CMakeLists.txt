@@ -92,7 +92,10 @@ endif ("${isSystemDir}" STREQUAL "-1")
 #-----------------------------------------------------------------------
 # Setup Compilation flags
 #-----------------------------------------------------------------------
-set(CMAKE_BUILD_TYPE Debug)
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
+    "Default build type: Debug" FORCE)
+endif ()
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 
 set(CMAKE_CXX_STANDARD 20)

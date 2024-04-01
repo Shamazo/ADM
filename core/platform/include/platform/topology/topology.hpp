@@ -341,12 +341,15 @@ class topology {
   static void init();
 
   static inline const topology &getInstance() {
-    assert(instance.getCoreCount() > 0 && "Is topology initialized?");
+    CHECK_GT(instance.getCoreCount(), 0) << "Is topology initialized?";
     return instance;
   }
 
   [[nodiscard]] inline uint32_t getGpuCount() const { return gpu_cnt; }
 
+  /**
+   * @return The number of logical CPU cores in the system (i.e including HTs)
+   */
   [[nodiscard]] inline uint32_t getCoreCount() const { return core_cnt; }
 
   [[nodiscard]] inline uint32_t getCpuNumaNodeCount() const {
