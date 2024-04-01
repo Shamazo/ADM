@@ -141,6 +141,7 @@ target_link_libraries(${PROJECT_NAME}
   stduuid::stduuid
   PRIVATE
   magic_enum::magic_enum
+  lz4_static
   )
 
 include(proteus-lib)

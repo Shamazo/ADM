@@ -24,6 +24,8 @@
 #ifndef PROTEUS_BLOCK_NVME_PLUGIN_HPP
 #define PROTEUS_BLOCK_NVME_PLUGIN_HPP
 
+#include <rapidjson/document.h>
+
 #include <olap/plugins/binary-block-plugin.hpp>
 #include <olap/values/types.hpp>
 #include <variant>
@@ -47,6 +49,13 @@ class NvmePlugin : public BinaryBlockPlugin {
           partition_no(partition_no),
           _(0),
           block_no(block_no) {}
+
+    PageId_t(const PageId_t &other) noexcept
+        : cpu_numa_affinity(other.cpu_numa_affinity),
+          attribute_no(other.attribute_no),
+          partition_no(other.partition_no),
+          _(0),
+          block_no(other.block_no) {}
 
     static PageId_t from_ptr(void *ptr) noexcept {
       auto page_id = reinterpret_cast<uint64_t>(ptr);
@@ -84,14 +93,25 @@ class NvmePlugin : public BinaryBlockPlugin {
   static_assert(sizeof(PageId_t) == sizeof(void *));
 
   struct AttributePartMetaData {
+    enum DataFormat_t { COMPRESSED, UNCOMPRESSED };
+
     explicit AttributePartMetaData(const std::filesystem::path &md_path);
     ~AttributePartMetaData();
     uint64_t num_blocks;
     int fd;
     std::filesystem::path data_file_path;
-    std::vector<uint64_t> block_offsets;
-    std::vector<int> block_sizes;
-    bool compressed;
+    std::vector<uint64_t> block_offsets;  /// File offset in bytes of each block
+    std::vector<uint32_t> block_sizes;   /// on disk size of each block in bytes
+    std::vector<uint32_t> value_counts;  /// count of values in each block
+    std::vector<std::vector<uint32_t>>
+        chunk_sizes;  /// count of each compressed chunk in each block. Unset
+                      /// for uncompressed Attribute parts
+    int decompressed_chunk_size;    /// the size of each chunk after
+                                    /// decompression. The last chunk in a block
+                                    /// may be smaller.
+    int max_compressed_block_size;  /// the maximum compressed block size. Note
+                                    /// calculated and not stored in metadata
+    DataFormat_t data_format;
   };
 
   NvmePlugin(
@@ -104,6 +124,14 @@ class NvmePlugin : public BinaryBlockPlugin {
 
   ~NvmePlugin() override;
 
+  struct PageIOInfo {
+    const int fd;
+    const uint64_t offset;
+    const size_t size;
+    const std::vector<uint32_t> chunk_sizes;
+    const bool is_compressed;
+    const int decompressed_chunk_size;
+  };
   /**
    * Retrieves the IO information for a given page.
    * @param page_id The PageId_t of the page for which to retrieve the IO
@@ -111,8 +139,7 @@ class NvmePlugin : public BinaryBlockPlugin {
    * @return A tuple containing the file descriptor, offset, and size in bytes
    * of the page.
    */
-  std::tuple<int, uint64_t, size_t> getPageIoInfo(
-      const PageId_t &page_id) const;
+  [[nodiscard]] PageIOInfo getPageIoInfo(const PageId_t &page_id) const;
 
  protected:
   llvm::Value *getDataPointersForFile(OlapParallelContext *context, size_t i,

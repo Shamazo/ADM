@@ -1,0 +1,21 @@
+{
+  "data_format": "COMPRESSED",
+  "_comment": "generated with adm-partition-ssb",
+  "data_file": "ssb100_compressed_date.csv.d_datekey",
+  "num_blocks": 1,
+  "decompressed_chunk_size": 16384,
+  "block_sizes": [
+    10266
+  ],
+  "block_offsets": [
+    0
+  ],
+  "value_counts": [
+    2556
+  ],
+  "chunk_sizes": [
+    [
+      10266
+    ]
+  ]
+}

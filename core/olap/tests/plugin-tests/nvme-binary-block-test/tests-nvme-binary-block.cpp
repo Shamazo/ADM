@@ -30,6 +30,8 @@
 #include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <platform/common/common.hpp>
 
+#include "lib/operators/mem-move/compression.hpp"
+
 // `SCOPED_TRACE("")` raises this error
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wused-but-marked-unused"
@@ -47,6 +49,28 @@ TEST(NvmePluginAttributePartMetaDataTest, from_file_small) {
   EXPECT_EQ(x.block_sizes.back(), 1514240);
   EXPECT_EQ(x.block_offsets.front(), 0);
   EXPECT_EQ(x.block_offsets.back(), 10485760);
+  EXPECT_EQ(x.value_counts.front(), 524288);
+  EXPECT_EQ(x.value_counts.back(), 378560);
+  EXPECT_EQ(x.data_format,
+            NvmePlugin::AttributePartMetaData::DataFormat_t::UNCOMPRESSED);
+}
+
+TEST(NvmePluginAttributePartMetaDataTest, from_file_small_compressed) {
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/"
+      "ssb100_compressed_date.csv.d_datekey.metadata.json";
+  NvmePlugin::AttributePartMetaData x{md_path};
+  EXPECT_EQ(x.num_blocks, 1);
+  EXPECT_EQ(x.block_sizes.size(), 1);
+  EXPECT_EQ(x.block_offsets.size(), 1);
+  EXPECT_EQ(x.block_sizes.front(), 10266);
+  EXPECT_EQ(x.block_offsets.front(), 0);
+  EXPECT_EQ(x.value_counts.front(), 2556);
+  EXPECT_EQ(x.chunk_sizes.front().front(), 10266);
+  EXPECT_EQ(x.max_compressed_block_size, 10266);
+  EXPECT_EQ(x.decompressed_chunk_size, 16384);
+  EXPECT_EQ(x.data_format,
+            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
 }
 
 TEST(PageId_t, ptr_tagging) {
@@ -82,6 +106,40 @@ TEST(PageId_t, invertable) {
   EXPECT_EQ(from_cpp_cons.getAttributeNo(), y.getAttributeNo());
   EXPECT_EQ(from_cpp_cons.getPartitionNo(), y.getPartitionNo());
   EXPECT_EQ(from_cpp_cons.getBlockNo(), y.getBlockNo());
+}
+
+TEST(DecompressionTest, decompress_datekey) {
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/"
+      "ssb100_compressed_date.csv.d_datekey.metadata.json";
+  NvmePlugin::AttributePartMetaData partMetaData(md_path);
+  EXPECT_EQ(partMetaData.data_format,
+            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  EXPECT_EQ(partMetaData.num_blocks, 1);
+
+  auto read_size = partMetaData.block_sizes[0];
+  if (read_size % 512 != 0) {
+    read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+  }
+  char* compressed_buf =
+      static_cast<char*>(std::aligned_alloc(4096, read_size));
+  PCHECK(read(partMetaData.fd, compressed_buf, read_size) > 0);
+
+  auto decompressed_buf =
+      static_cast<char*>(std::aligned_alloc(4096, BlockManager::block_size));
+  auto decomp_span =
+      std::span<char>(decompressed_buf, BlockManager::block_size);
+  auto comp_span = std::span<char>(compressed_buf, partMetaData.block_sizes[0]);
+  ASSERT_EQ(decompress_block(partMetaData.chunk_sizes[0], comp_span,
+                             decomp_span, partMetaData.decompressed_chunk_size),
+            0)
+      << "decompression failed";
+
+  auto original_data = mmap_file("inputs/ssbm100/date.csv.d_datekey", PINNED);
+
+  EXPECT_EQ(memcmp(original_data.getData(), decompressed_buf,
+                   original_data.getFileSize()),
+            0);
 }
 
 uintptr_t hex_to_uintptr(const std::string& hex_str) {
@@ -322,7 +380,7 @@ TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
                                   1);  //  block number
 
   // Retrieve IO information for the test page
-  auto [fd, offset, size] = testPlugin.getPageIoInfo(testPageId);
+  auto page_io_info = testPlugin.getPageIoInfo(testPageId);
 
   // Load expected values from the metadata file
   NvmePlugin::AttributePartMetaData partMetaData(md_path);
@@ -331,8 +389,9 @@ TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
 
   // Can't test FD easily without a real file, but we can test the offset and
   // expected size
-  EXPECT_EQ(offset, expected_offset);
-  EXPECT_EQ(size, expected_size);
+  EXPECT_EQ(page_io_info.offset, expected_offset);
+  EXPECT_EQ(page_io_info.size, expected_size);
+  EXPECT_EQ(page_io_info.is_compressed, false);
 }
 
 TEST_F(NvmePluginTest, scan_and_move_one_col_one_part) {

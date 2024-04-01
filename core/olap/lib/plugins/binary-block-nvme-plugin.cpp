@@ -23,6 +23,7 @@
 
 #include <rapidjson/document.h>
 
+#include <magic_enum.hpp>
 #include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <variant>
 
@@ -108,7 +109,7 @@ NvmePlugin::NvmePlugin(
 
 NvmePlugin::~NvmePlugin() {}
 
-std::tuple<int, uint64_t, size_t> NvmePlugin::getPageIoInfo(
+NvmePlugin::PageIOInfo NvmePlugin::getPageIoInfo(
     const PageId_t &page_id) const {
   if (page_id.getAttributeNo() >= m_attribute_metadata.size() ||
       page_id.getPartitionNo() >=
@@ -137,8 +138,14 @@ std::tuple<int, uint64_t, size_t> NvmePlugin::getPageIoInfo(
   uint64_t offset = partMetaData.block_offsets[page_id.getBlockNo()];
   size_t size =
       static_cast<size_t>(partMetaData.block_sizes[page_id.getBlockNo()]);
+  if (partMetaData.data_format ==
+      NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED) {
+    auto chunk_sizes = partMetaData.chunk_sizes[page_id.getBlockNo()];
+    return {fd,          offset, size,
+            chunk_sizes, true,   partMetaData.decompressed_chunk_size};
+  }
 
-  return std::make_tuple(fd, offset, size);
+  return {fd, offset, size, {}, false, 0};
 }
 
 std::pair<llvm::Value *, llvm::Value *> NvmePlugin::getPartitionSizes(
@@ -510,15 +517,13 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
   CHECK(std::filesystem::exists(data_file_path))
       << "data_file does not exist: " << data_file_path;
 
-  CHECK(document.HasMember("data_format"));
-  CHECK(document["data_format"].IsString());
-
   CHECK(document.HasMember("block_sizes"));
   CHECK(document["block_sizes"].IsArray());
   auto block_sizes_json_array = document["block_sizes"].GetArray();
   block_sizes.reserve(block_sizes_json_array.Size());
   for (auto &v : block_sizes_json_array) {
-    block_sizes.push_back(v.GetInt());
+    CHECK(v.IsUint());
+    block_sizes.push_back(v.GetUint());
   }
 
   CHECK(document.HasMember("block_offsets"));
@@ -526,17 +531,66 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
   auto block_offsets_json_array = document["block_offsets"].GetArray();
   block_offsets.reserve(block_offsets_json_array.Size());
   for (auto &v : block_offsets_json_array) {
+    CHECK(v.IsUint64()) << " expected Uint64, is: "
+                        << magic_enum::enum_name(v.GetType());
     block_offsets.push_back(v.GetUint64());
   }
 
+  CHECK(document.HasMember("value_counts"));
+  CHECK(document["value_counts"].IsArray());
+  auto value_counts_json_array = document["value_counts"].GetArray();
+  value_counts.reserve(value_counts_json_array.Size());
+  for (auto &v : value_counts_json_array) {
+    CHECK(v.IsUint());
+    value_counts.push_back(v.GetUint());
+  }
+
   CHECK_EQ(block_offsets.size(), block_sizes.size());
+  CHECK_EQ(value_counts.size(), block_sizes.size());
 
   CHECK(document.HasMember("num_blocks"));
   CHECK(document["num_blocks"].IsUint64());
 
   num_blocks = document["num_blocks"].GetUint64();
-  compressed = false;
+  CHECK_EQ(block_sizes.size(), num_blocks);
 
+  CHECK(document.HasMember("data_format"));
+  CHECK(document["data_format"].IsString());
+  auto maybe_data_format =
+      magic_enum::enum_cast<DataFormat_t>(document["data_format"].GetString());
+  CHECK(maybe_data_format.has_value());
+  data_format = maybe_data_format.value();
+
+  if (data_format == DataFormat_t::COMPRESSED) {
+    CHECK(document.HasMember("chunk_sizes"));
+    CHECK(document["chunk_sizes"].IsArray());
+    auto chunk_sizes_json_array = document["chunk_sizes"].GetArray();
+    chunk_sizes.reserve(chunk_sizes_json_array.Size());
+    for (const auto &block_chunk_sizes_json : chunk_sizes_json_array) {
+      CHECK(block_chunk_sizes_json.IsArray());
+      std::vector<uint32_t> chunk_sizes_in_block;
+      chunk_sizes_in_block.reserve(block_chunk_sizes_json.Size());
+      for (const auto &chunk_size_json : block_chunk_sizes_json.GetArray()) {
+        CHECK(chunk_size_json.IsUint());
+        chunk_sizes_in_block.emplace_back(chunk_size_json.GetUint());
+      }
+      chunk_sizes.push_back(chunk_sizes_in_block);
+    }
+
+    // It is possible for a partition to be empty
+    if (block_sizes.size() > 0) {
+      max_compressed_block_size =
+          *std::max_element(block_sizes.begin(), block_sizes.end());
+    } else {
+      max_compressed_block_size = 0;
+    }
+
+    CHECK(document.HasMember("decompressed_chunk_size"));
+    CHECK(document["decompressed_chunk_size"].IsInt());
+    decompressed_chunk_size = document["decompressed_chunk_size"].GetInt();
+  }
+
+  DLOG(INFO) << "opening data file: " << data_file_path << "for " << md_path;
   fd = open(data_file_path.c_str(), O_DIRECT);
   PCHECK(fd > 0);
 #ifndef NDEBUG
@@ -548,8 +602,14 @@ NvmePlugin::AttributePartMetaData::~AttributePartMetaData() { close(fd); }
 
 uint64_t NvmePlugin::getRowGroupTupleCount(uint64_t partIdx,
                                            uint64_t blockIdx) {
-  // fixme integrate with catalog properly. Assuming all 4 byte sizes for now
-  return m_attribute_metadata[0][partIdx].block_sizes[blockIdx] / 4;
+#ifndef NDEBUG
+  auto values_in_first_col =
+      m_attribute_metadata[0][partIdx].value_counts[blockIdx];
+  for (const auto &attr_meta : m_attribute_metadata) {
+    CHECK_EQ(values_in_first_col, attr_meta[partIdx].value_counts[blockIdx]);
+  }
+#endif
+  return m_attribute_metadata[0][partIdx].value_counts[blockIdx];
 }
 
 uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
