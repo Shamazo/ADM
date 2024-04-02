@@ -47,9 +47,10 @@ void *getNvmePageIdPtr(uint8_t cpu_numa_affinity, uint8_t attribute_no,
 
 std::ostream &operator<<(std::ostream &out,
                          const NvmePlugin::PageId_t &page_id) {
-  return out << "PageId_t{cpu_numa_affinity=" << page_id.cpu_numa_affinity
-             << ", attribute_no=" << page_id.attribute_no
-             << ", partition_no=" << page_id.partition_no
+  return out << "PageId_t{cpu_numa_affinity="
+             << static_cast<int>(page_id.cpu_numa_affinity)
+             << ", attribute_no=" << static_cast<int>(page_id.attribute_no)
+             << ", partition_no=" << static_cast<int>(page_id.partition_no)
              << ", block_no=" << page_id.block_no << "}";
 }
 
