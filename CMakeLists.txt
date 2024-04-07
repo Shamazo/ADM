@@ -122,6 +122,9 @@ string(STRIP "${COMPILER_FLAGS} -O3" COMPILER_FLAGS)
 
 string(STRIP "${COMPILER_FLAGS} -gdwarf-4" COMPILER_FLAGS)
 
+# more reliable stack traces while debugging/profiling
+string(STRIP "${COMPILER_FLAGS} -fno-omit-frame-pointer" COMPILER_FLAGS)
+
 # this adds ASAN everywhere. We do this because ASAN can result in a different ABI
 # and because ASAN is most useful when everything is instrumented
 if (PROTEUS_ASAN_BUILD)
