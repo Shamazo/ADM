@@ -138,6 +138,7 @@ IoUringThreadUnsafe::~IoUringThreadUnsafe() {
     auto *io_info_ptr = m_IoInfo_free_set.pop();
     delete io_info_ptr;
   }
+  io_uring_queue_exit(&m_ring);
 }
 void IoUringThreadUnsafe::flush() {
   submit();
