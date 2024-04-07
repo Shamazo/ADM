@@ -23,6 +23,8 @@
 
 #include "mem-move-device.hpp"
 
+#include <lz4.h>
+
 #include <atomic>
 #include <codegen/jit/pipeline.hpp>
 #include <platform/memory/block-manager.hpp>
@@ -31,6 +33,7 @@
 #include <platform/util/timing.hpp>
 #include <platform/util/tracing.hpp>
 
+#include "compression.hpp"
 #include "lib/util/catalog.hpp"
 #include "olap/plugins/binary-block-nvme-plugin.hpp"
 
@@ -58,25 +61,69 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push(
 proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
     const proteus::managed_ptr &src, int target_device, cudaStream_t movestrm,
     workunit *wu) {
-  auto buff = BlockManager::h_get_buffer(target_device);
   auto page_id = NvmePlugin::PageId_t::from_ptr(src.get());
   DCHECK_NE(nvme_plugin, nullptr);
-  // TODO handle compression and moving to the GPU
-  auto [fd, offset, size] = nvme_plugin->getPageIoInfo(page_id);
-  DCHECK_LE(size, BlockManager::block_size);
-  wu->complete += 1;
+  const auto page_io_info = nvme_plugin->getPageIoInfo(page_id);
 
-  // TODO really should probably pass the result of IO to the callback
-  proteus::storage::IoUringThreadUnsafe::CompletionCallBack cb = [wu] {
-    std::atomic_fetch_add_explicit(&wu->complete, -1,
-                                   std::memory_order_relaxed);
-  };
+  auto buff = BlockManager::h_get_buffer(target_device);
 
-  if (size % 512 != 0) {
-    size += 512 - (size % 512);  // align to 512 bytes for O_DIRECT
+  if (page_io_info.is_compressed) {
+    // allocate temporary storage for IO target
+    // decompress into the target buffer
+    char *compressed_buff =
+        static_cast<char *>(std::aligned_alloc(4096, page_io_info.size));
+    auto decompressed_buff = static_cast<char *>(buff.get());
+    wu->complete += 1;
+
+    // decompressed buff will have a lifetime exceeding the callback, as the
+    // catcher spins on wu->complete.
+    // compressed buf ownership is moved into the lambda which frees it
+    auto cb = [page_id, wu, compressed_buff, io_size = page_io_info.size,
+               max_decomp_chunk_size = page_io_info.decompressed_chunk_size,
+               chunk_sizes = std::move(page_io_info.chunk_sizes),
+               decompressed_buff = decompressed_buff] {
+      auto decomp_span =
+          std::span<char>(decompressed_buff, BlockManager::block_size);
+      auto comp_span = std::span<char>(compressed_buff, io_size);
+
+      auto decomp_res = decompress_block(chunk_sizes, comp_span, decomp_span,
+                                         max_decomp_chunk_size);
+      CHECK(decomp_res == 0)
+          << "failed to decompress block for page: " << page_id;
+      std::free(compressed_buff);
+      std::atomic_fetch_add_explicit(&wu->complete, -1,
+                                     std::memory_order_relaxed);
+      DCHECK_GE(wu->complete, 0);
+    };
+    auto read_size = page_io_info.size;
+    if (read_size % 512 != 0) {
+      read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+    }
+    DCHECK_GE(read_size, 0);
+    DCHECK_EQ(read_size % 512, 0);
+    DCHECK_GE(page_io_info.offset, 0);
+    DCHECK_EQ(page_io_info.offset % 512, 0);
+
+    io_uring->read(page_io_info.fd, compressed_buff, read_size,
+                   page_io_info.offset, std::move(cb));
+
+  } else {
+    DCHECK_LE(page_io_info.size, BlockManager::block_size);
+    wu->complete += 1;
+
+    // TODO really should probably pass the result of IO to the callback
+    proteus::storage::IoUringThreadUnsafe::CompletionCallBackSuccess cb = [wu] {
+      std::atomic_fetch_add_explicit(&wu->complete, -1,
+                                     std::memory_order_relaxed);
+    };
+    auto read_size = page_io_info.size;
+    if (read_size % 512 != 0) {
+      read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+    }
+
+    io_uring->read(page_io_info.fd, buff.get(), read_size, page_io_info.offset,
+                   cb);
   }
-
-  io_uring->read(fd, buff.get(), size, offset, cb);
   return buff;
 }
 
@@ -488,6 +535,7 @@ void MemMoveDevice::open(Pipeline *pip) {
   char *data_buff = (char *)mmc->data_buffs;
   for (size_t i = 0; i < slack; ++i) {
     wu[i].data = ((void *)(data_buff + i * data_size));
+    wu[i].complete = 0;
     mmc->idle.push(wu + i);
   }
   // nvtxRangePushA("memmove::open2");
