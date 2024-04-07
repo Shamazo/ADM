@@ -189,6 +189,7 @@ void writeUncompressedChunksToFiles(
 
     std::ofstream metaFile(filePath.string() + ".metadata.json");
     metaFile << strbuf.GetString();
+    metaFile.flush();
   }
 }
 
@@ -207,8 +208,8 @@ std::vector<char> compressChunk(std::span<const char>& chunk) {
 
   const int compressed_size =
       LZ4_compress_default(chunk.data(), compressed_chunk.data(),
-                      chunk.size(),  // size of the input
-                      max_compressed_chunk_size);
+                           chunk.size(),  // size of the input
+                           max_compressed_chunk_size);
   CHECK_GT(compressed_size, 0)
       << "Failed to compress chunk with size " << chunk.size();
   compressed_chunk.resize(compressed_size);
@@ -271,7 +272,7 @@ std::vector<CompressedBlock> compressBlocks(
 
   std::vector<CompressedBlock> compressed_blocks;
   compressed_blocks.reserve(uncompressed_blocks.size());
-  for (int i = 0 ; i < compressed_block_futures.size(); ++i) {
+  for (int i = 0; i < compressed_block_futures.size(); ++i) {
     compressed_blocks.emplace_back(compressed_block_futures[i].get());
     uncompressed_blocks[i].resize(0);
   }
@@ -340,7 +341,9 @@ void writeCompressedBlocksToFiles(
       for (const auto& chunk : block.compressed_chunks) {
         CHECK_GT(chunk.size(), 0);
         auto wrote_bytes = write(data_file_fd, chunk.data(), chunk.size());
-        PCHECK(wrote_bytes == chunk.size()) << "failed to write to file. wrote_bytes: " << wrote_bytes << " to file " << filePath;
+        PCHECK(wrote_bytes == chunk.size())
+            << "failed to write to file. wrote_bytes: " << wrote_bytes
+            << " to file " << filePath;
         bytes_written += chunk.size();
         block_size += chunk.size();
         chunk_sizes.push_back(chunk.size());
@@ -503,18 +506,30 @@ int main(int argc, char* argv[]) {
       }
     }
   } else {
+    ThreadPool pool(4);
+    std::vector<std::future<void>> split_column_futures;
+    split_column_futures.reserve(data_file_paths.size());
     for (const auto& data_file_path : data_file_paths) {
-      LOG(INFO) << "Splitting file: " << data_file_path;
-      auto blocks = splitFileIntoBlocks(data_file_path, kBlockSize);
-      writeUncompressedChunksToFiles(blocks, output_directories,
-                                     data_file_path.filename().string());
-      fs::path dict_path = data_file_path.string() + ".dict";
-      if (fs::exists(dict_path)) {
-        for (const auto& output_dir : output_directories) {
-          fs::copy(dict_path, output_dir / dict_path.filename().string());
+      split_column_futures.emplace_back(pool.enqueue([&]() {
+        LOG(INFO) << "Splitting file: " << data_file_path;
+        auto blocks = splitFileIntoBlocks(data_file_path, kBlockSize);
+        writeUncompressedChunksToFiles(blocks, output_directories,
+                                       data_file_path.filename().string());
+        fs::path dict_path = data_file_path.string() + ".dict";
+        if (fs::exists(dict_path)) {
+          for (const auto& output_dir : output_directories) {
+            fs::copy(dict_path, output_dir / dict_path.filename().string());
+          }
         }
-      }
+      }));
     }
+    LOG(INFO) << "waiting for futures to complete";
+    CHECK_EQ(split_column_futures.size(), data_file_paths.size());
+    for (int i = 0; i < data_file_paths.size(); i++) {
+      LOG(INFO) << "waiting for future " << data_file_paths[i];
+      split_column_futures[i].get();
+    }
+    LOG(INFO) << "done";
   }
 
   return 0;
