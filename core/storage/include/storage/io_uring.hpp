@@ -34,7 +34,8 @@ namespace proteus::storage {
 
 class IoUringThreadUnsafe {
  public:
-  using CompletionCallBack = std::function<void()>;
+  using CompletionCallBackSuccess = std::function<void()>;
+  using CompletionCallBackFailure = std::function<void(io_uring_cqe*)>;
   /**
    * @param max_inflight_requests the maximum number of requests that can be in
    * progress at any time
@@ -49,7 +50,8 @@ class IoUringThreadUnsafe {
    * @param cb a call back that will be called on completion of this request.
    * @see submit
    */
-  void read(int fd, void* buf, size_t size, off_t start, CompletionCallBack cb);
+  void read(int fd, void* buf, size_t size, off_t start,
+            CompletionCallBackSuccess cb);
   /**
    *
    * @param fd valid file descriptor
@@ -61,7 +63,7 @@ class IoUringThreadUnsafe {
    * @note code path not tested/validated
    */
   void readv(int fd, const iovec* iov, int iovcnt, off_t offset,
-             CompletionCallBack cb);
+             CompletionCallBackSuccess cb);
 
   /**
    * Poll for completions and process callbacks. IoUringThreadUnsafe itself does
@@ -91,13 +93,13 @@ class IoUringThreadUnsafe {
    */
   void poll_until_requests_can_be_made();
   struct IoInfo {
-    CompletionCallBack call_back;
+    CompletionCallBackSuccess call_back_success;
+    CompletionCallBackFailure call_back_failure;
     struct iovec iov;
   };
   struct io_uring m_ring;
   threadsafe_set<IoInfo*> m_IoInfo_free_set;  /// threadsafe_set is overkill
   int m_count_pending_submissions;
-  proteus::memory::PinnedMemoryAllocator<IoInfo> m_IoInfo_allocator;
   const size_t m_max_inflight_requests;
 };
 

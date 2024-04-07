@@ -28,7 +28,6 @@ using namespace proteus::storage;
 IoUringThreadUnsafe::IoUringThreadUnsafe(size_t max_inflight_requests)
     : m_IoInfo_free_set(),
       m_count_pending_submissions(0),
-      m_IoInfo_allocator(),
       m_max_inflight_requests(max_inflight_requests) {
   // first argument is the SQ size. This has no impact on the total number of
   // inflight requests, just the number of requests you can submit at once.
@@ -46,40 +45,42 @@ IoUringThreadUnsafe::IoUringThreadUnsafe(size_t max_inflight_requests)
   // this is how we actually control inflight requests
   for (size_t i = 0; i < max_inflight_requests; i++) {
     IoInfo *io_info = new IoInfo;
-    // Something weird is happening between the allocator and the std::function
-    // leading to a segfault when the callback is destructed
-    //        static_cast<IoInfo
-    //        *>(m_IoInfo_allocator.allocate(sizeof(IoInfo)));
-    io_info->call_back = []() {};
     m_IoInfo_free_set.emplace(io_info);
   }
 }
 
 void IoUringThreadUnsafe::read(int fd, void *buf, size_t size, off_t start,
-                               CompletionCallBack cb) {
+                               CompletionCallBackSuccess cb) {
   poll_until_requests_can_be_made();
 
   IoInfo *user_info = m_IoInfo_free_set.pop();
-  user_info->call_back = cb;
+  user_info->call_back_success = cb;
   user_info->iov.iov_base = buf;
   user_info->iov.iov_len = size;
+  user_info->call_back_failure = [size, start](io_uring_cqe *res_cqe) {
+    CHECK(res_cqe->res >= 0)
+        << "io_uring request failed with: " << strerror(-res_cqe->res)
+        << " start_offset: " << start << "size: " << size;
+  };  // forcibly destruct the callback
+
   struct io_uring_sqe *sqe = io_uring_get_sqe(&m_ring);
   DCHECK_NE(sqe, nullptr)
       << "This should never happen because we restrict inflight IO";
   DCHECK_EQ(start % 512, 0) << "we only support O_DIRECT";
   DCHECK_EQ(size % 512, 0) << "we only support O_DIRECT";
   DCHECK_EQ(reinterpret_cast<uintptr_t>(buf) % 512, 0);
+  DCHECK_GE(start, 0);
   io_uring_prep_readv(sqe, fd, &user_info->iov, 1, start);
   io_uring_sqe_set_data(sqe, user_info);
   m_count_pending_submissions += 1;
 }
 
 void IoUringThreadUnsafe::readv(int fd, const iovec *iov, int iovcnt,
-                                off_t start, CompletionCallBack cb) {
+                                off_t start, CompletionCallBackSuccess cb) {
   poll_until_requests_can_be_made();
 
   IoInfo *user_info = m_IoInfo_free_set.pop();
-  user_info->call_back = cb;
+  user_info->call_back_success = cb;
   struct io_uring_sqe *sqe = io_uring_get_sqe(&m_ring);
   io_uring_prep_readv(sqe, fd, iov, iovcnt, start);
   io_uring_sqe_set_data(sqe, user_info);
@@ -103,10 +104,11 @@ void IoUringThreadUnsafe::poll() {
   // process completed events
   io_uring_for_each_cqe(&m_ring, head, cqe) {
     IoInfo *io_info = static_cast<IoInfo *>(io_uring_cqe_get_data(cqe));
-    CHECK(cqe->res >= 0) << "io_uring request failed with: "
-                         << strerror(-cqe->res);
-    io_info->call_back();
-    io_info->call_back = []() {};  // forcibly destruct the callback
+    if (cqe->res < 0) {
+      io_info->call_back_failure(cqe);
+    } else {
+      io_info->call_back_success();
+    }
     m_IoInfo_free_set.emplace(io_info);
     i++;
   }
@@ -135,7 +137,6 @@ IoUringThreadUnsafe::~IoUringThreadUnsafe() {
   for (size_t i = 0; i < m_max_inflight_requests; i++) {
     auto *io_info_ptr = m_IoInfo_free_set.pop();
     delete io_info_ptr;
-    //    m_IoInfo_allocator.deallocate(io_info_ptr, sizeof(io_info_ptr));
   }
 }
 void IoUringThreadUnsafe::flush() {
