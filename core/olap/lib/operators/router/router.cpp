@@ -63,6 +63,8 @@ void Router::generate_catch(OlapParallelContext *context) {
 
   auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
   const bool is_nvme_plugin = nvme_plugin != nullptr;
+  const bool non_scan_move =
+      wantedFields[0]->getRelationName().find("tmp") != std::string::npos;
 
   const ExpressionType *ptoid = pg->getOIDType();
 
@@ -153,7 +155,7 @@ void Router::generate_catch(OlapParallelContext *context) {
 
     variableBindings[tupleCnt] = context->toMem(cnt, context->createFalse());
 
-    if (is_nvme_plugin) {
+    if (is_nvme_plugin && !non_scan_move) {
       Value *tuple_cnt =
           Builder->CreateExtractValue(params, wantedFields.size() + 3);
       variableBindings[realTupleCnt] =

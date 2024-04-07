@@ -254,6 +254,10 @@ void MemMoveDevice::consume(OlapParallelContext *context,
   auto &llvmContext = context->getLLVMContext();
   auto Builder = context->getBuilder();
   auto insBB = Builder->GetInsertBlock();
+  // TODO a bit of a hack to not manipulate tuple cnts for non-scan moves
+  const bool non_scan_move =
+      (wantedFields[0]->getRelationName().find("tmp") != std::string::npos) ||
+      (wantedFields[0]->getRelationName().find("Pelago") != std::string::npos);
 
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
 
@@ -355,18 +359,23 @@ void MemMoveDevice::consume(OlapParallelContext *context,
   }
 
   {
-    // if we have anyPage Ids we need to update tupleCnt to store a tupleCnt
-    // instead of blockCnt, which the NvmePlugin stores in `tupleCnt`
-    auto ifAnyPageId = context->gen_if({any_ptr_is_page_id});
-    auto thenAnyIsPageId = std::move(ifAnyPageId)([&]() {  // NOLINT
-      RecordAttribute actualTupleCnt{wantedFields[0]->getRelationName(),
-                                     "tupleCnt", pg->getOIDType()};
-      ProteusValueMemory mem_tupleCntWrapper = childState[actualTupleCnt];
-      llvm::Value *mem_tupleCnt = Builder->CreateLoad(
-          mem_tupleCntWrapper.mem->getType()->getPointerElementType(),
-          mem_tupleCntWrapper.mem);
-      Builder->CreateStore(mem_tupleCnt, mem_cntWrapper.mem);
-    });
+    if (!non_scan_move) {
+      // if we have anyPage Ids we need to update tupleCnt to store a tupleCnt
+      // instead of blockCnt, which the NvmePlugin stores in `tupleCnt`
+      auto ifAnyPageId = context->gen_if({any_ptr_is_page_id});
+
+      auto thenAnyIsPageId = std::move(ifAnyPageId)([&]() {  // NOLINT
+        RecordAttribute actualTupleCnt{wantedFields[0]->getRelationName(),
+                                       "tupleCnt", pg->getOIDType()};
+        ProteusValueMemory mem_tupleCntWrapper = childState[actualTupleCnt];
+        llvm::Value *mem_tupleCnt = Builder->CreateLoad(
+            mem_tupleCntWrapper.mem->getType()->getPointerElementType(),
+            mem_tupleCntWrapper.mem);
+        //      context->log(mem_tupleCnt);
+        Builder->CreateStore(mem_tupleCnt, mem_cntWrapper.mem);
+
+      });
+    }
     // note, all of this is a bit hacky, we ignore size in the above and below
     // loops for page ids, but we could actually just store the size/fd/offset
     // in the Operator state
