@@ -25,6 +25,7 @@
 
 #include <magic_enum.hpp>
 #include <olap/plugins/binary-block-nvme-plugin.hpp>
+#include <regex>
 #include <variant>
 
 #include "lib/operators/operators.hpp"
@@ -90,10 +91,36 @@ NvmePlugin::NvmePlugin(
   // TODO fix m_attribute_metadata move / copy constructors
   m_attribute_metadata.reserve(whichFields.size());
   for (auto &field : whichFields) {
+    size_t blocks_for_field = 0;
     m_attribute_metadata.push_back({});
     m_attribute_metadata.back().reserve(Nparts);
     for (auto &attr_part_meta : field.second) {
       m_attribute_metadata.back().emplace_back(attr_part_meta);
+      blocks_for_field += m_attribute_metadata.back().back().num_blocks;
+      //      LOG(INFO) << field.first->getAttrName() << " has "
+      //                << m_attribute_metadata.back().back().num_blocks
+      //                << " blocks in partition "
+      //                << m_attribute_metadata.back().back().data_file_path;
+    }
+    LOG(INFO) << field.first->getAttrName() << " has " << blocks_for_field
+              << " total blocks";
+    //  TODO store dict path in metadata
+    //  this is ugly
+    const auto data_path =
+        m_attribute_metadata.back()[0].data_file_path.string();
+    std::string dict_path;
+    auto &attr = field.first;
+    if (attr->getOriginalType()->getTypeID() == DSTRING) {
+      std::regex pattern("(.*)(_[0-9]+_[0-9]+)");
+      std::smatch matches;
+      // fetch the dictionary
+      if (std::regex_search(data_path, matches, pattern)) {
+        dict_path = matches[1];
+      } else {
+        LOG(FATAL) << "bad regex";
+      }
+      void *dict = StorageManager::getInstance().getDictionaryOf(dict_path);
+      ((DStringType *)(attr->getOriginalType()))->setDictionary(dict);
     }
   }
 
