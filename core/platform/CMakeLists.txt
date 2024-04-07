@@ -119,7 +119,6 @@ target_link_libraries(platform
   NUMA::NUMA
   RDMA::RDMA
   ${CUDA_LIBS}
-  cli-flags::cli-flags
   stduuid::stduuid
   PRIVATE
   magic_enum::magic_enum
