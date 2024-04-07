@@ -74,7 +74,18 @@ TEST(NvmePluginAttributePartMetaDataTest, from_file_small_compressed) {
 }
 
 TEST(PageId_t, ptr_tagging) {
-  void* page_id_as_ptr = getNvmePageIdPtr(1, 2, 3, 4);
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+  std::vector<std::filesystem::path> attr_md{md_path, md_path};
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
+  auto context = OlapParallelContext("test");
+  NvmePlugin testPlugin(&context, relation_md);
+
+  void* page_id_as_ptr = getNvmePageIdPtr(&testPlugin, 0, 0, 0);
 
   EXPECT_TRUE(NvmePlugin::PageId_t::isPageIdPtr(page_id_as_ptr));
   constexpr uintptr_t full_mask = 1ULL << 63;
@@ -90,19 +101,29 @@ TEST(PageId_t, ptr_tagging) {
 }
 
 TEST(PageId_t, invertable) {
-  const uint8_t expected_cpu_numa_affinity = 1;
-  const uint8_t expected_attribute_no = 2;
-  const uint8_t expected_partition_no = 3;
-  const uint32_t expected_block_no = 4;
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+  std::vector<std::filesystem::path> attr_md{md_path, md_path};
+  RecordType my_record_type = rel("customer.csv")(Int("c_custkey"));
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_custkey"], attr_md);
+  auto context = OlapParallelContext("test");
+  NvmePlugin testPlugin(&context, relation_md);
 
-  NvmePlugin::PageId_t from_cpp_cons{expected_cpu_numa_affinity,
-                                     expected_attribute_no,
+  const uint8_t cpu_numa_affinity =
+      1;  /// can't test since it depends on affinity of the test file location
+  const uint8_t expected_attribute_no = 0;
+  const uint8_t expected_partition_no = 0;
+  const uint32_t expected_block_no = 1;
+
+  NvmePlugin::PageId_t from_cpp_cons{cpu_numa_affinity, expected_attribute_no,
                                      expected_partition_no, expected_block_no};
   void* page_id_as_ptr = getNvmePageIdPtr(
-      from_cpp_cons.getCpuNumaAffinity(), from_cpp_cons.getAttributeNo(),
+      &testPlugin, from_cpp_cons.getAttributeNo(),
       from_cpp_cons.getPartitionNo(), from_cpp_cons.getBlockNo());
   NvmePlugin::PageId_t y = NvmePlugin::PageId_t::from_ptr(page_id_as_ptr);
-  EXPECT_EQ(from_cpp_cons.getCpuNumaAffinity(), y.getCpuNumaAffinity());
   EXPECT_EQ(from_cpp_cons.getAttributeNo(), y.getAttributeNo());
   EXPECT_EQ(from_cpp_cons.getPartitionNo(), y.getPartitionNo());
   EXPECT_EQ(from_cpp_cons.getBlockNo(), y.getBlockNo());

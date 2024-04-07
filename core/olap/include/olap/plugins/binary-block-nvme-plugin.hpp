@@ -28,7 +28,14 @@
 
 #include <olap/plugins/binary-block-plugin.hpp>
 #include <olap/values/types.hpp>
+#include <platform/util/linux-exec.hpp>
+#include <regex>
 #include <variant>
+
+class NvmePlugin;
+extern "C" void *getNvmePageIdPtr(NvmePlugin *pg, uint8_t attribute_no,
+                                  uint8_t partition_no,
+                                  uint32_t block_no) noexcept;
 
 class NvmePlugin : public BinaryBlockPlugin {
  public:
@@ -112,6 +119,7 @@ class NvmePlugin : public BinaryBlockPlugin {
     int max_compressed_block_size;  /// the maximum compressed block size. Note
                                     /// calculated and not stored in metadata
     DataFormat_t data_format;
+    int numa_node;
   };
 
   NvmePlugin(
@@ -173,17 +181,67 @@ class NvmePlugin : public BinaryBlockPlugin {
   std::vector<uint64_t> part_sizes;  /// in blocks
   void nextEntry(OlapParallelContext *context);
 
+  static int fileNameToNumaNodeIndex(std::filesystem::path path) {
+    CHECK(std::filesystem::exists(path));
+
+    std::string command = "df " + path.string() + " --output=source";
+    auto [dfOutput, returnCode] = execCommand(command);
+    CHECK_EQ(returnCode, 0)
+        << "Failed to df file: " << path.string() << " output: " << dfOutput
+        << "  Are you sure it exists?";
+
+    // df output looks like this:
+    //  nicholso@diascld36:~$ df /scratch --output=source
+    //  Filesystem
+    //  /dev/sdb1
+    // we care about the second line, which gets us the device this file is on
+    auto ssDfOutput = std::stringstream{dfOutput};
+    auto splitDfOutput = std::vector<std::string>{};
+    for (std::string line; std::getline(ssDfOutput, line, '\n');)
+      splitDfOutput.push_back(line);
+    assert(splitDfOutput.size() == 2);
+
+    std::string partition = splitDfOutput.at(1);
+    // partitions is something like "/dev/nvme0n1p1"
+    // we want to drop this final p1, as we don't care about partitions, we need
+    // the dev path with namespace
+    std::regex nvme_regex("/dev/nvme[0-9]+n[0-9]+p[0-9]");
+    std::regex sata_regex("/dev/sda[0-9]");
+    std::smatch device_path;
+    std::string dev_path_str;
+    if (std::regex_search(partition, device_path, nvme_regex)) {
+      // if there is a match, there should only be 1
+      assert(device_path.size() == 1 && "Device regex seriously broken");
+
+      std::string dev_path_str_with_p = device_path[0];
+      //    TODO this breaks portability, lopping off the final p1, see
+      //    topology.hpp for details
+      dev_path_str =
+          dev_path_str_with_p.substr(0, dev_path_str_with_p.size() - 2);
+    } else if (std::regex_search(partition, device_path, sata_regex)) {
+      LOG(WARNING) << "File is not on a NVMe drive, assuming NUMA 0 affinity: "
+                   << path;
+      return 0;
+    } else {
+      LOG(FATAL) << "Failed to match device path in df output: " << partition;
+    }
+    const auto &topo = topology::getInstance();
+    std::reference_wrapper<const topology::numanode> drive =
+        topo.devPathToNvme(dev_path_str);
+
+    return topo.devPathToNvme(dev_path_str).getLocalCPUNumaNode().index_in_topo;
+  }
+
   friend uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
                                         NvmePlugin *pg);
+
+  friend void *getNvmePageIdPtr(NvmePlugin *pg, uint8_t attribute_no,
+                                uint8_t partition_no,
+                                uint32_t block_no) noexcept;
 };
 
 uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,
                                NvmePlugin *pg);
-
-extern "C" {
-void *getNvmePageIdPtr(uint8_t cpu_numa_affinity, uint8_t attribute_no,
-                       uint8_t partition_no, uint32_t block_no) noexcept;
-}
 
 std::ostream &operator<<(std::ostream &out,
                          const NvmePlugin::PageId_t &page_id);

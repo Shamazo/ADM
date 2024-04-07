@@ -35,8 +35,14 @@
 using namespace llvm;
 
 extern "C" {
-void *getNvmePageIdPtr(uint8_t cpu_numa_affinity, uint8_t attribute_no,
+void *getNvmePageIdPtr(NvmePlugin *pg, uint8_t attribute_no,
                        uint8_t partition_no, uint32_t block_no) noexcept {
+  DCHECK_LT(attribute_no, pg->m_attribute_metadata.size());
+  DCHECK_LT(partition_no, pg->m_attribute_metadata[attribute_no].size());
+  DCHECK_LT(partition_no,
+            pg->m_attribute_metadata[attribute_no][partition_no].num_blocks);
+  const uint8_t cpu_numa_affinity =
+      pg->m_attribute_metadata[attribute_no][partition_no].numa_node;
   uint64_t page_id =
       (uint64_t)(cpu_numa_affinity | NvmePlugin::PageId_t::page_id_bit_in_numa)
           << 56 |
@@ -432,9 +438,13 @@ void NvmePlugin::scan(const ::Operator &producer,
     // _should_ be fine, but really we should check
     Value *block_idx_32bit =
         Builder->CreateTruncOrBitCast(block_idx, Builder->getInt32Ty());
+    Value *this_ptr = context->getBuilder()->CreateIntToPtr(
+        context->createInt64((uintptr_t)this),
+        Type::getInt8PtrTy(context->getLLVMContext()));
+
     Value *page_id = context->gen_call(
-        getNvmePageIdPtr, {context->createInt8(0), context->createInt8(i),
-                           part_idx, block_idx_32bit});
+        getNvmePageIdPtr,
+        {this_ptr, context->createInt8(i), part_idx, block_idx_32bit});
 
     string bufVarStr = string(bufVar);
     string currBufVar = bufVarStr + "." + attr.getAttrName() + "_ptr";
@@ -617,7 +627,7 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     CHECK(document["decompressed_chunk_size"].IsInt());
     decompressed_chunk_size = document["decompressed_chunk_size"].GetInt();
   }
-
+  numa_node = fileNameToNumaNodeIndex(data_file_path);
   DLOG(INFO) << "opening data file: " << data_file_path << "for " << md_path;
   fd = open(data_file_path.c_str(), O_DIRECT);
   PCHECK(fd > 0);
