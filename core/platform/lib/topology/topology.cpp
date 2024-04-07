@@ -209,7 +209,9 @@ static size_t fixSize(size_t bytes) {
 }
 
 void *topology::cpunumanode::alloc(size_t bytes) const {
-  auto prof_range = profiling::ProfileRegion("topology::cpunumanode::alloc");
+  static profiling::ProfileRegionType pr_type =
+      profiling::ProfileRegionType("topology::cpunumanode::alloc");
+  profiling::ProfileRegion pr(pr_type);
   bytes = fixSize(bytes);
   void *mem = mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);

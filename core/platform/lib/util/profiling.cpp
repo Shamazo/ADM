@@ -34,22 +34,20 @@
 
 namespace profiling {
 void resume() {
-#if __has_include("nvtx3/nvToolsExt.h")
   for (const auto &gpu : topology::getInstance().getGpus()) {
     set_exec_location_on_scope d{gpu};
+    // Defined by gpu-common.hpp if NCUDA is defined
     gpu_run(cudaProfilerStart());
   }
-#endif
   __itt_resume();
 }
 
 void pause() {
-#if __has_include("nvtx3/nvToolsExt.h")
   for (const auto &gpu : topology::getInstance().getGpus()) {
     set_device_on_scope d{gpu};
+    // Defined by gpu-common.hpp if NCUDA is defined
     gpu_run(cudaProfilerStop());
   }
-#endif
   __itt_pause();
 }
 

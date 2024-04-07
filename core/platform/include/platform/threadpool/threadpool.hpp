@@ -101,11 +101,7 @@ class ThreadPool {
             }
 
             pthread_setname_np(pthread_self(), "working");
-            {
-              auto region =
-                  profiling::ProfileRegion("ThreadPool::executing-task");
-              task();
-            }
+            { task(); }
           }
         },
         workers.size());

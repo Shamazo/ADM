@@ -45,22 +45,62 @@ namespace profiling {
 void resume();
 void pause();
 
+class ProfileRegion;
+class ProfileRegionType {
+ public:
+#if __has_include("ittnotify.h")
+  /**
+   * Construct a new profiling region type
+   * @param region_name name to associate with the region type, depending on the
+   * profiler a ProfileRegion constructed with this ProfileRegionType will be
+   * displayed with this string.
+   * @details For at least VTune, there is an upperbound on the number of
+   * ProfileRegionTypes (`__itt_event`) that can be created. Likely due to
+   * __itt_event being type def'd as an int. This is not enforced by this class.
+   */
+  [[nodiscard]] explicit ProfileRegionType(const std::string &region_name)
+      : m_region_name(region_name),
+        m_event(__itt_event_create(m_region_name.c_str(),
+                                   m_region_name.length())) {}
+#else
+  [[nodiscard]] explicit ProfileRegionType(const std::string &region_name)
+      : m_region_name(region_name) {}
+#endif
+
+ private:
+  const std::string m_region_name;
+#if __has_include("ittnotify.h")
+  const __itt_event m_event;
+#endif
+  friend ProfileRegion;
+};
+
 /**
  * Mark a region in a thread
  *
- * Region begins when ProfileRegion is constructed and ends with destructed
+ * Region begins when ProfileRegion is constructed and ends when destructed
+ *
  */
 class ProfileRegion {
  public:
 #if __has_include("ittnotify.h")
-  [[nodiscard]] explicit ProfileRegion(const std::string &region_name)
-      : m_event(__itt_event_create(region_name.c_str(), region_name.length())) {
+  /**
+   * Begin a new profiling region
+   * @param profile_region_type previously constructed ProfileRegionType to
+   * distinguish regions in a profiler
+   * @details the lifetime of ProfileRegion does not need to be fully
+   * encapsulated by the ProfileRegionType
+   */
+  [[nodiscard]] explicit ProfileRegion(
+      const ProfileRegionType &profile_region_type)
+      : m_event(profile_region_type.m_event) {
 #else
-  [[nodiscard]] explicit ProfileRegion(const std::string &region_name) {
+  [[nodiscard]] explicit ProfileRegion(
+      const ProfileRegionType &profile_region_type) {
 #endif
 
 #if __has_include("nvtx3/nvToolsExt.h")
-    nvtxRangePushA(region_name.c_str());
+    nvtxRangePushA(profile_region_type.m_region_name.c_str());
 #endif
 
 #if __has_include("ittnotify.h")
