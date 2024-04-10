@@ -64,9 +64,9 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
 
   RelBuilder distribute_build(RelBuilder input) override {
     auto rel = input
-                   .router(getDOP(), getSlack(), RoutingPolicy::LOCAL,
+                   .router(getDOP(), scan_rounter_slack, RoutingPolicy::LOCAL,
                            getDevice(), getAffinitizer())
-                   .memmove(8, getDevice());
+                   .memmove(scan_memmove_slack, getDevice());
 
     if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
 
@@ -77,11 +77,14 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   CPUOnlyNVMeMorsel(std::vector<std::string> input_dirs,
                     const std::string &catalog_path,
                     decltype(input_sizes) input_sizes, bool allowMoves,
+                    size_t scan_memmove_slack, size_t scan_rounter_slack,
                     size_t slack)
       : InputPrefixQueryShaper("N/A", input_sizes, allowMoves, slack),
         input_dirs(sort_vector(
             input_dirs)),  // sort so we always iterate in the same order
-        catalog_path(catalog_path) {}
+        catalog_path(catalog_path),
+        scan_memmove_slack(scan_memmove_slack),
+        scan_rounter_slack(scan_rounter_slack) {}
 
  protected:
   std::vector<std::filesystem::path> getMdForAttribute(
@@ -182,6 +185,8 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
     std::sort(paths.begin(), paths.end());
     return paths;
   }
+  size_t scan_memmove_slack;
+  size_t scan_rounter_slack;
 };
 };  // namespace proteus
 
