@@ -29,18 +29,30 @@ IoUringThreadUnsafe::IoUringThreadUnsafe(size_t max_inflight_requests)
     : m_IoInfo_free_set(),
       m_count_pending_submissions(0),
       m_max_inflight_requests(max_inflight_requests) {
+  io_uring probe_ring;
+  int probe_success = io_uring_queue_init(1, &probe_ring, 0);
+  CHECK(probe_success == 0)
+      << "failed to init probe io_uring: " << strerror(-probe_success);
+
   // first argument is the SQ size. This has no impact on the total number of
   // inflight requests, just the number of requests you can submit at once.
-  int init_success =
-      io_uring_queue_init(max_inflight_requests, &m_ring,
-                          IORING_SETUP_IOPOLL | IORING_SETUP_SINGLE_ISSUER |
-                              IORING_SETUP_COOP_TASKRUN);
+  int init_success = io_uring_queue_init(
+      max_inflight_requests, &m_ring,
+      IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_COOP_TASKRUN);
+  // TODO IOPOLL results in no completions ever on dias49 even though it should
+  // and we are specifically calling io_uring_submit_and_get_events
+  // https://github.com/axboe/liburing/issues/385
+  //  IORING_SETUP_IOPOLL |
   CHECK(init_success == 0) << "failed to init ring: "
                            << strerror(-init_success);
 
-  int register_rfd_success = io_uring_register_ring_fd(&m_ring);
-  CHECK(register_rfd_success == 1)
-      << "failed to register ring fd: " << strerror(-register_rfd_success);
+  // Minor optimization for io_uring when onl a single thread is accessing it
+  if (probe_ring.features & IORING_FEAT_REG_REG_RING) {
+    int register_rfd_success = io_uring_register_ring_fd(&m_ring);
+    CHECK(register_rfd_success == 1)
+        << "failed to register ring fd: " << strerror(-register_rfd_success);
+  }
+  io_uring_queue_exit(&probe_ring);
 
   // this is how we actually control inflight requests
   for (size_t i = 0; i < max_inflight_requests; i++) {
