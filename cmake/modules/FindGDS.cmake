@@ -13,15 +13,24 @@ pkg_check_modules(PC_GDS QUIET gds)
 # cuda 11.7.1 has v1.3.1
 # cufile.so does not link to any other nvidia toolkit libraries and I think just depends on the kernel driver / nvidia-fs modules
 # it does link to libstdc++.so.6, but this is fine because none of std:: is used in the header/interface
-find_path(GDS_INCLUDE_DIRS
-    NAMES cufile.h
-    HINTS /usr/local/cuda-12.3/include
-    )
+#find_path(GDS_INCLUDE_DIRS
+#    NAMES cufile.h
+#    HINTS /scratch/cufile
+#    )
+#
+#find_library(GDS_LIBRARIES
+#    NAMES cufile.so.1.8.1
+#    HINTS /usr/local/cuda-12.3/lib64
+#    )
 
-find_library(GDS_LIBRARIES
-    NAMES cufile
-    HINTS /usr/local/cuda-12.3/lib64
-    )
+set(GDS_INCLUDE_DIRS  /scratch/cufile)
+
+if(EXISTS "/usr/local/cuda-12.3/lib64/libcufile.so.1.8.1")
+    set(GDS_LIBRARIES  /usr/local/cuda-12.3/lib64/libcufile.so.1.8.1)
+elseif(EXISTS "/usr/local/cuda-12.2/lib64/libcufile.so.1.7.1")
+    set(GDS_LIBRARIES  /usr/local/cuda-12.2/lib64/libcufile.so.1.7.1)
+endif()
+
 
 set(GDS_VERSION ${PC_GDS_VERSION})
 

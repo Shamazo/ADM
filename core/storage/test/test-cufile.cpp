@@ -25,7 +25,8 @@
 // Nvidia wrote a bad doxygen string, but that is not our problem
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdocumentation"
-#include <cufile.h>
+// #include <cufile.h>
+#include <cufile_181/cufile.h>
 #pragma clang diagnostic pop
 #include <gtest/gtest.h>
 
@@ -86,7 +87,8 @@ loadBlockFunc gpuDirectGetLoadCustKeyBlockfunc() {
 
     status = cuFileDriverOpen();
     if (status.err != CU_FILE_SUCCESS) {
-      LOG(ERROR) << " cuFile driver failed to open: " << status.err << ", " << cufileop_status_error(status.err);
+      LOG(ERROR) << " cuFile driver failed to open: " << status.err << ", "
+                 << cufileop_status_error(status.err);
       close(fd);
       return proteus::managed_ptr(nullptr);
     }
@@ -160,11 +162,70 @@ TEST(cuFile, smokeTestCuFile) {
   BlockManager::release_buffer(std::move(gpuBlock));
 }
 
+TEST(cuFile, streamingCuFileInterface) {
+  auto& topo = topology::getInstance();
+  if (topo.getGpus().size() < 1) {
+    LOG(WARNING) << "No GPUS, skipping test;";
+    GTEST_SKIP();
+  }
 
-TEST(cuFile, streamingCuFileInterface){
-  LOG(WARNING) << "TODO: implement when GDS is fixed";
-  GTEST_SKIP();
+  set_exec_location_on_scope d{topo.getGpus().at(0)};
 
+  size_t readSize = 2097152ul;
+  ssize_t ret;
+  CUfileError_t status;
 
+  std::string fileName = "inputs/ssbm100/customer.csv.c_custkey";
+
+  auto fd = open(fileName.c_str(), O_DIRECT | O_RDONLY);
+  ASSERT_NE(fd, -1) << "Failed to open file for reading: " << fileName.c_str();
+
+  status = cuFileDriverOpen();
+  ASSERT_EQ(status.err, CU_FILE_SUCCESS)
+      << " cuFile driver failed to open: " << status.err << ", "
+      << cufileop_status_error(status.err);
+
+  // register a file handle
+  CUfileDescr_t cf_descr;
+  CUfileHandle_t cf_handle;
+  memset((void*)&cf_descr, 0, sizeof(CUfileDescr_t));
+  cf_descr.handle.fd = fd;
+  cf_descr.type = CU_FILE_HANDLE_TYPE_OPAQUE_FD;
+  status = cuFileHandleRegister(&cf_handle, &cf_descr);
+  ASSERT_EQ(status.err, CU_FILE_SUCCESS)
+      << "cuFileHandleRegister fd " << fd << " status " << status.err;
+
+  // allocate memory on the gpu to load the 2MiB to
+  auto destinationMemory = BlockManager::h_get_buffer(0);
+  ssize_t bytes_read = 0;
+  auto strm = createNonBlockingStream();
+  status = cuFileStreamRegister(strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
+                                          CU_FILE_STREAM_FIXED_BUF_OFFSET |
+                                          CU_FILE_STREAM_FIXED_FILE_OFFSET |
+                                          CU_FILE_STREAM_FIXED_FILE_SIZE);
+  ASSERT_EQ(status.err, CU_FILE_SUCCESS)
+      << "cuFileHandleRegister fd " << fd << " status " << status.err;
+  off_t offset = 0;
+  status = cuFileReadAsync(cf_handle, destinationMemory.get(), &readSize,
+                           &offset, &offset, &bytes_read, strm);
+  ASSERT_EQ(status.err, CU_FILE_SUCCESS)
+      << "Failed to cuFileReadAsync" << status.err;
+
+  auto copied_to_cpu_buffer = BlockManager::get_buffer();
+  gpu_run(cudaMemcpy(copied_to_cpu_buffer.get(), destinationMemory.get(),
+                     readSize, cudaMemcpyKind::cudaMemcpyDefault));
+
+  gpu_run(cuStreamSynchronize(strm));
+  status = cuFileStreamDeregister(strm);
+  ASSERT_EQ(status.err, CU_FILE_SUCCESS)
+      << "failed to cuFileStreamDeregister status: " << status.err;
+  syncAndDestroyStream(strm);
+
+  auto cpu_loaded = getLoadCustKeyBlockfunc()(-1);
+  EXPECT_EQ(memcmp(copied_to_cpu_buffer.get(), cpu_loaded.get(), readSize), 0);
+  EXPECT_EQ(readSize, bytes_read);
+
+  BlockManager::release_buffer(std::move(copied_to_cpu_buffer));
+  BlockManager::release_buffer(std::move(destinationMemory));
+  BlockManager::release_buffer(std::move(cpu_loaded));
 }
-
