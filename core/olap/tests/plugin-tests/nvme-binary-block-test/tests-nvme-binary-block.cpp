@@ -153,7 +153,7 @@ TEST(DecompressionTest, decompress_datekey) {
   auto comp_span = std::span<char>(compressed_buf, partMetaData.block_sizes[0]);
   ASSERT_EQ(decompress_block(partMetaData.chunk_sizes[0], comp_span,
                              decomp_span, partMetaData.decompressed_chunk_size),
-            0)
+            partMetaData.value_counts[0] * sizeof(int32_t))
       << "decompression failed";
 
   auto original_data = mmap_file("inputs/ssbm100/date.csv.d_datekey", PINNED);

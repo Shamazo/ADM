@@ -128,6 +128,13 @@ target_compile_features(${PROJECT_NAME}
   cxx_std_20
   )
 
+set(OLAP_PRIVATE_LIBS magic_enum::magic_enum lz4_static)
+find_package(nvcomp)
+if (nvcomp_FOUND)
+  list(APPEND OLAP_PRIVATE_LIBS nvcomp::nvcomp)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_NVCOMP)
+endif ()
+
 # Depend on a library that we defined in the top-level file
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
@@ -140,8 +147,7 @@ target_link_libraries(${PROJECT_NAME}
   rt # for shared memory
   stduuid::stduuid
   PRIVATE
-  magic_enum::magic_enum
-  lz4_static
+  ${OLAP_PRIVATE_LIBS}
   )
 
 include(proteus-lib)

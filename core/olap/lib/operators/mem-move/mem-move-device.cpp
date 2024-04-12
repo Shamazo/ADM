@@ -88,7 +88,7 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
 
       auto decomp_res = decompress_block(chunk_sizes, comp_span, decomp_span,
                                          max_decomp_chunk_size);
-      CHECK(decomp_res == 0)
+      CHECK_GT(decomp_res, 0)
           << "failed to decompress block for page: " << page_id;
       std::free(compressed_buff);
       std::atomic_fetch_add_explicit(&wu->complete, -1,

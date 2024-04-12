@@ -31,13 +31,13 @@
 #include "lz4.h"
 
 /**
- *
- * @return 0 on success, a negative value on failure
+ * @return a positive integer on success indicating the number of bytes
+ * decompressed, a negative value on failure
  */
-[[nodiscard]] int decompress_block(const std::vector<uint32_t>& chunk_sizes,
-                                   std::span<char> compressed_buffer,
-                                   std::span<char> output_buffer,
-                                   int max_decomp_chunk_size) {
+[[nodiscard]] int decompress_block(
+    const std::vector<uint32_t>& chunk_sizes,
+    const std::span<const char> compressed_buffer,
+    std::span<char> output_buffer, int max_decomp_chunk_size) {
   int comp_idx = 0;
   int decomp_idx = 0;
   for (const auto& chunk_size : chunk_sizes) {
@@ -54,9 +54,19 @@
 
     comp_idx += chunk_size;
     decomp_idx += decompressed_size;
+    DCHECK_LE(decomp_idx, output_buffer.size());
   }
-  DCHECK_LE(decomp_idx, output_buffer.size());
-  return 0;
+  return decomp_idx;
+}
+
+[[nodiscard]] int decompress_block(const std::vector<uint32_t>& chunk_sizes,
+                                   std::span<char> compressed_buffer,
+                                   std::span<char> output_buffer,
+                                   int max_decomp_chunk_size) {
+  return decompress_block(
+      chunk_sizes,
+      std::span<const char>(compressed_buffer.data(), compressed_buffer.size()),
+      output_buffer, max_decomp_chunk_size);
 }
 
 #endif  // PROTEUS_COMPRESSION_HPP
