@@ -328,6 +328,12 @@ class topology {
   void init_nvmeStorage();
 
   /**
+   * initialize the cufile driver
+   * @return false if cufile is not available or incorrectly configured
+   */
+  bool init_cufile();
+
+  /**
    * Maps a pcie address to a cpunumanode id
    * @param address string in the form '0000:04:00.0' as you may get from a cli
    * utility

@@ -135,6 +135,8 @@ if (nvcomp_FOUND)
   target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_NVCOMP)
 endif ()
 
+find_package(GDS REQUIRED)
+
 # Depend on a library that we defined in the top-level file
 target_link_libraries(${PROJECT_NAME}
   PUBLIC
@@ -146,6 +148,7 @@ target_link_libraries(${PROJECT_NAME}
   jsmn::jsmn
   rt # for shared memory
   stduuid::stduuid
+  NVIDIA::GDS
   PRIVATE
   ${OLAP_PRIVATE_LIBS}
   )

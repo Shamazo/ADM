@@ -112,9 +112,11 @@ add_library(platform SHARED
 # here
 target_compile_features(platform PUBLIC cxx_std_20)
 
+find_package(GDS REQUIRED)
 # Depend on a library that we defined in the top-level file
 target_link_libraries(platform
   PUBLIC
+  NVIDIA::GDS
   glog::glog
   NUMA::NUMA
   RDMA::RDMA

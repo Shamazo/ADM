@@ -44,6 +44,8 @@
 #ifndef NCUDA
 #include <cuda_profiler_api.h>
 #include <cuda_runtime_api.h>
+// FIXME cufile hack using cufile from cuda 12.2
+#include <cufile_181/cufile.h>
 #include <nvtx3/nvToolsExt.h>
 #endif
 
@@ -663,6 +665,65 @@ void topology::init_() {
 
   // collect NVMe info
   init_nvmeStorage();
+
+  if (getGpuCount() > 0) {
+    auto res = init_cufile();
+    if (!res) {
+      LOG(WARNING) << "cufile initialization failed. Successive calls to "
+                      "cufile io APIs will likely fail.";
+    } else {
+      LOG(INFO) << "cufile driver initialized";
+    }
+  }
+}
+
+bool topology::init_cufile() {
+#ifndef NCUDA
+
+  // TODO think about where this should actually go, topology?
+  LOG(INFO) << "opening cufile driver...";
+  CUfileError_t status = cuFileDriverOpen();
+  if (status.err != CU_FILE_SUCCESS) {
+    LOG(WARNING) << " cuFile driver failed to open: " << status.err << ", "
+                 << cufileop_status_error(status.err);
+    return false;
+  }
+
+  {
+    CUfileDrvProps_t props{};
+    status = cuFileDriverGetProperties(&props);
+    CHECK_EQ(status.err, CU_FILE_SUCCESS)
+        << " cuFile driver failed to get properties: " << status.err << ", "
+        << cufileop_status_error(status.err);
+    LOG(INFO) << "NVFS version: " << props.nvfs.major_version << "."
+              << props.nvfs.minor_version;
+
+    LOG(INFO) << "NVFS supports NVMe: "
+              << (props.nvfs.dstatusflags & (1 << CU_FILE_NVME_SUPPORTED)
+                      ? "yes"
+                      : "no");
+    LOG(INFO) << "NVFS supports NVMEoF: "
+              << (props.nvfs.dstatusflags & (1 << CU_FILE_NVMEOF_SUPPORTED)
+                      ? "yes"
+                      : "no");
+    // nvidia docs unclear exactly in the relation between the flag fields and
+    // their enums. It is semi implied that the enum value is the bit number
+    LOG(INFO) << "CU_FILE_ALLOW_COMPAT_MODE: "
+              << (props.nvfs.dcontrolflags & (1 << CU_FILE_ALLOW_COMPAT_MODE)
+                      ? "yes"
+                      : "no");
+    LOG(INFO) << "CU_FILE_STREAMS_SUPPORTED: "
+              << (props.fflags & (1 << CU_FILE_STREAMS_SUPPORTED) ? "yes"
+                                                                  : "no");
+    LOG(INFO) << "cufile max_device_pinned_mem_size: "
+              << props.max_device_pinned_mem_size;
+    LOG(INFO) << "cufile per_buffer_cache_size: "
+              << props.per_buffer_cache_size;
+    LOG(INFO) << "cufile max_device_cache_size: "
+              << props.max_device_cache_size;
+  }
+#endif
+  return true;
 }
 
 /**

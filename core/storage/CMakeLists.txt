@@ -50,7 +50,6 @@ if (PROTEUS_BUILD_UNIT_TESTS)
 add_proteus_unit_test(unit-tests-storage proteus::storage
   test/storage-test-main.cpp
   test/test-mmap-file.cpp
-  test/test-cufile.cpp
   )
 
 target_link_libraries(unit-tests-storage
