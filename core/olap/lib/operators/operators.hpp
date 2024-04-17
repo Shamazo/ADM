@@ -28,6 +28,7 @@
 #include <olap/util/parallel-context.hpp>
 #include <platform/common/common.hpp>
 #include <platform/topology/device-types.hpp>
+#include <stduuid/uuid.hpp>
 
 #include "lib/plugins/output/plugins-output.hpp"
 #include "llvm/IR/IRBuilder.h"
@@ -59,7 +60,7 @@ enum class HomParallelization {
 
 class Operator {
  public:
-  Operator() : parent(nullptr) {}
+  Operator() : parent(nullptr), id(uuids::uuid_system_generator{}()) {}
   virtual ~Operator() { LOG(INFO) << "Collapsing operator"; }
   virtual void setParent(Operator *parent) { this->parent = parent; }
   Operator *const getParent() const { return parent; }
@@ -73,6 +74,7 @@ class Operator {
 
  protected:
   virtual void produce_(OlapParallelContext *context) = 0;
+  const uuids::uuid id;
 
  public:
   virtual void produce(OlapParallelContext *context) final {
@@ -90,6 +92,8 @@ class Operator {
    */
   virtual void consume(Context *const context,
                        const OperatorState &childState) = 0;
+
+  [[nodiscard]] uuids::uuid getUUID() const { return id; }
 
   virtual RecordType getRowType() const = 0;
   //  {

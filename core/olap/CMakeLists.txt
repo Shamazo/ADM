@@ -134,6 +134,7 @@ target_link_libraries(${PROJECT_NAME}
   proteus::codegen
   jsmn::jsmn
   rt # for shared memory
+  stduuid::stduuid
   )
 
 include(proteus-lib)
