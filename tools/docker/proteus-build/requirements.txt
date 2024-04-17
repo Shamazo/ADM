@@ -19,6 +19,8 @@ python-dev
 openjdk-11-jre-headless
 # for glog
 libxml2-dev
+# for stduuid
+uuid-dev
 # LLVM dependencies if not installed via a .deb in the docker file
 #clang-format-14
 # clang-14
