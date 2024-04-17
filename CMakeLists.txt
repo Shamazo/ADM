@@ -157,6 +157,7 @@ if (PROTEUS_BUILD_UNIT_TESTS)
   include(tests)
 endif ()
 
+include(stduuid)
 include(googlebenchmark)
 include(perftests)
 include(magic-enum)
