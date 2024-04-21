@@ -24,6 +24,7 @@
 #ifndef PROTEUS_BLOCK_NVME_PLUGIN_HPP
 #define PROTEUS_BLOCK_NVME_PLUGIN_HPP
 
+#include <cufile_181/cufile.h>
 #include <rapidjson/document.h>
 
 #include <olap/plugins/binary-block-plugin.hpp>
@@ -106,6 +107,7 @@ class NvmePlugin : public BinaryBlockPlugin {
     ~AttributePartMetaData();
     uint64_t num_blocks;
     int fd;
+    CUfileHandle_t cufile_handle;
     std::filesystem::path data_file_path;
     std::vector<uint64_t> block_offsets;  /// File offset in bytes of each block
     std::vector<uint32_t> block_sizes;   /// on disk size of each block in bytes
@@ -134,6 +136,7 @@ class NvmePlugin : public BinaryBlockPlugin {
 
   struct PageIOInfo {
     const int fd;
+    const CUfileHandle_t cufile_handle;
     const uint64_t offset;
     const size_t size;
     const std::vector<uint32_t> chunk_sizes;
@@ -181,7 +184,7 @@ class NvmePlugin : public BinaryBlockPlugin {
   std::vector<uint64_t> part_sizes;  /// in blocks
   void nextEntry(OlapParallelContext *context);
 
-  static int fileNameToNumaNodeIndex(std::filesystem::path path) {
+  static std::string fileToDevPath(const std::filesystem::path &path) {
     CHECK(std::filesystem::exists(path));
 
     std::string command = "df " + path.string() + " --output=source";
@@ -211,7 +214,7 @@ class NvmePlugin : public BinaryBlockPlugin {
     std::string dev_path_str;
     if (std::regex_search(partition, device_path, nvme_regex)) {
       // if there is a match, there should only be 1
-      assert(device_path.size() == 1 && "Device regex seriously broken");
+      CHECK_EQ(device_path.size(), 1) << "Device regex seriously broken";
 
       std::string dev_path_str_with_p = device_path[0];
       //    TODO this breaks portability, lopping off the final p1, see
@@ -221,11 +224,31 @@ class NvmePlugin : public BinaryBlockPlugin {
     } else if (std::regex_search(partition, device_path, sata_regex)) {
       LOG(WARNING) << "File is not on a NVMe drive, assuming NUMA 0 affinity: "
                    << path;
-      return 0;
+      CHECK_EQ(device_path.size(), 1) << "Device regex seriously broken";
+      dev_path_str = device_path[0];
     } else {
       LOG(FATAL) << "Failed to match device path in df output: " << partition;
     }
+    return dev_path_str;
+  }
+
+  static bool fileIsOnNvmeDrive(const std::filesystem::path &path) {
+    const auto dev_path_str = fileToDevPath(path);
+    if (dev_path_str.find("nvme") != std::string::npos) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  static int fileNameToNumaNodeIndex(const std::filesystem::path &path) {
     const auto &topo = topology::getInstance();
+    const std::string dev_path_str = fileToDevPath(path);
+    if (dev_path_str.find("nvme") == std::string::npos) {
+      LOG(WARNING) << "File is not on a NVMe device, assuming NUMA 0 affinity: "
+                   << path;
+      return 0;
+    }
     std::reference_wrapper<const topology::numanode> drive =
         topo.devPathToNvme(dev_path_str);
 

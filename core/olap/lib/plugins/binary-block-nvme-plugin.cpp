@@ -175,11 +175,12 @@ NvmePlugin::PageIOInfo NvmePlugin::getPageIoInfo(
   if (partMetaData.data_format ==
       NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED) {
     auto chunk_sizes = partMetaData.chunk_sizes[page_id.getBlockNo()];
-    return {fd,          offset, size,
-            chunk_sizes, true,   partMetaData.decompressed_chunk_size};
+    return {
+        fd,   partMetaData.cufile_handle,          offset, size, chunk_sizes,
+        true, partMetaData.decompressed_chunk_size};
   }
 
-  return {fd, offset, size, {}, false, 0};
+  return {fd, partMetaData.cufile_handle, offset, size, {}, false, 0};
 }
 
 std::pair<llvm::Value *, llvm::Value *> NvmePlugin::getPartitionSizes(
@@ -628,15 +629,39 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     decompressed_chunk_size = document["decompressed_chunk_size"].GetInt();
   }
   numa_node = fileNameToNumaNodeIndex(data_file_path);
-  DLOG(INFO) << "opening data file: " << data_file_path << "for " << md_path;
+  DLOG(INFO) << "opening data file: " << data_file_path << " for " << md_path;
   fd = open(data_file_path.c_str(), O_DIRECT);
   PCHECK(fd > 0);
 #ifndef NDEBUG
   auto res = fcntl(fd, F_GETFD);
   PCHECK(res != -1) << "File descriptor is not valid";
 #endif
+
+  if (fileIsOnNvmeDrive(data_file_path)) {
+    CUfileDescr_t cf_descr;
+    memset((void *)&cf_descr, 0, sizeof(CUfileDescr_t));
+    cf_descr.handle.fd = fd;
+    cf_descr.type = CU_FILE_HANDLE_TYPE_OPAQUE_FD;
+    CUfileError_t status = cuFileHandleRegister(&cufile_handle, &cf_descr);
+    if (status.err != CU_FILE_SUCCESS) {
+      LOG(ERROR)
+          << "failed to cuFileHandleRegister for file: " << data_file_path
+          << " status: " << cufileop_status_error(status.err)
+          << "\n This will only be fatal if cufile APIs are used on this file";
+    }
+  } else {
+    LOG(WARNING) << "file is not on a NVMe drive, it cannot be used with "
+                    "cufile APIs: "
+                 << data_file_path;
+  }
 }
-NvmePlugin::AttributePartMetaData::~AttributePartMetaData() { close(fd); }
+
+NvmePlugin::AttributePartMetaData::~AttributePartMetaData() {
+  if (fileIsOnNvmeDrive(data_file_path)) {
+    cuFileHandleDeregister(cufile_handle);
+  }
+  close(fd);
+}
 
 uint64_t NvmePlugin::getRowGroupTupleCount(uint64_t partIdx,
                                            uint64_t blockIdx) {

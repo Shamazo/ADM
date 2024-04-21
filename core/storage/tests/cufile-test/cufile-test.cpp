@@ -53,7 +53,7 @@ proteus::managed_ptr loadFirstBlockofFile(const std::string& file_name) {
   return block;
 }
 
-TEST(cuFile, syncRead) {
+TEST(cuFile, syncReadSingleBlock) {
   LOG(INFO) << "running cuFile smoke test";
   auto& topo = topology::getInstance();
   if (topo.getGpus().size() < 1) {
@@ -129,9 +129,11 @@ TEST(cuFile, syncRead) {
   BlockManager::release_buffer(std::move(device_target_io_mem));
   BlockManager::release_buffer(std::move(cpu_loaded));
   BlockManager::release_buffer(std::move(copied_to_cpu_buffer));
+  close(fd);
+  cuFileHandleDeregister(cf_handle);
 }
 
-TEST(cuFile, streamRead) {
+TEST(cuFile, streamReadSingleBlock) {
   auto& topo = topology::getInstance();
   if (topo.getGpus().size() < 1) {
     LOG(WARNING) << "No GPUS, skipping test;";
@@ -214,4 +216,6 @@ TEST(cuFile, streamRead) {
   BlockManager::release_buffer(std::move(copied_to_cpu_buffer));
   BlockManager::release_buffer(std::move(device_target_io_mem));
   BlockManager::release_buffer(std::move(cpu_loaded));
+  close(fd);
+  cuFileHandleDeregister(cf_handle);
 }
