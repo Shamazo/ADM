@@ -458,8 +458,6 @@ class topology {
   friend class affinity;
   friend class InfiniBandManager;
   friend int numa_node_of_gpu(int device);
-  friend int node_of_gpu(int device);
-  friend int get_rand_core_local_to_ptr(const void *p);
   friend std::ostream &operator<<(std::ostream &stream, const topology &topo);
   size_t getIBCount();
 };

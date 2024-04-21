@@ -64,27 +64,6 @@ void launch_kernel_strm_single(CUfunction function, void **args,
 }
 }
 
-extern "C" {
-int get_ptr_device(const void *p) {
-  const auto *g = topology::getInstance().getGpuAddressed(p);
-  return g ? g->id : -1;
-}
-
-// FIXME: rename function...........
-int get_ptr_device_or_rand_for_host(const void *p) {
-  const auto *g = topology::getInstance().getGpuAddressed(p);
-  if (g) return g->id;
-  const auto *c = topology::getInstance().getCpuNumaNodeAddressed(p);
-  size_t local_gpus = c->local_gpus.size();
-  if (local_gpus == 1)
-    return c->local_gpus[0];
-  else if (local_gpus > 0)
-    return c->local_gpus[rand() % local_gpus];
-  else
-    return rand();
-}
-}
-
 cudaStream_t createNonBlockingStream() {
   cudaStream_t strm = nullptr;
   gpu_run(cudaStreamCreateWithFlags(&strm, cudaStreamNonBlocking));
@@ -108,4 +87,5 @@ void syncAndDestroyStream(cudaStream_t strm) {
   gpu_run(cudaStreamDestroy(strm));
 }
 
+/// Placeholder defaultGridDim. The value is updated when topology initializes
 dim3 defaultGridDim = {40, 1, 1};

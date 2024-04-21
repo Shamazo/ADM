@@ -155,28 +155,6 @@ void CpuPipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
       Function::Create(yield, Function::ExternalLinkage, "yield", llvmModule);
   pipelineGen->registerFunction("yield", fyield);
 
-  FunctionType *get_ptr_device =
-      FunctionType::get(int32_type, std::vector<Type *>{charPtrType}, false);
-  Function *fget_ptr_device = Function::Create(
-      get_ptr_device, Function::ExternalLinkage, "get_ptr_device", llvmModule);
-  pipelineGen->registerFunction("get_ptr_device", fget_ptr_device);
-
-  FunctionType *get_ptr_device_or_rand_for_host =
-      FunctionType::get(int32_type, std::vector<Type *>{charPtrType}, false);
-  Function *fget_ptr_device_or_rand_for_host = Function::Create(
-      get_ptr_device_or_rand_for_host, Function::ExternalLinkage,
-      "get_ptr_device_or_rand_for_host", llvmModule);
-  pipelineGen->registerFunction("get_ptr_device_or_rand_for_host",
-                                fget_ptr_device_or_rand_for_host);
-
-  FunctionType *get_rand_core_local_to_ptr =
-      FunctionType::get(int32_type, std::vector<Type *>{charPtrType}, false);
-  Function *fget_rand_core_local_to_ptr =
-      Function::Create(get_rand_core_local_to_ptr, Function::ExternalLinkage,
-                       "get_rand_core_local_to_ptr", llvmModule);
-  pipelineGen->registerFunction("get_rand_core_local_to_ptr",
-                                fget_rand_core_local_to_ptr);
-
   FunctionType *rand_local_cpu = FunctionType::get(
       int32_type, std::vector<Type *>{charPtrType, int64_type}, false);
   Function *frand_local_cpu = Function::Create(
