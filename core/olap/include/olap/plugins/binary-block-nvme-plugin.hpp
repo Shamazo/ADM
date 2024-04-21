@@ -109,8 +109,8 @@ class NvmePlugin : public BinaryBlockPlugin {
     int fd;
     CUfileHandle_t cufile_handle;
     std::filesystem::path data_file_path;
-    std::vector<uint64_t> block_offsets;  /// File offset in bytes of each block
-    std::vector<uint32_t> block_sizes;   /// on disk size of each block in bytes
+    std::vector<off_t> block_offsets;    /// File offset in bytes of each block
+    std::vector<uint64_t> block_sizes;   /// on disk size of each block in bytes
     std::vector<uint32_t> value_counts;  /// count of values in each block
     std::vector<std::vector<uint32_t>>
         chunk_sizes;  /// count of each compressed chunk in each block. Unset
@@ -137,8 +137,10 @@ class NvmePlugin : public BinaryBlockPlugin {
   struct PageIOInfo {
     const int fd;
     const CUfileHandle_t cufile_handle;
-    const uint64_t offset;
-    const size_t size;
+    const off_t *offset;  /// ptr because cuFileAsync expects a ptr and gives
+                          /// no documentation on required lifetime. Non-owning
+                          /// pointer. Life time is the same as the plugin
+    const size_t *size;   /// same as above
     const std::vector<uint32_t> chunk_sizes;
     const bool is_compressed;
     const int decompressed_chunk_size;

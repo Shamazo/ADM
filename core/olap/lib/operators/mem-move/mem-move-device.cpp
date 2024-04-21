@@ -30,8 +30,16 @@
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
+#include <platform/util/tracing.hpp>
+#include <platform/util/profiling.hpp>
 #include <platform/util/timing.hpp>
 #include <platform/util/tracing.hpp>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdocumentation"
+// #include <cufile.h>
+#include <cufile_181/cufile.h>
+#pragma clang diagnostic pop
 
 #include "compression.hpp"
 #include "lib/util/catalog.hpp"
@@ -71,14 +79,14 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
     // allocate temporary storage for IO target
     // decompress into the target buffer
     char *compressed_buff =
-        static_cast<char *>(std::aligned_alloc(4096, page_io_info.size));
+        static_cast<char *>(std::aligned_alloc(4096, *page_io_info.size));
     auto decompressed_buff = static_cast<char *>(buff.get());
     wu->complete += 1;
 
     // decompressed buff will have a lifetime exceeding the callback, as the
     // catcher spins on wu->complete.
     // compressed buf ownership is moved into the lambda which frees it
-    auto cb = [page_id, wu, compressed_buff, io_size = page_io_info.size,
+    auto cb = [page_id, wu, compressed_buff, io_size = *page_io_info.size,
                max_decomp_chunk_size = page_io_info.decompressed_chunk_size,
                chunk_sizes = std::move(page_io_info.chunk_sizes),
                decompressed_buff = decompressed_buff] {
@@ -95,34 +103,54 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
                                      std::memory_order_relaxed);
       DCHECK_GE(wu->complete, 0);
     };
-    auto read_size = page_io_info.size;
+    auto read_size = *page_io_info.size;
     if (read_size % 512 != 0) {
       read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
     }
     DCHECK_GE(read_size, 0);
     DCHECK_EQ(read_size % 512, 0);
-    DCHECK_GE(page_io_info.offset, 0);
-    DCHECK_EQ(page_io_info.offset % 512, 0);
+    DCHECK_GE(*page_io_info.offset, 0);
+    DCHECK_EQ(*page_io_info.offset % 512, 0);
 
     io_uring->read(page_io_info.fd, compressed_buff, read_size,
-                   page_io_info.offset, std::move(cb));
+                   *page_io_info.offset, std::move(cb));
 
   } else {
-    DCHECK_LE(page_io_info.size, BlockManager::block_size);
-    wu->complete += 1;
+    DCHECK_LE(*page_io_info.size, BlockManager::block_size);
+    CHECK(*page_io_info.size % 4_K == 0);
 
-    // TODO really should probably pass the result of IO to the callback
-    proteus::storage::IoUringThreadUnsafe::CompletionCallBackSuccess cb = [wu] {
-      std::atomic_fetch_add_explicit(&wu->complete, -1,
-                                     std::memory_order_relaxed);
-    };
-    auto read_size = page_io_info.size;
-    if (read_size % 512 != 0) {
-      read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+    if (target_device >= 0) {
+      // GPU case
+      // cuFiles does not respect event synchronization. Hence, each WU has its
+      // own stream
+      static off_t buff_offset = 0;
+      wu->bytes_read[wu->index_in_wu] = 0;
+      //      LOG(INFO) << "read size " << read_size;
+      //      LOG(INFO) << "page_offset " << page_offset;
+      /// required lifetimes of pointers passed to cuFileReadAsync is unknown
+      CUfileError_t status = cuFileReadAsync(
+          page_io_info.cufile_handle, buff.get(),
+          const_cast<size_t *>(page_io_info.size),
+          const_cast<off_t *>(page_io_info.offset), &buff_offset,
+          &(wu->bytes_read[wu->index_in_wu]), wu->cufile_strm);
+      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+          << "cuFileReadAsync failed with: "
+          << cufileop_status_error(status.err);
+      wu->index_in_wu += 1;
+    } else {
+      // CPU case
+      wu->complete += 1;
+
+      // TODO really should probably pass the result of IO to the callback
+      proteus::storage::IoUringThreadUnsafe::CompletionCallBackSuccess cb =
+          [wu] {
+            std::atomic_fetch_add_explicit(&wu->complete, -1,
+                                           std::memory_order_relaxed);
+          };
+
+      io_uring->read(page_io_info.fd, buff.get(), *page_io_info.size,
+                     *page_io_info.offset, cb);
     }
-
-    io_uring->read(page_io_info.fd, buff.get(), read_size, page_io_info.offset,
-                   cb);
   }
   return buff;
 }
@@ -157,6 +185,7 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
                           int num_buffers, pb *pair_buffs,
                           MemMoveDevice::workunit *wu) noexcept {
   wu->complete = 0;
+  wu->index_in_wu = 0;
   for (int i = 0; i < num_buffers; i++) {
     auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
                        target_device, srcServer, wu);
@@ -167,7 +196,7 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
     /// poll until there are (probably) enough buffers for the next iteration
     while (mmc->idle.size_unsafe() < num_buffers) {
       mmc->io_uring->poll();
-      std::this_thread::yield();
+      //      std::this_thread::yield();
     }
   }
 }
@@ -511,13 +540,25 @@ void MemMoveDevice::destroyMoveConf(MemMoveDevice::MemMoveConf *mmc) const {
 
 void MemMoveDevice::open(Pipeline *pip) {
   auto *wu = (workunit *)MemoryManager::mallocPinned(sizeof(workunit) * slack);
+  static profiling::ProfileRegionType pr_type =
+      profiling::ProfileRegionType("memmove::open");
+  profiling::ProfileRegion pr(pr_type);
   event_range<range_log_op::MEMMOVE_OPEN> er{id, catch_pip->getUUID(),
                                              pip->getGroup()};
-
   // nvtxRangePushA("memmove::open");
   cudaStream_t strm = createNonBlockingStream();
 
   size_t data_size = (pip->getSizeOf(data_type) + 16 - 1) & ~((size_t)0xF);
+
+  if (!to_cpu) {
+    CUfileError_t status = cuFileStreamRegister(
+        strm,
+        CU_FILE_STREAM_PAGE_ALIGNED_INPUTS | CU_FILE_STREAM_FIXED_BUF_OFFSET |
+            CU_FILE_STREAM_FIXED_FILE_OFFSET | CU_FILE_STREAM_FIXED_FILE_SIZE);
+    CHECK_EQ(status.err, CU_FILE_SUCCESS)
+        << "Failed to cuFileStreamRegister status: "
+        << cufileop_status_error(status.err);
+  }
 
   MemMoveConf *mmc = createMoveConf();
 
@@ -536,7 +577,22 @@ void MemMoveDevice::open(Pipeline *pip) {
   for (size_t i = 0; i < slack; ++i) {
     wu[i].data = ((void *)(data_buff + i * data_size));
     wu[i].complete = 0;
+    wu[i].bytes_read = static_cast<ssize_t *>(
+        MemoryManager::mallocPinned(sizeof(ssize_t) * wantedFields.size()));
+    wu[i].index_in_wu = 0;
+    wu[i].cufile_strm = createNonBlockingStream();
     mmc->idle.push(wu + i);
+
+    if (!to_cpu) {
+      CUfileError_t status = cuFileStreamRegister(
+          wu[i].cufile_strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
+                                 CU_FILE_STREAM_FIXED_BUF_OFFSET |
+                                 CU_FILE_STREAM_FIXED_FILE_OFFSET |
+                                 CU_FILE_STREAM_FIXED_FILE_SIZE);
+      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+          << "Failed to cuFileStreamRegister status: "
+          << cufileop_status_error(status.err);
+    }
   }
   // nvtxRangePushA("memmove::open2");
   for (size_t i = 0; i < slack; ++i) {
@@ -561,6 +617,9 @@ int MemMoveDevice::getTargetDevice() const {
 }
 
 void MemMoveDevice::close(Pipeline *pip) {
+  static profiling::ProfileRegionType pr_type =
+      profiling::ProfileRegionType("memmove::close");
+  profiling::ProfileRegion pr(pr_type);
   auto *mmc = pip->getStateVar<MemMoveConf *>(memmvconf_var);
 
   {
@@ -577,6 +636,13 @@ void MemMoveDevice::close(Pipeline *pip) {
 
   event_range<range_log_op::MEMMOVE_CLOSE_CLEAN_UP> er{id, catch_pip->getUUID(),
                                                        pip->getGroup()};
+  if (!to_cpu) {
+    CUfileError_t status = cuFileStreamDeregister(mmc->strm);
+    CHECK_EQ(status.err, CU_FILE_SUCCESS)
+        << "failed to cuFileStreamDeregister status: "
+        << cufileop_status_error(status.err);
+  }
+
   syncAndDestroyStream(mmc->strm);
 
   nvtxRangePushA("MemMoveDev_running2");
@@ -586,6 +652,14 @@ void MemMoveDevice::close(Pipeline *pip) {
   workunit *start_wu = nullptr;
   for (size_t i = 0; i < slack; ++i) {
     workunit *wu = mmc->idle.pop_unsafe();
+    if (!to_cpu) {
+      CUfileError_t status = cuFileStreamDeregister(wu->cufile_strm);
+      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+          << "failed to cuFileStreamDeregister status: "
+          << cufileop_status_error(status.err);
+    }
+    syncAndDestroyStream(wu->cufile_strm);
+    MemoryManager::freePinned(wu->bytes_read);
     gpu_run(cudaEventDestroy(wu->event));
     if (i == 0 || wu < start_wu) start_wu = wu;
   }
@@ -602,7 +676,9 @@ void MemMoveDevice::close(Pipeline *pip) {
 
 void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
                                            bool is_noop) {
-  if (!is_noop) gpu_run(cudaEventRecord(buff->event, strm));
+  if (!is_noop) {
+    gpu_run(cudaEventRecord(buff->event, strm));
+  }
 
   tran.push(buff);
 }
@@ -622,6 +698,9 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
   if (!tran.pop(*ret)) return false;
   gpu_run(cudaEventSynchronize((*ret)->event));
+  if (nvme_plugin != nullptr) {
+    cudaStreamSynchronize((*ret)->cufile_strm);
+  }
   while ((*ret)->complete != 0) {
     std::this_thread::yield();
   }

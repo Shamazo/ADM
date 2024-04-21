@@ -169,9 +169,8 @@ NvmePlugin::PageIOInfo NvmePlugin::getPageIoInfo(
                     << ", block no: " << page_id.getBlockNo()
                     << partMetaData.data_file_path;
 #endif
-  uint64_t offset = partMetaData.block_offsets[page_id.getBlockNo()];
-  size_t size =
-      static_cast<size_t>(partMetaData.block_sizes[page_id.getBlockNo()]);
+  const off_t *offset = &partMetaData.block_offsets[page_id.getBlockNo()];
+  const size_t *size = &partMetaData.block_sizes[page_id.getBlockNo()];
   if (partMetaData.data_format ==
       NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED) {
     auto chunk_sizes = partMetaData.chunk_sizes[page_id.getBlockNo()];
@@ -563,6 +562,13 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
   for (auto &v : block_sizes_json_array) {
     CHECK(v.IsUint());
     block_sizes.push_back(v.GetUint());
+    // FIXME: chang adm-partition to but the 4k aligned with padding sizes in
+    // the metadata write now it write data with padding to be 4k aligned, but
+    // does not include the padding in the block size
+    if (block_sizes.back() % 4_K != 0) {
+      block_sizes.back() += 4_K - (block_sizes.back() % 4_K);
+    }
+    CHECK(block_sizes.back() % 4_K == 0);
   }
 
   CHECK(document.HasMember("block_offsets"));

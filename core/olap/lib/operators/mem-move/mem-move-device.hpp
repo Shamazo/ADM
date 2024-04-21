@@ -48,6 +48,9 @@ class MemMoveDevice : public experimental::UnaryOperator {
     void *data;
     cudaEvent_t event;
     std::atomic<int> complete;  // 0 for complete, positive number for remaining
+    ssize_t* bytes_read;
+    cudaStream_t cufile_strm; // stream for cufile, memcpyasync still uses mmc->strm
+    uint8_t index_in_wu; // Index within bytes_read
     [[maybe_unused]] bool unused;  // FIXME: remove
   };
 
