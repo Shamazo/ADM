@@ -79,6 +79,7 @@ void GpuReduce::consume(OlapParallelContext *context,
     Value *mem_accumulating = nullptr;
 
     switch (agg.getMonoid()) {
+      case MIN:
       case SUM:
       case MULTIPLY:
       case MAX:
