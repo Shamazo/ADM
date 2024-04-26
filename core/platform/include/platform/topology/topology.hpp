@@ -135,6 +135,11 @@ class topology {
     nvmeStorage &operator=(nvmeStorage &&) = delete;
 
     /**
+     * @return the mount path of this nvmeStorage device, if it is mounted
+     */
+    std::optional<std::filesystem::path> getMountPath() const;
+
+    /**
      *
      * @return The cpunumanode to which this nvmeStorage belongs
      */

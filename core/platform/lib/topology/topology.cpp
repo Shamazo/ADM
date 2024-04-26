@@ -33,6 +33,7 @@
 #include <platform/common/error-handling.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
+#include <platform/util/linux-exec.hpp>
 #include <platform/util/logging.hpp>
 #include <platform/util/profiling.hpp>
 #include <platform/util/topology_parser.hpp>
@@ -970,6 +971,32 @@ const topology::nvmeStorage &topology::devPathToNvme(
     return *maybeFound;
   } else {
     LOG(FATAL) << "Tried to find nvme device with bad dev path: " << devPath;
+  }
+}
+
+std::optional<std::filesystem::path> topology::nvmeStorage::getMountPath()
+    const {
+  // won't work for multiple partitions on the same drive
+  const std::string command = "df --output=source,target | grep " + devPath;
+  auto [dfOutput, returnCode] = execCommand(command);
+  if (returnCode != 0) {
+    LOG(WARNING) << "`" << command << "`"
+                 << "failed with error code: " << returnCode
+                 << " and output: " << dfOutput;
+    return std::nullopt;
+  }
+  if (dfOutput.find(devPath) != std::string::npos) {
+    // dfOutput.size() - 1 is to strip a trailing
+    std::string mount_point =
+        dfOutput.substr(dfOutput.find_last_of(' ') + 1, dfOutput.size());
+    mount_point.erase(std::remove(mount_point.begin(), mount_point.end(), '\n'),
+                      mount_point.end());
+    CHECK(std::filesystem::exists(mount_point))
+        << "mount_point does not exist: " << mount_point;
+    return mount_point;
+  } else {
+    // drive not mounted
+    return std::nullopt;
   }
 }
 
