@@ -38,6 +38,8 @@ void check_vector_paths(const std::vector<std::string> &paths) {
   }
 }
 
+enum class Shaper {NVMECPU, NVMEGPU};
+
 /*
  * For all combinations of drives. Outer vector is per drive num
  */
@@ -51,6 +53,17 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
       std::vector<std::string> two_drives = {
           "/scratch/nicholso/data/compressed_ssbm100_0_2",
           "/scratch2/nicholso/data/compressed_ssbm100_1_2"};
+
+      check_vector_paths(one_drive);
+      check_vector_paths(two_drives);
+      return {one_drive, two_drives};
+    }
+    if (sf == 1000){
+      std::vector<std::string> one_drive = {
+          "/scratch2/nicholso/data/compressed_ssbm1000"};
+      std::vector<std::string> two_drives = {
+          "/scratch/nicholso/data/compressed_ssbm1000_0_2",
+          "/scratch2/nicholso/data/compressed_ssbm1000_1_2"};
 
       check_vector_paths(one_drive);
       check_vector_paths(two_drives);
@@ -230,14 +243,25 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
   if (server_number == 44) {
     if (sf == 100) {
       std::vector<std::string> one_drive = {
-          "/scratch/nicholso/data/compressed_ssbm100"};
+          "/scratch/data/ssbm100"};
       std::vector<std::string> two_drives = {
-          "/scratch/nicholso/data/compressed_ssbm100_0_2",
-          "/scratch2/nicholso/data/compressed_ssbm100_1_2"};
+          "/scratch/nicholso/data/ssbm100_0_2",
+          "/scratch2/nicholso/data/ssbm100_1_2"};
 
       check_vector_paths(one_drive);
       check_vector_paths(two_drives);
       return {one_drive, two_drives};
+    }
+    if (sf == 1000) {
+      std::vector<std::string> one_drive = {
+          "/scratch/data/ssbm1000"};
+//      std::vector<std::string> two_drives = {
+//          "/scratch/nicholso/data/ssbm1000_0_2",
+//          "/scratch2/nicholso/data/ssbm1000_1_2"};
+
+      check_vector_paths(one_drive);
+//      check_vector_paths(two_drives);
+      return {one_drive};
     }
   }
 
@@ -288,7 +312,7 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
     }
 
     if (sf == 1000) {
-      std::vector<std::string> one_drive = {"/nvme13/nicholso/data/sbm1000"};
+      std::vector<std::string> one_drive = {"/nvme11/nicholso/data/sbm1000"};
 
       std::vector<std::string> two_drives = {
           "/nvme12/nicholso/data/sbm1000_0_2",
