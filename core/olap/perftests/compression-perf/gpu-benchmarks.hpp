@@ -25,7 +25,12 @@
 #define PROTEUS_GPU_BENCHMARKS_HPP
 
 #include "compressed-file.hpp"
+#include "lib/operators/mem-move/compression.hpp"
 
-std::string benchmark_lz4_gpu_decompression(const CompressedFile& input_file);
+std::string benchmark_lz4_gpu_decompression_gpu_mem(
+    const CompressedFile& input_file);
+
+std::string benchmark_lz4_gpu_decompression_from_cpu_mem(
+    const CompressedFile& input_file);
 
 #endif  // PROTEUS_GPU_BENCHMARKS_HPP

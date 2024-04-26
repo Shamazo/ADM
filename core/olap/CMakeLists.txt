@@ -29,6 +29,7 @@ set(olap_cxx
   lib/operators/gpu/gpu-reduce.cpp
   lib/operators/gpu/gpu-sort.cpp
   lib/operators/gpu/gpu-to-cpu.cpp
+  lib/operators/mem-move/compression.cpp
   lib/operators/mem-move/mem-broadcast-device.cpp
   lib/operators/mem-move/mem-broadcast-scaleout.cpp
   lib/operators/mem-move/mem-move-device.cpp

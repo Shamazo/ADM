@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <codegen/expressions/expressionTypes.hpp>
+#include <cstring>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/plan/query-result.hpp>
@@ -127,6 +128,62 @@ TEST(PageId_t, invertable) {
   EXPECT_EQ(from_cpp_cons.getAttributeNo(), y.getAttributeNo());
   EXPECT_EQ(from_cpp_cons.getPartitionNo(), y.getPartitionNo());
   EXPECT_EQ(from_cpp_cons.getBlockNo(), y.getBlockNo());
+}
+
+TEST(DecompressionTest, decompress_datekey_gpu) {
+  const std::filesystem::path md_path =
+      "inputs/nvme-plugin-tests/"
+      "ssb100_compressed_date.csv.d_datekey.metadata.json";
+  NvmePlugin::AttributePartMetaData partMetaData(md_path);
+  EXPECT_EQ(partMetaData.data_format,
+            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  EXPECT_EQ(partMetaData.num_blocks, 1);
+
+  auto read_size = partMetaData.block_sizes[0];
+  if (read_size % 512 != 0) {
+    read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+  }
+  char* compressed_buf =
+      static_cast<char*>(std::aligned_alloc(4096, read_size));
+  PCHECK(read(partMetaData.fd, compressed_buf, read_size) > 0);
+
+  cudaStream_t stream = nullptr;
+  gpu_run(cudaStreamCreate(&stream));
+
+  void* compressed_buf_gpu = nullptr;
+  gpu_run(cudaMallocAsync(&compressed_buf_gpu, partMetaData.block_sizes[0],
+                          stream));
+  gpu_run(cudaMemcpyAsync(compressed_buf_gpu, compressed_buf,
+                          partMetaData.block_sizes[0], cudaMemcpyHostToDevice,
+                          stream));
+
+  void* decompressed_buf_gpu = nullptr;
+  size_t decomp_size = partMetaData.value_counts[0] * sizeof(int32_t);
+  gpu_run(cudaMallocAsync(&decompressed_buf_gpu, decomp_size, stream));
+
+  auto compress_span_gpu = std::span<char>(
+      static_cast<char*>(compressed_buf_gpu), partMetaData.block_sizes[0]);
+  auto decomp_span_gpu =
+      std::span<char>(static_cast<char*>(decompressed_buf_gpu), decomp_size);
+
+  ASSERT_EQ(decompress_block_gpu(partMetaData.chunk_sizes[0], compress_span_gpu,
+                                 decomp_span_gpu,
+                                 partMetaData.decompressed_chunk_size, stream),
+            partMetaData.value_counts[0] * sizeof(int32_t))
+      << "decompression failed";
+
+  /* Validate against input data.  */
+  // Transfer the decompressed buffer to the host.
+  char* decompress_buf = new char[decomp_size];
+  gpu_run(cudaMemcpy(decompress_buf, decomp_span_gpu.data(), decomp_size,
+                     cudaMemcpyDeviceToHost));
+
+  auto original_data = mmap_file("inputs/ssbm100/date.csv.d_datekey", PINNED);
+
+  EXPECT_EQ(decomp_size, original_data.getFileSize());
+
+  EXPECT_EQ(memcmp(original_data.getData(), (void*)decompress_buf, decomp_size),
+            0);
 }
 
 TEST(DecompressionTest, decompress_datekey) {

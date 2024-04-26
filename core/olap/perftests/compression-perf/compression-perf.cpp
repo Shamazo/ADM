@@ -32,6 +32,7 @@
 #include "compressed-file.hpp"
 #include "cpu-benchmarks.hpp"
 #include "gpu-benchmarks.hpp"
+#include "platform/util/profiling.hpp"
 
 DECLARE_string(input_md_file);
 DEFINE_string(input_md_file, "",
@@ -44,6 +45,10 @@ DEFINE_bool(decomp_cpu_in_cpu_memory, false,
 DECLARE_bool(decomp_gpu_in_gpu_memory);
 DEFINE_bool(decomp_gpu_in_gpu_memory, false,
             "Benchmark GPU decompression on in-gpu-memory data");
+
+DECLARE_bool(decomp_gpu_in_cpu_memory);
+DEFINE_bool(decomp_gpu_in_cpu_memory, false,
+            "Benchmark GPU decompression on in-cpu-memory data");
 
 #ifdef HAVE_NVCOMP
 constexpr bool kHaveNvcomp = true;
@@ -76,7 +81,18 @@ int main(int argc, char* argv[]) {
       CHECK_GT(topo.getGpuCount(), 0) << "No GPUs available";
       auto gpu_scope = topo.getGpus()[0].set_on_scope();
       CompressedFile cb(FLAGS_input_md_file, data_loc::GPU_RESIDENT);
-      results << benchmark_lz4_gpu_decompression(cb) << std::endl;
+      results << benchmark_lz4_gpu_decompression_gpu_mem(cb) << std::endl;
+    }
+  }
+
+  if (FLAGS_decomp_gpu_in_cpu_memory) {
+    if (!kHaveNvcomp) {
+      LOG(ERROR) << "nvcomp not available, skipping GPU decompression";
+    } else {
+      CHECK_GT(topo.getGpuCount(), 0) << "No GPUs available";
+      auto gpu_scope = topo.getGpus()[0].set_on_scope();
+      CompressedFile cb(FLAGS_input_md_file, data_loc::PINNED);
+      results << benchmark_lz4_gpu_decompression_from_cpu_mem(cb) << std::endl;
     }
   }
 
