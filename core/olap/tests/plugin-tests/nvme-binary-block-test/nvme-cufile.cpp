@@ -36,37 +36,7 @@
 #include <platform/util/glog.hpp>
 
 #include "olap/plugins/binary-block-nvme-plugin.hpp"
-
-void validateLoadedBlocks(const std::vector<proteus::managed_ptr>& blocks,
-                          const std::filesystem::path& input_file) {
-  const auto baseline_data = mmap_file(input_file, PAGEABLE);
-  const auto baseline_data_span = baseline_data.asSpan();
-  EXPECT_GE(blocks.size() * BlockManager::block_size,
-            baseline_data.getFileSize())
-      << "not enough 2MiB blocks to contain the contents of "
-      << input_file.string();
-  size_t byte_index = 0;
-  for (const auto& block : blocks) {
-    auto bytes_to_compare =
-        byte_index + BlockManager::block_size < baseline_data.getFileSize()
-            ? BlockManager::block_size
-            : baseline_data.getFileSize() - byte_index;
-    auto comparison = memcmp(static_cast<std::byte*>(block.get()),
-                             &baseline_data_span[byte_index], bytes_to_compare);
-    EXPECT_EQ(comparison, 0)
-        << "contents differ after: " << byte_index << " bytes";
-    if (comparison != 0) {
-      for (size_t i = 0; i < bytes_to_compare; i++) {
-        ASSERT_EQ((static_cast<char*>(block.get()) + byte_index)[i],
-                  (reinterpret_cast<const char*>(baseline_data.getData()) +
-                   byte_index)[i])
-            << " bytes differ at byte " << i << " of block "
-            << byte_index / BlockManager::block_size;
-      }
-    }
-    byte_index += BlockManager::block_size;
-  }
-}
+#include "utils.hpp"
 
 class StreamReadFileFixture
     : public testing::TestWithParam<std::pair<std::filesystem::path, size_t>> {
@@ -265,9 +235,10 @@ TEST_P(StreamReadFileFixture, streamReadFileEventSynchronize) {
   // m_sync_every is > 1 then we won't synchronize on all of these events
   std::vector<cudaEvent_t> events{m_file_md.num_blocks};
   for (size_t i = 0; i < m_file_md.num_blocks; ++i) {
-    gpu_run(cudaEventCreateWithFlags(
-        &(events[i]), cudaEventDisableTiming | cudaEventBlockingSync));
   }
+  cudaEvent_t event = nullptr;
+  gpu_run(cudaEventCreateWithFlags(
+      &event, cudaEventDisableTiming | cudaEventBlockingSync));
 
   std::vector<proteus::managed_ptr> cpu_buffers;  // for validation
   for (size_t i = 0; i < m_file_md.num_blocks; i++) {
@@ -289,16 +260,20 @@ TEST_P(StreamReadFileFixture, streamReadFileEventSynchronize) {
     ASSERT_EQ(status.err, CU_FILE_SUCCESS)
         << "Failed to cuFileReadAsync " << cufileop_status_error(status.err)
         << " for block " << i << " reading: " << m_file_md.block_sizes[i];
-    gpu_run(cudaEventRecord(events[i], m_strm));
+    gpu_run(cudaEventRecord(event, m_strm));
     if (i % m_sync_every == 0) {
       // wait for all IO up until this point
-      gpu_run(cudaEventSynchronize(events[i]));
+      gpu_run(cudaEventSynchronize(event));
       // copy to the CPU in reverse order of completion to validate that
       // cudaEventSynchronize works with cuFile. If it does not, then the IO for
       // the most recently "loaded" GPU blocks may not actually be complete.
       // use a different stream to copy to the CPU to avoid blocking the IO and
       // to increase chances of synchronization bugs within cuFile
       for (int j = i; j > last_event_sync; j--) {
+        ASSERT_EQ(bytes_read_vec[j], m_file_md.block_sizes[j])
+            << "cuFileRead failed to read the expected number of bytes after "
+               "cudaEventSynchronize for block "
+            << j;
         BlockManager::overwrite_bytes(
             cpu_buffers[j].get(), gpu_buffers[j].get(),
             m_file_md.block_sizes[j], memcpy_strm, false);
