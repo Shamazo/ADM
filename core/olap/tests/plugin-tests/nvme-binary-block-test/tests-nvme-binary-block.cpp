@@ -32,6 +32,7 @@
 #include <platform/common/common.hpp>
 
 #include "lib/operators/mem-move/compression.hpp"
+#include "utils.hpp"
 
 // `SCOPED_TRACE("")` raises this error
 #pragma clang diagnostic push
@@ -131,6 +132,10 @@ TEST(PageId_t, invertable) {
 }
 
 TEST(DecompressionTest, decompress_datekey_gpu) {
+  if (topology::getInstance().getGpuCount() < 1) {
+    GTEST_SKIP() << "No GPUs available";
+  }
+
   const std::filesystem::path md_path =
       "inputs/nvme-plugin-tests/"
       "ssb100_compressed_date.csv.d_datekey.metadata.json";
@@ -146,6 +151,10 @@ TEST(DecompressionTest, decompress_datekey_gpu) {
   char* compressed_buf =
       static_cast<char*>(std::aligned_alloc(4096, read_size));
   PCHECK(read(partMetaData.fd, compressed_buf, read_size) > 0);
+
+  auto gpu_decompressor =
+      GpuDecompressor(partMetaData.decompressed_chunk_size, 1,
+                      partMetaData.chunk_sizes[0].size());
 
   cudaStream_t stream = nullptr;
   gpu_run(cudaStreamCreate(&stream));
@@ -166,9 +175,13 @@ TEST(DecompressionTest, decompress_datekey_gpu) {
   auto decomp_span_gpu =
       std::span<char>(static_cast<char*>(decompressed_buf_gpu), decomp_size);
 
-  ASSERT_EQ(decompress_block_gpu(partMetaData.chunk_sizes[0], compress_span_gpu,
-                                 decomp_span_gpu,
-                                 partMetaData.decompressed_chunk_size, stream),
+  ASSERT_GE(gpu_decompressor.decompress_block_gpu(partMetaData.chunk_sizes[0],
+                                                  compress_span_gpu,
+                                                  decomp_span_gpu, stream),
+            0)
+      << "decompression launch failed";
+  cudaStreamSynchronize(stream);
+  ASSERT_EQ(gpu_decompressor.get_last_batch_bytes_decompressed(),
             partMetaData.value_counts[0] * sizeof(int32_t))
       << "decompression failed";
 
@@ -184,6 +197,106 @@ TEST(DecompressionTest, decompress_datekey_gpu) {
 
   EXPECT_EQ(memcmp(original_data.getData(), (void*)decompress_buf, decomp_size),
             0);
+}
+
+TEST(DecompressionTest, decompress_gpu_batch) {
+  if (topology::getInstance().getGpuCount() < 1) {
+    GTEST_SKIP() << "No GPUs available";
+  }
+  auto& gpu = topology::getInstance().getGpus()[0];
+  auto exec_scope = gpu.set_on_scope();
+  // FIXME server specific path
+  const std::filesystem::path md_path =
+      "/nvme14/nicholso/data/compressed_ssbm1000/"
+      "supplier.csv.s_region_0_1.metadata.json";
+  NvmePlugin::AttributePartMetaData partMetaData(md_path);
+  EXPECT_EQ(partMetaData.data_format,
+            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  const int batch_size = 2;
+  EXPECT_GE(partMetaData.num_blocks, batch_size)
+      << "not a hard correctness requirement, but this test is mean to test "
+         "batch decompression";
+
+  std::vector<proteus::managed_ptr> uncompressed_blocks{};
+  uncompressed_blocks.reserve(partMetaData.num_blocks);
+
+  auto compressed_data_gpu =
+      mmap_file(partMetaData.data_file_path, data_loc::GPU_RESIDENT);
+
+  std::vector<const char*> compressed_block_ptrs(partMetaData.num_blocks);
+  for (int i = 0; i < partMetaData.num_blocks; i++) {
+    auto read_size = partMetaData.block_sizes[i];
+    if (read_size % 512 != 0) {
+      read_size += 512 - (read_size % 512);  // align to 512 bytes for O_DIRECT
+    }
+    compressed_block_ptrs[i] =
+        static_cast<const char*>(compressed_data_gpu.getData()) +
+        partMetaData.block_offsets[i];
+    uncompressed_blocks.emplace_back(
+        BlockManager::h_get_buffer(gpu.index_in_topo));
+  }
+
+  // assuming the first block will have the maximum number of chunks per block.
+  const size_t chunks_per_block = partMetaData.chunk_sizes[0].size();
+  EXPECT_GT(chunks_per_block, 0);
+  auto gpu_decompressor = GpuDecompressor(partMetaData.decompressed_chunk_size,
+                                          batch_size, chunks_per_block);
+
+  cudaStream_t stream = createNonBlockingStream();
+
+  for (int i = 0; i < partMetaData.num_blocks; i += batch_size) {
+    std::vector<std::vector<uint32_t>> block_chunk_sizes;
+    std::vector<std::span<char>> block_compressed_buffers;
+    std::vector<std::span<char>> block_output_buffers;
+    size_t expected_batch_decomp_size_bytes = 0;
+    for (int j = i; (j < i + batch_size) && (j < partMetaData.num_blocks);
+         j++) {
+      block_chunk_sizes.emplace_back(partMetaData.chunk_sizes[j]);
+
+      const size_t decomp_size = partMetaData.value_counts[j] * sizeof(int32_t);
+      expected_batch_decomp_size_bytes += decomp_size;
+      auto compress_span_gpu =
+          std::span<char>(const_cast<char*>(compressed_block_ptrs[j]),
+                          partMetaData.block_sizes[j]);
+      auto decomp_span_gpu = std::span<char>(
+          static_cast<char*>(uncompressed_blocks[j].get()), decomp_size);
+      block_compressed_buffers.emplace_back(compress_span_gpu);
+      block_output_buffers.emplace_back(decomp_span_gpu);
+    }
+
+    auto submit_success = gpu_decompressor.batch_decompress_block_gpu(
+        block_chunk_sizes, block_compressed_buffers, block_output_buffers,
+        stream);
+    ASSERT_EQ(submit_success, 0);
+
+    // wait for the batch to complete
+    cudaStreamSynchronize(stream);
+    auto bytes_decompressed =
+        gpu_decompressor.get_last_batch_bytes_decompressed();
+    ASSERT_GE(bytes_decompressed, 0)
+        << "failed to decompression chunk: " << -i
+        << " which is chunk: " << (-i) % chunks_per_block
+        << " in block: " << (-i) / chunks_per_block
+        << " this occurred in batch " << i;
+    ASSERT_EQ(expected_batch_decomp_size_bytes, bytes_decompressed);
+  }
+
+  std::vector<proteus::managed_ptr> uncompressed_blocks_cpu{};
+  uncompressed_blocks_cpu.reserve(partMetaData.num_blocks);
+  for (int i = 0; i < partMetaData.num_blocks; i++) {
+    uncompressed_blocks_cpu.emplace_back(BlockManager::get_buffer());
+    BlockManager::overwrite_bytes(
+        uncompressed_blocks_cpu[i].get(), uncompressed_blocks[i].get(),
+        partMetaData.value_counts[i] * sizeof(int32_t), stream, false);
+  }
+
+  validateLoadedBlocks(uncompressed_blocks_cpu,
+                       "inputs/ssbm1000/supplier.csv.s_region");
+
+  for (int i = 0; i < partMetaData.num_blocks; i++) {
+    BlockManager::release_buffer(uncompressed_blocks_cpu[i].release());
+    BlockManager::release_buffer(uncompressed_blocks[i].release());
+  }
 }
 
 TEST(DecompressionTest, decompress_datekey) {

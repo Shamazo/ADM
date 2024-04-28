@@ -39,13 +39,18 @@ struct DecompressionResult {
     const std::vector<CompressedFile::CompressedBlock>& compressed_blocks,
     bool from_cpu_mem) {
   std::chrono::milliseconds decomp_time;
-  uint32_t block_batch_size = 1;
+  const uint32_t block_batch_size = 1;
   uint32_t block_end;
+
+  auto gpu_decompressor = GpuDecompressor(
+      compressed_blocks.front().decompressed_chunk_size, block_batch_size,
+      compressed_blocks.front().chunk_sizes.size());
 
   std::cerr << "Block size: " << block_batch_size << std::endl;
 
   uint64_t bytes_decompressed = 0;
   {
+    cudaStream_t stream = createNonBlockingStream();
     time_block t{[&](const auto& time) { decomp_time = time; }};
     for (size_t block = 0; block < compressed_blocks.size();
          block += block_batch_size) {
@@ -55,12 +60,7 @@ struct DecompressionResult {
         block_end = block + block_batch_size;
       }
 
-      cudaStream_t stream = nullptr;
-      gpu_run(cudaStreamCreate(&stream));
-
       const size_t decomp_size = 2_M;
-      int decompressed_chunk_size =
-          compressed_blocks[block].decompressed_chunk_size;
 
       std::vector<std::vector<uint32_t>> block_chunk_sizes;
       std::vector<std::span<char>> block_compressed_buffers;
@@ -97,9 +97,15 @@ struct DecompressionResult {
       }
 
       // Run decompression in GPU.
-      bytes_decompressed += batch_decompress_block_gpu(
+      int result = gpu_decompressor.batch_decompress_block_gpu(
           block_chunk_sizes, block_compressed_buffers, block_output_buffers,
-          decompressed_chunk_size, stream);
+          stream);
+      CHECK_GE(result, 0);
+      cudaStreamSynchronize(stream);
+      int batch_decomp_size_bytes =
+          gpu_decompressor.get_last_batch_bytes_decompressed();
+      CHECK_GT(batch_decomp_size_bytes, 0) << "Decompression failed!";
+      bytes_decompressed += batch_decomp_size_bytes;
 
       // Free memory.
       if (from_cpu_mem) {
@@ -110,9 +116,8 @@ struct DecompressionResult {
       for (const auto& block_output_buffer : block_output_buffers) {
         gpu_run(cudaFree(block_output_buffer.data()));
       }
-
-      gpu_run(cudaStreamDestroy(stream));
     }
+    syncAndDestroyStream(stream);
   }
 
   //  {
