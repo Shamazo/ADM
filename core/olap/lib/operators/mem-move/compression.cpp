@@ -28,6 +28,7 @@
 #include <magic_enum.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/memory/memory-manager.hpp>
+#include <platform/topology/affinity_manager.hpp>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnewline-eof"
@@ -40,8 +41,18 @@
 
 GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
                                  size_t max_batch_block_count,
-                                 size_t max_chunks_per_block)
+                                 size_t max_chunks_per_block,
+                                 int gpu_index_in_topo)
     : m_max_decomp_chunk_size(max_decomp_chunk_size), last_batch_num_chunks(0) {
+  // ensure that we are allocating memory on the correct GPU
+  int gpu_index = gpu_index_in_topo;
+  if (gpu_index_in_topo == -1) {
+    gpu_index = topology::getInstance().getActiveGpu().index_in_topo;
+  }
+  m_gpu_index_in_topo = gpu_index;
+
+  set_device_on_scope d(topology::getInstance().getGpus()[m_gpu_index_in_topo]);
+
   const int max_batch_chunks = max_batch_block_count * max_chunks_per_block;
   m_host_compressed_ptrs = static_cast<void **>(
       MemoryManager::mallocPinned(sizeof(void *) * max_batch_chunks));
@@ -217,6 +228,9 @@ int GpuDecompressor::decompress_gpu(const size_t batch_size,
                                     size_t *device_compressed_bytes,
                                     size_t output_buffer_size,
                                     cudaStream_t stream) {
+  // to ensure kernels launched on the correct GPU
+  set_device_on_scope d(topology::getInstance().getGpus()[m_gpu_index_in_topo]);
+
   const bool synchronous = (stream == nullptr);
   if (synchronous) {
     stream = createNonBlockingStream();

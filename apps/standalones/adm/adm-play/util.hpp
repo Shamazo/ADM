@@ -38,7 +38,7 @@ void check_vector_paths(const std::vector<std::string> &paths) {
   }
 }
 
-enum class Shaper {NVMECPU, NVMEGPU};
+enum class Shaper { NVMECPU, NVMEGPU };
 
 /*
  * For all combinations of drives. Outer vector is per drive num
@@ -58,7 +58,7 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
       check_vector_paths(two_drives);
       return {one_drive, two_drives};
     }
-    if (sf == 1000){
+    if (sf == 1000) {
       std::vector<std::string> one_drive = {
           "/scratch2/nicholso/data/compressed_ssbm1000"};
       std::vector<std::string> two_drives = {
@@ -242,8 +242,7 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
   CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
   if (server_number == 44) {
     if (sf == 100) {
-      std::vector<std::string> one_drive = {
-          "/scratch/data/ssbm100"};
+      std::vector<std::string> one_drive = {"/scratch/data/ssbm100"};
       std::vector<std::string> two_drives = {
           "/scratch/nicholso/data/ssbm100_0_2",
           "/scratch2/nicholso/data/ssbm100_1_2"};
@@ -253,14 +252,13 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
       return {one_drive, two_drives};
     }
     if (sf == 1000) {
-      std::vector<std::string> one_drive = {
-          "/scratch/data/ssbm1000"};
-//      std::vector<std::string> two_drives = {
-//          "/scratch/nicholso/data/ssbm1000_0_2",
-//          "/scratch2/nicholso/data/ssbm1000_1_2"};
+      std::vector<std::string> one_drive = {"/scratch/data/ssbm1000"};
+      //      std::vector<std::string> two_drives = {
+      //          "/scratch/nicholso/data/ssbm1000_0_2",
+      //          "/scratch2/nicholso/data/ssbm1000_1_2"};
 
       check_vector_paths(one_drive);
-//      check_vector_paths(two_drives);
+      //      check_vector_paths(two_drives);
       return {one_drive};
     }
   }
@@ -444,24 +442,84 @@ PreparedStatement small_scan(proteus::QueryShaper &morph,
                              const std::string &lo_column) {
   morph.setQueryName("small_scan");
 
-  return morph
-      .parallel(morph.scan("lineorder", {lo_column}), {},
-                [&](auto probe, auto) {
-                  return probe.unpack()
-                      .filter([&](const auto &arg) -> expression_t {
-                        return expressions::hint(
-                            lt(arg[lo_column], 1),
-                            expressions::Selectivity(0.000001));
-                      })
-                      .reduce(
-                          [&](const auto &arg) -> std::vector<expression_t> {
-                            return {arg[lo_column]};
-                          },
-                          {SUM});
-                })
+  auto scan = morph.scan("lineorder", {lo_column});
+  auto gpu_pip =
+      morph.distribute_probe(scan)
+          .unpack()
+          .filter([&](const auto &arg) -> expression_t {
+            return expressions::hint(lt(arg[lo_column], 1),
+                                     expressions::Selectivity(0.000001));
+          })
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg[lo_column]};
+              },
+              {SUM});
+  return morph.collect(gpu_pip)
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {arg[lo_column]};
+          },
+          {SUM})
+      .print(pg{"pm-csv"})
+      .prepare();
+}
+
+PreparedStatement scan_two_columns(proteus::QueryShaper &morph,
+                                   const std::string &lo_col1,
+                                   const std::string &lo_col2) {
+  morph.setQueryName("two_col_scan");
+
+  auto scan = morph.scan("lineorder", {lo_col1, lo_col2});
+  auto gpu_pip =
+      morph.distribute_probe(scan)
+          .unpack()
+          .filter([&](const auto &arg) -> expression_t {
+            return expressions::hint(lt(arg[lo_col1], 1),
+                                     expressions::Selectivity(0.000001));
+          })
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg[lo_col1]};
+              },
+              {SUM});
+  return morph.collect(gpu_pip)
+      .reduce(
+          [&](const auto &arg) -> std::vector<expression_t> {
+            return {arg[lo_col1]};
+          },
+          {SUM})
+      .print(pg{"pm-csv"})
+      .prepare();
+}
+
+PreparedStatement scan_six_columns(proteus::QueryShaper &morph,
+                                   const std::string &lo_col1,
+                                   const std::string &lo_col2,
+                                   const std::string &lo_col3,
+                                   const std::string &lo_col4,
+                                   const std::string &lo_col5,
+                                   const std::string &lo_col6) {
+  morph.setQueryName("two_col_scan");
+
+  auto scan = morph.scan(
+      "lineorder", {lo_col1, lo_col2, lo_col3, lo_col4, lo_col5, lo_col6});
+  auto gpu_pip =
+      morph.distribute_probe(scan)
+          .unpack()
+          .filter([&](const auto &arg) -> expression_t {
+            return expressions::hint(gt(arg[lo_col1], 1),
+                                     expressions::Selectivity(0.000001));
+          })
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg[lo_col1]};
+              },
+              {SUM});
+  return morph.collect(gpu_pip)
+      .reduce(
+          [&](const auto &arg) -> std::vector<expression_t> {
+            return {arg[lo_col1]};
           },
           {SUM})
       .print(pg{"pm-csv"})

@@ -58,10 +58,11 @@ class GpuDecompressor {
   size_t* m_device_uncompressed_chunk_sizes;
 
   size_t last_batch_num_chunks;
+  int m_gpu_index_in_topo;
 
  public:
   GpuDecompressor(size_t max_decomp_chunk_size, size_t max_batch_block_count,
-                  size_t max_chunks_per_block);
+                  size_t max_chunks_per_block, int gpu_index_in_topo = -1);
   ~GpuDecompressor();
 
   /**

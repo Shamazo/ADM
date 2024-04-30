@@ -69,13 +69,14 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push(
 proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
     const proteus::managed_ptr &src, int target_device, cudaStream_t movestrm,
     workunit *wu) {
-  auto page_id = NvmePlugin::PageId_t::from_ptr(src.get());
+  const auto page_id = NvmePlugin::PageId_t::from_ptr(src.get());
   DCHECK_NE(nvme_plugin, nullptr);
   const auto page_io_info = nvme_plugin->getPageIoInfo(page_id);
 
   auto buff = BlockManager::h_get_buffer(target_device);
 
-  if (page_io_info.is_compressed) {
+  if (page_io_info.is_compressed && target_device < 0) {
+    // CPU target and compressed case
     // allocate temporary storage for IO target
     // decompress into the target buffer
     char *compressed_buff =
@@ -117,26 +118,29 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
 
   } else {
     DCHECK_LE(*page_io_info.size, BlockManager::block_size);
-    CHECK(*page_io_info.size % 4_K == 0);
+    DCHECK(*page_io_info.size % 4_K == 0);
 
     if (target_device >= 0) {
       // GPU case
       // cuFiles does not respect event synchronization. Hence, each WU has its
       // own stream
-      static off_t buff_offset = 0;
-      wu->bytes_read[wu->index_in_wu] = 0;
-      //      LOG(INFO) << "read size " << read_size;
-      //      LOG(INFO) << "page_offset " << page_offset;
-      /// required lifetimes of pointers passed to cuFileReadAsync is unknown
-      CUfileError_t status = cuFileReadAsync(
-          page_io_info.cufile_handle, buff.get(),
-          const_cast<size_t *>(page_io_info.size),
-          const_cast<off_t *>(page_io_info.offset), &buff_offset,
-          &(wu->bytes_read[wu->index_in_wu]), wu->cufile_strm);
-      CHECK_EQ(status.err, CU_FILE_SUCCESS)
-          << "cuFileReadAsync failed with: "
-          << cufileop_status_error(status.err);
-      wu->index_in_wu += 1;
+      //      static off_t buff_offset = 0;
+      //      wu->bytes_read[wu->index_in_wu] = 0;
+      // required lifetimes of pointers passed to cuFileReadAsync is unknown
+      //      CUfileError_t status = cuFileReadAsync(
+      //          page_io_info.cufile_handle, buff.get(),
+      //          const_cast<size_t *>(page_io_info.size),
+      //          const_cast<off_t *>(page_io_info.offset), &buff_offset,
+      //          &(wu->bytes_read[wu->index_in_wu]), wu->cufile_strm);
+      //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+      //          << "cuFileReadAsync failed with: "
+      //          << cufileop_status_error(status.err);
+
+      ssize_t bytes_read =
+          cuFileRead(page_io_info.cufile_handle, buff.get(), *page_io_info.size,
+                     *page_io_info.offset, 0);
+      CHECK_GT(bytes_read, 0) << "cuFileRead failed with: " << bytes_read;
+      //      wu->index_in_wu += 1;
     } else {
       // CPU case
       wu->complete += 1;
@@ -165,8 +169,7 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
     return buff_pair::not_moved(
         std::move(buff));  // src is not a pointer and does not need freeing
   } else {
-    // currently only used do NVMe to CPU IO
-    // TODO: is pass the fact we are doing IO to the operator constructor
+    // regular memory to memory movement
     const auto *d = topology::getInstance().getGpuAddressed(src.get());
     int dev = d ? static_cast<int>(d->id) : -1;
 
@@ -179,13 +182,114 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
   }
 }
 
+std::vector<buff_pair> MemMoveDevice::MemMoveConf::batch_push_nvme_to_gpu(
+    const std::vector<proteus::managed_ptr> &src, size_t bytes,
+    int target_device, uint64_t srcServer, workunit *wu) {
+  set_device_on_scope d(topology::getInstance().getGpus()[target_device]);
+  std::vector<buff_pair> buff_pairs;
+  std::vector<std::vector<uint32_t>> block_chunk_sizes;
+  std::vector<std::span<char>> block_compressed_buffers;
+  std::vector<std::span<char>> block_decompressed_buffers;
+  std::vector<void *> to_cuda_free;  // to free on the stream after
+                                     // decompression is enqueued on the stream
+
+  static off_t buff_offset =
+      0;  // offset for cuFileReadAsync to write into block
+
+  for (uint8_t i = 0; i < src.size(); i++) {
+    DCHECK(NvmePlugin::PageId_t::isPageIdPtr(src[i].get()));
+    // NVMe to CPU for staging
+    if (!do_transfer[i]) {
+      buff_pairs.emplace_back(
+          buff_pair::not_moved(force_push_from_nvme(src[i], -1, strm, wu)));
+      continue;
+    }
+    // otherwise NVMe to GPU (compressed or not compressed)
+    auto page_id = NvmePlugin::PageId_t::from_ptr(src[i].get());
+    const auto page_io_info = nvme_plugin->getPageIoInfo(page_id);
+
+    // nvme to GPU no decompression
+    if (!page_io_info.is_compressed) {
+      buff_pairs.emplace_back(buff_pair::not_moved(
+          force_push_from_nvme(src[i], target_device, strm, wu)));
+      continue;
+    }
+
+    // NVMe to GPU with compression
+    // in this loop we do IO and set up buffers
+    DCHECK(do_transfer[i]);
+    DCHECK(page_io_info.is_compressed);
+    auto decomp_buff = BlockManager::h_get_buffer(target_device);
+    void *comp_buff = nullptr;
+    cudaMalloc(&comp_buff, *page_io_info.size);
+    DCHECK_EQ(((uintptr_t)comp_buff) % 4096, 0);
+
+    auto decomp_span = std::span<char>(static_cast<char *>(decomp_buff.get()),
+                                       BlockManager::block_size);
+    auto comp_span =
+        std::span<char>(static_cast<char *>(comp_buff), *page_io_info.size);
+    block_compressed_buffers.emplace_back(comp_span);
+    block_decompressed_buffers.emplace_back(decomp_span);
+    block_chunk_sizes.emplace_back(page_io_info.chunk_sizes);
+    to_cuda_free.emplace_back(comp_buff);
+    ssize_t bytes_read =
+        cuFileRead(page_io_info.cufile_handle, comp_buff, *page_io_info.size,
+                   *page_io_info.offset, 0);
+
+    CHECK_GT(bytes_read, 0) << "cuFileRead failed with: " << bytes_read;
+    buff_pairs.emplace_back(buff_pair::not_moved(std::move(decomp_buff)));
+  }
+
+  // then we submit a batch decompression on the gpu, if any block was
+  // compressed
+  if (!block_chunk_sizes.empty()) {
+    int res = (*wu->decompressors)[target_device].batch_decompress_block_gpu(
+        block_chunk_sizes, block_compressed_buffers, block_decompressed_buffers,
+        wu->cufile_strm);
+    CHECK_GE(res, 0) << "batch decompression failed";
+    for (auto ptr : to_cuda_free) {
+      gpu_run(cudaFreeAsync(ptr, wu->cufile_strm));
+    }
+  }
+  return buff_pairs;
+}
+
 extern "C" {
 void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
                           uint64_t srcServer, MemMoveDevice::MemMoveConf *mmc,
                           int num_buffers, pb *pair_buffs,
                           MemMoveDevice::workunit *wu) noexcept {
+  const static auto prt = profiling::ProfileRegionType("memmove:::make_mmd");
+  const bool any_iouring =
+      (target_device < 0) |
+      std::all_of(mmc->do_transfer.begin(), mmc->do_transfer.end(),
+                  [](bool v) { return !v; });
+  auto prof_reg = profiling::ProfileRegion(prt);
   wu->complete = 0;
   wu->index_in_wu = 0;
+  if (NvmePlugin::PageId_t::isPageIdPtr(src_ptrs[0]) && target_device >= 0) {
+    std::vector<proteus::managed_ptr> src_ptrs_vec;
+    src_ptrs_vec.reserve(num_buffers);
+    for (int i = 0; i < num_buffers; i++) {
+      src_ptrs_vec.emplace_back(src_ptrs[i]);
+    }
+    auto moved_pair_buffs = mmc->batch_push_nvme_to_gpu(
+        src_ptrs_vec, *bytes, target_device, srcServer, wu);
+    for (int i = 0; i < num_buffers; i++) {
+      auto &x = moved_pair_buffs[i];
+      pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
+      src_ptrs_vec[i].release();
+    }
+    if (any_iouring) {
+      mmc->io_uring->submit();
+      /// poll until there are (probably) enough buffers for the next iteration
+      while (mmc->idle.size_unsafe() < num_buffers) {
+        mmc->io_uring->poll();
+      }
+    }
+    return;
+  }
+
   for (int i = 0; i < num_buffers; i++) {
     auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
                        target_device, srcServer, wu);
@@ -196,7 +300,6 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
     /// poll until there are (probably) enough buffers for the next iteration
     while (mmc->idle.size_unsafe() < num_buffers) {
       mmc->io_uring->poll();
-      //      std::this_thread::yield();
     }
   }
 }
@@ -530,7 +633,9 @@ void MemMoveDevice::consume(OlapParallelContext *context,
 
 MemMoveDevice::MemMoveConf *MemMoveDevice::createMoveConf() const {
   void *pmmc = MemoryManager::mallocPinned(sizeof(MemMoveConf));
-  return new (pmmc) MemMoveConf;
+  auto mmc = new (pmmc) MemMoveConf;
+  mmc->do_transfer = do_transfer;
+  return mmc;
 }
 
 void MemMoveDevice::destroyMoveConf(MemMoveDevice::MemMoveConf *mmc) const {
@@ -550,15 +655,17 @@ void MemMoveDevice::open(Pipeline *pip) {
 
   size_t data_size = (pip->getSizeOf(data_type) + 16 - 1) & ~((size_t)0xF);
 
-  if (!to_cpu) {
-    CUfileError_t status = cuFileStreamRegister(
-        strm,
-        CU_FILE_STREAM_PAGE_ALIGNED_INPUTS | CU_FILE_STREAM_FIXED_BUF_OFFSET |
-            CU_FILE_STREAM_FIXED_FILE_OFFSET | CU_FILE_STREAM_FIXED_FILE_SIZE);
-    CHECK_EQ(status.err, CU_FILE_SUCCESS)
-        << "Failed to cuFileStreamRegister status: "
-        << cufileop_status_error(status.err);
-  }
+  //  if (!to_cpu) {
+  //    CUfileError_t status = cuFileStreamRegister(
+  //        strm,
+  //        CU_FILE_STREAM_PAGE_ALIGNED_INPUTS | CU_FILE_STREAM_FIXED_BUF_OFFSET
+  //        |
+  //            CU_FILE_STREAM_FIXED_FILE_OFFSET |
+  //            CU_FILE_STREAM_FIXED_FILE_SIZE);
+  //    CHECK_EQ(status.err, CU_FILE_SUCCESS)
+  //        << "Failed to cuFileStreamRegister status: "
+  //        << cufileop_status_error(status.err);
+  //  }
 
   MemMoveConf *mmc = createMoveConf();
 
@@ -584,14 +691,21 @@ void MemMoveDevice::open(Pipeline *pip) {
     mmc->idle.push(wu + i);
 
     if (!to_cpu) {
-      CUfileError_t status = cuFileStreamRegister(
-          wu[i].cufile_strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
-                                 CU_FILE_STREAM_FIXED_BUF_OFFSET |
-                                 CU_FILE_STREAM_FIXED_FILE_OFFSET |
-                                 CU_FILE_STREAM_FIXED_FILE_SIZE);
-      CHECK_EQ(status.err, CU_FILE_SUCCESS)
-          << "Failed to cuFileStreamRegister status: "
-          << cufileop_status_error(status.err);
+      wu[i].decompressors = new std::vector<GpuDecompressor>{};
+      wu[i].decompressors->reserve(topology::getInstance().getGpuCount());
+      for (int j = 0; j < topology::getInstance().getGpuCount(); j++) {
+        wu[i].decompressors->emplace_back(16_K, wantedFields.size(), 2_M / 16_K,
+                                          j);
+      }
+      //      CUfileError_t status = cuFileStreamRegister(
+      //          wu[i].cufile_strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
+      //                                 CU_FILE_STREAM_FIXED_BUF_OFFSET |
+      //                                 CU_FILE_STREAM_FIXED_FILE_OFFSET |
+      //                                 CU_FILE_STREAM_FIXED_FILE_SIZE);
+      //
+      //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+      //          << "Failed to cuFileStreamRegister status: "
+      //          << cufileop_status_error(status.err);
     }
   }
   // nvtxRangePushA("memmove::open2");
@@ -636,12 +750,12 @@ void MemMoveDevice::close(Pipeline *pip) {
 
   event_range<range_log_op::MEMMOVE_CLOSE_CLEAN_UP> er{id, catch_pip->getUUID(),
                                                        pip->getGroup()};
-  if (!to_cpu) {
-    CUfileError_t status = cuFileStreamDeregister(mmc->strm);
-    CHECK_EQ(status.err, CU_FILE_SUCCESS)
-        << "failed to cuFileStreamDeregister status: "
-        << cufileop_status_error(status.err);
-  }
+  //  if (!to_cpu) {
+  //    CUfileError_t status = cuFileStreamDeregister(mmc->strm);
+  //    CHECK_EQ(status.err, CU_FILE_SUCCESS)
+  //        << "failed to cuFileStreamDeregister status: "
+  //        << cufileop_status_error(status.err);
+  //  }
 
   syncAndDestroyStream(mmc->strm);
 
@@ -652,20 +766,20 @@ void MemMoveDevice::close(Pipeline *pip) {
   workunit *start_wu = nullptr;
   for (size_t i = 0; i < slack; ++i) {
     workunit *wu = mmc->idle.pop_unsafe();
-    if (!to_cpu) {
-      CUfileError_t status = cuFileStreamDeregister(wu->cufile_strm);
-      CHECK_EQ(status.err, CU_FILE_SUCCESS)
-          << "failed to cuFileStreamDeregister status: "
-          << cufileop_status_error(status.err);
-    }
     syncAndDestroyStream(wu->cufile_strm);
+    if (!to_cpu) {
+      //      CUfileError_t status = cuFileStreamDeregister(wu->cufile_strm);
+      //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
+      //          << "failed to cuFileStreamDeregister status: "
+      //          << cufileop_status_error(status.err);
+      delete wu->decompressors;
+    }
     MemoryManager::freePinned(wu->bytes_read);
     gpu_run(cudaEventDestroy(wu->event));
     if (i == 0 || wu < start_wu) start_wu = wu;
   }
   nvtxRangePop();
   nvtxRangePop();
-
   MemoryManager::freePinned(mmc->data_buffs);
   MemoryManager::freePinned(start_wu);
 
@@ -697,13 +811,19 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
   if (!tran.pop(*ret)) return false;
-  gpu_run(cudaEventSynchronize((*ret)->event));
+
   if (nvme_plugin != nullptr) {
+    const static auto prt = profiling::ProfileRegionType("memmove:::get_prop");
+    auto prof_reg = profiling::ProfileRegion(prt);
     cudaStreamSynchronize((*ret)->cufile_strm);
+    //    cudaStreamSynchronize(strm);
+    while ((*ret)->complete != 0) {
+      std::this_thread::yield();
+    }
+    return true;
   }
-  while ((*ret)->complete != 0) {
-    std::this_thread::yield();
-  }
+  gpu_run(cudaEventSynchronize((*ret)->event));
+
   return true;
 }
 

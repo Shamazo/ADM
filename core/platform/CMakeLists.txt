@@ -121,6 +121,7 @@ target_link_libraries(platform
   NUMA::NUMA
   RDMA::RDMA
   ${CUDA_LIBS}
+  ${CMAKE_DL_LIBS}
   stduuid::stduuid
   PRIVATE
   magic_enum::magic_enum

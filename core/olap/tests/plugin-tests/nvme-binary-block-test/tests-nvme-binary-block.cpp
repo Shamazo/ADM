@@ -993,4 +993,148 @@ TEST_F(NvmePluginTest, gpu_scan_and_move_two_col_two_part) {
   EXPECT_EQ(split_output[4], 2 * expected_count);
 }
 
+TEST_F(NvmePluginTest, gpu_scan_and_move_two_col_two_part_staging) {
+  auto& topo = topology::getInstance();
+  if (topo.getGpus().size() == 0) {
+    GTEST_SKIP_("No GPUs available");
+  }
+  set_exec_location_on_scope exec(topo.getGpus()[0]);
+
+  RecordType my_record_type =
+      rel("customer.csv")(Int("c_phone"), Int("c_custkey"));
+
+  const std::filesystem::path md_path_c_phone =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_phone.metadata.json";
+  const std::filesystem::path md_path_c_custkey =
+      "inputs/nvme-plugin-tests/ssb100_customer.csv.c_custkey.metadata.json";
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_phone"],
+                           std::vector{md_path_c_phone, md_path_c_phone});
+
+  relation_md.emplace_back(meta_data_records_map["c_custkey"],
+                           std::vector{md_path_c_custkey, md_path_c_custkey});
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  //  res should hold the page_ids in csv format for the 6 blocks
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .memmove(4, DeviceType::GPU,
+                          std::make_optional<std::vector<bool>>(
+                              {true, false}))  /// staging 2nd col
+                 .to_gpu()
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "key_min"),
+                               arg["c_custkey"].as("tmp", "key_max"),
+                               arg["c_phone"].as("tmp", "phone_min"),
+                               arg["c_phone"].as("tmp", "phone_max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .to_cpu()
+                 .router(DegreeOfParallelism{1}, 4, RoutingPolicy::RANDOM,
+                         DeviceType::CPU)
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["key_min"], arg["key_max"], arg["phone_min"],
+                               arg["phone_max"], arg["count"]};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  auto split_output = splitStringToInt32(output.str());
+  EXPECT_EQ(split_output.size(), 5)
+      << "expected a single tuple with 5 aggregates";
+  auto [expected_min_key, expected_max_key, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_custkey");
+  auto [expected_min_phone, expected_max_phone, _] =
+      calculate_min_max_count_int32("inputs/ssbm100/customer.csv.c_phone");
+  EXPECT_EQ(split_output[0], expected_min_key);
+  EXPECT_EQ(split_output[1], expected_max_key);
+  EXPECT_EQ(split_output[2], expected_min_phone);
+  EXPECT_EQ(split_output[3], expected_max_phone);
+  // 2 partitions that are the same base data
+  EXPECT_EQ(split_output[4], 2 * expected_count);
+}
+
+TEST_F(NvmePluginTest, gpu_scan_and_move_two_col_two_part_compressed) {
+  auto& topo = topology::getInstance();
+  if (topo.getGpus().size() == 0) {
+    GTEST_SKIP_("No GPUs available");
+  }
+  set_exec_location_on_scope exec(topo.getGpus()[0]);
+
+  RecordType my_record_type =
+      rel("customer.csv")(Int("c_phone"), Int("c_custkey"));
+
+  // TODO fix server specific paths
+  const std::filesystem::path md_path_c_phone =
+      "/nvme14/nicholso/data/compressed_ssbm1000/"
+      "customer.csv.c_phone_0_1.metadata.json";
+  const std::filesystem::path md_path_c_custkey =
+      "/nvme14/nicholso/data/compressed_ssbm1000/"
+      "customer.csv.c_custkey_0_1.metadata.json";
+
+  auto meta_data_records_map = my_record_type.getArgsMap();
+  std::vector<std::pair<RecordAttribute*, std::vector<std::filesystem::path>>>
+      relation_md;
+  relation_md.emplace_back(meta_data_records_map["c_phone"],
+                           std::vector{md_path_c_phone, md_path_c_phone});
+
+  relation_md.emplace_back(meta_data_records_map["c_custkey"],
+                           std::vector{md_path_c_custkey, md_path_c_custkey});
+
+  RelBuilderFactory factory = getRelBuilderFactory();
+  //  res should hold the page_ids in csv format for the 6 blocks
+  auto res = factory.getBuilder()
+                 .scan(relation_md)
+                 .memmove(4, DeviceType::GPU)
+                 .to_gpu()
+                 .unpack()
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["c_custkey"].as("tmp", "key_min"),
+                               arg["c_custkey"].as("tmp", "key_max"),
+                               arg["c_phone"].as("tmp", "phone_min"),
+                               arg["c_phone"].as("tmp", "phone_max"),
+                               expression_t{1}.as("tmp", "count")};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .to_cpu()
+                 .router(DegreeOfParallelism{1}, 4, RoutingPolicy::RANDOM,
+                         DeviceType::CPU)
+                 .reduce(
+                     [&](const auto& arg) -> std::vector<expression_t> {
+                       return {arg["key_min"], arg["key_max"], arg["phone_min"],
+                               arg["phone_max"], arg["count"]};
+                     },
+                     {MIN, MAX, MIN, MAX, SUM})
+                 .print(pg("pm-csv"))
+                 .prepare()
+                 .execute();
+  std::stringstream output;
+  output << res;
+  std::string res_string = output.str();
+  auto split_output = splitStringToInt32(res_string);
+  EXPECT_EQ(split_output.size(), 5)
+      << "expected a single tuple with 5 aggregates instead of " << res_string;
+  auto [expected_min_key, expected_max_key, expected_count] =
+      calculate_min_max_count_int32("inputs/ssbm1000/customer.csv.c_custkey");
+  auto [expected_min_phone, expected_max_phone, _] =
+      calculate_min_max_count_int32("inputs/ssbm1000/customer.csv.c_phone");
+  EXPECT_EQ(split_output[0], expected_min_key);
+  EXPECT_EQ(split_output[1], expected_max_key);
+  EXPECT_EQ(split_output[2], expected_min_phone);
+  EXPECT_EQ(split_output[3], expected_max_phone);
+  // 2 partitions that are the same base data
+  EXPECT_EQ(split_output[4], 2 * expected_count);
+}
+
 #pragma clang diagnostic pop

@@ -15,6 +15,8 @@ target_link_libraries(${PROJECT_NAME}
   proteus::storage
   proteus::platform
   queries::ssb
+  magic_enum::magic_enum
+  ${CMAKE_DL_LIBS}
   )
 
 include(proteus-experiment)

@@ -134,16 +134,6 @@ RelBuilder RelBuilder::scan(Plugin &pg) const {
   return RelBuilder{ctx, new Scan(pg)};
 }
 
-RelBuilder RelBuilder::memmove(
-    const std::vector<RecordAttribute *> &wantedFields, size_t slack,
-    DeviceType to) const {
-  for (const auto &attr : wantedFields) {
-    assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
-  }
-  auto op = new MemMoveDevice(root, wantedFields, slack, to == DeviceType::CPU);
-  return apply(op);
-}
-
 RelBuilder RelBuilder::memmove_scaleout(
     const std::vector<RecordAttribute *> &wantedFields, size_t slack) const {
   for (const auto &attr : wantedFields) {
@@ -217,8 +207,21 @@ RelBuilder RelBuilder::membrdcst_scaleout(size_t fanout, bool to_cpu,
       fanout, to_cpu, always_share);
 }
 
-RelBuilder RelBuilder::memmove(size_t slack, DeviceType to) const {
-  CHECK(root->isPacked()) << "MemMove is not applicable to unpacked inputs";
+RelBuilder RelBuilder::memmove(
+    const std::vector<RecordAttribute *> &wantedFields, size_t slack,
+    DeviceType to, const std::vector<bool> &do_transfer) const {
+  for (const auto &attr : wantedFields) {
+    assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
+  }
+  auto op = new MemMoveDevice(root, wantedFields, slack, to == DeviceType::CPU,
+                              do_transfer);
+  return apply(op);
+}
+
+RelBuilder RelBuilder::memmove(
+    size_t slack, DeviceType to,
+    std::optional<std::vector<bool>> do_transfer) const {
+  assert(root->isPacked() && "MemMove is not applicable to unpacked inputs");
   std::vector<RecordAttribute *> ret;
   for (const auto &attr : getOutputArg().getProjections()) {
     if (dynamic_cast<const BlockType *>(attr.getOriginalType())) {
@@ -226,7 +229,19 @@ RelBuilder RelBuilder::memmove(size_t slack, DeviceType to) const {
     }
   }
   DCHECK(!ret.empty()) << "No attributes to move!";
-  return memmove(ret, slack, to);
+  std::vector<bool> do_transfer_vec;
+  if (do_transfer.has_value()) {
+    do_transfer_vec = do_transfer.value();
+    DCHECK_EQ(do_transfer->size(), ret.size())
+        << "Invalid do_transfer vector! do_transfer.size() must be equal to "
+           "the number of attributes to transfer!";
+    if (to == DeviceType::CPU) {
+      LOG(WARNING) << "do_transfer provided for CPU target. Ignoring it!";
+    }
+  } else {
+    do_transfer_vec = std::vector<bool>(ret.size(), true);
+  }
+  return memmove(ret, slack, to, do_transfer_vec);
 }
 
 RelBuilder RelBuilder::memmove_scaleout(const MultiAttributeFactory &attr,

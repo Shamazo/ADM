@@ -180,7 +180,7 @@ void Router::generate_catch(OlapParallelContext *context) {
 }
 
 proteus::managed_ptr Router::acquireBuffer(int target, bool polling) {
-  nvtxRangePushA("acq_buff");
+  nvtxRangePushA("rtr::acq_buff");
 
   if (free_pool[target].empty_unsafe() && polling) {
     nvtxRangePop();

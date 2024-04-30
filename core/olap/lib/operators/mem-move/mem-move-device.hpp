@@ -31,6 +31,7 @@
 #include <storage/io_uring.hpp>
 #include <thread>
 
+#include "compression.hpp"
 #include "lib/operators/operators.hpp"
 #include "olap/plugins/binary-block-nvme-plugin.hpp"
 
@@ -44,13 +45,15 @@ struct buff_pair {
 
 class MemMoveDevice : public experimental::UnaryOperator {
  public:
-  struct workunit {
+  struct alignas(64) workunit {
     void *data;
     cudaEvent_t event;
     std::atomic<int> complete;  // 0 for complete, positive number for remaining
-    ssize_t* bytes_read;
-    cudaStream_t cufile_strm; // stream for cufile, memcpyasync still uses mmc->strm
-    uint8_t index_in_wu; // Index within bytes_read
+    ssize_t *bytes_read;        // for cufile async api only
+    cudaStream_t cufile_strm;   // stream for cufile/nvcomp, memcpyasync still
+                                // uses mmc->strm
+    std::vector<GpuDecompressor> *decompressors;
+    uint8_t index_in_wu;           // Index within bytes_read
     [[maybe_unused]] bool unused;  // FIXME: remove
   };
 
@@ -81,6 +84,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
     void *data_buffs;
     std::unique_ptr<proteus::storage::IoUringThreadUnsafe> io_uring;
     NvmePlugin *nvme_plugin;  // TODO something neater
+    std::vector<bool> do_transfer;
 
    public:
     virtual ~MemMoveConf() = default;
@@ -98,6 +102,9 @@ class MemMoveDevice : public experimental::UnaryOperator {
     virtual proteus::managed_ptr pull(proteus::managed_ptr buff) {
       return buff;
     }
+    std::vector<buff_pair> batch_push_nvme_to_gpu(
+        const std::vector<proteus::managed_ptr> &src, size_t bytes,
+        int target_device, uint64_t srcServer, workunit *wu);
 
     /**
      * acquire an idle workunit
@@ -179,6 +186,10 @@ class MemMoveDevice : public experimental::UnaryOperator {
   [[nodiscard]] int getTargetDevice() const;
   virtual void open(Pipeline *pip);
   virtual void close(Pipeline *pip);
+  // profiling domain
+  struct memmove_domain {
+    static constexpr char const *name{"memmove"};
+  };
 };
 
 extern "C" {

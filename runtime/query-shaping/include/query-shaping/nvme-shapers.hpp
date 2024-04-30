@@ -39,24 +39,7 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
    */
   [[nodiscard]] RelBuilder scan(
       const std::string &relName,
-      std::initializer_list<std::string> relAttrs) override {
-    std::vector<DanglingAttr> attrs = constructDanglingAttrs(relName, relAttrs);
-    RecordType scan_record_type = rel(relName)(attrs);
-
-    auto meta_data_records_map = scan_record_type.getArgsMap();
-    std::vector<
-        std::pair<RecordAttribute *, std::vector<std::filesystem::path>>>
-        relation_md;
-
-    for (const auto &attr : relAttrs) {
-      auto md_paths = getMdForAttribute(attr);
-      relation_md.emplace_back(meta_data_records_map[attr], md_paths);
-    }
-    auto builder = getBuilder();
-    auto rel = builder.scan(relation_md);
-    rel = rel.hintRowCount(getRowHint(relName));
-    return rel;
-  }
+      std::initializer_list<std::string> relAttrs) override;
 
   [[nodiscard]] std::string getRelName(const std::string &base) override {
     LOG(FATAL) << "N/A to NVMe shapers";
@@ -88,22 +71,7 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
 
  protected:
   std::vector<std::filesystem::path> getMdForAttribute(
-      const std::string &attr) const {
-    std::vector<std::filesystem::path> md_paths;
-    //     for each input dir, find all associated metadata files for this
-    //     attribute
-    for (const auto &dir : input_dirs) {
-      auto dir_files = getSortedDirectoryFiles(dir);
-      for (const auto &entry : dir_files) {
-        if (entry.string().find(attr + "_") != std::string::npos &&
-            entry.string().find("metadata.json") != std::string::npos) {
-          md_paths.push_back(entry);
-        }
-      }
-    }
-    std::sort(md_paths.begin(), md_paths.end());
-    return md_paths;
-  }
+      const std::string &attr) const;
 
   /**
    * gross and hacky helper to construct dangling attributes for a relation and
@@ -111,56 +79,7 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
    */
   std::vector<DanglingAttr> constructDanglingAttrs(
       const std::string &relName,
-      const std::vector<std::string> &relAttrs) const {
-    std::vector<DanglingAttr> attrs;
-    CatalogParser catalog = CatalogParser(catalog_path);
-    auto inputInfo =
-        catalog.getInputInfo(catalog_path + "/" + relName + ".csv");
-    auto &collType = dynamic_cast<CollectionType &>(*(inputInfo->exprType));
-
-    const ExpressionType &nestedType = collType.getNestedType();
-    auto record_type = dynamic_cast<const RecordType &>(nestedType);
-
-    for (const auto &attr : relAttrs) {
-      auto arg = record_type.getArg(attr);
-      if (!arg) {
-        LOG(FATAL) << "Attribute " << attr << " not found";
-      }
-      switch (arg->getOriginalType()->getTypeID()) {
-        case BOOL:
-          attrs.push_back(dangling_attr::Bool(attr));
-          break;
-        case DSTRING:
-          attrs.push_back(dangling_attr::DString(attr));
-          break;
-        case STRING:
-          attrs.push_back(dangling_attr::String(attr));
-          break;
-        case FLOAT:
-          attrs.push_back(dangling_attr::Float(attr));
-          break;
-        case INT:
-          attrs.push_back(dangling_attr::Int(attr));
-          break;
-        case DATE:
-          attrs.push_back(dangling_attr::Date(attr));
-          break;
-        case INT64:
-          attrs.push_back(dangling_attr::Int64(attr));
-          break;
-        case RECORD:
-        case LIST:
-        case BAG:
-        case SET:
-        case COMPOSITE:
-        case BLOCK:
-        case INDEXEDSEQ:
-          LOG(FATAL) << "Unsupported type";
-          break;
-      }
-    }
-    return attrs;
-  }
+      const std::vector<std::string> &relAttrs) const;
 
   const std::vector<std::string> input_dirs;
   const std::string catalog_path;  // the path to the legacy catalog file
@@ -188,6 +107,38 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   size_t scan_memmove_slack;
   size_t scan_rounter_slack;
 };
+
+class GPUOnlyNVMeMorsel : public proteus::CPUOnlyNVMeMorsel {
+  using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
+  [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
+
+  /**
+   * For GPUS, we do scan -> router (fanout) -> memmove -> router (fanin to GPU
+   * DOP) because the asynchronous cufile API does not appear to scale either
+   * with the number of threads or streams. On a A40 with 16x PCIe 4.0 we
+   * achieve at best ~60% of the pcie bandwidth.
+   * Our solution is to use the synchronous API, but have multiple memove
+   * instances for each GPU so that we can have multiple IOs in flight to
+   * achieve bandwidth. This approach achieves the maximum practical PCIe
+   * bandwidth.
+   * We should revisit the async API in future cuda versions, in theory it
+   * should be more efficient
+   */
+  RelBuilder distribute_probe(RelBuilder input) override {
+    auto rel = input.router(
+        DegreeOfParallelism(topology::getInstance().getGpuCount() * 12), 2,
+        RoutingPolicy::LOCAL, DeviceType::CPU, getAffinitizer());
+
+    if (doMove()) rel = rel.memmove(16, getDevice());
+    rel = rel.router(getDOP(), 8, RoutingPolicy::LOCAL, DeviceType::CPU,
+                     getAffinitizer());
+
+    if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
+
+    return rel;
+  }
+};
+
 };  // namespace proteus
 
 #endif  // PROTEUS_NVME_SHAPERS_HPP

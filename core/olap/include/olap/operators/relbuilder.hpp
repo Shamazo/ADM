@@ -277,10 +277,14 @@ class RelBuilder {
    *                    used for load balancing
    *                    (limits the on-the-fly transfers)
    * @param     to      the type of the current NUMA node
-   *
+   * @param     do_transfer  a vector of booleans, one per attribute. If to is a
+   * GPU, then true will transfer to the GPU, false will transfer from NVMe to
+   * CPU or if the data is CPU resident, it will remain there.
    * @see Chrysogelos et al, VLDB2019
    */
-  [[nodiscard]] RelBuilder memmove(size_t slack, DeviceType to) const;
+  [[nodiscard]] RelBuilder memmove(
+      size_t slack, DeviceType to,
+      std::optional<std::vector<bool>> do_transfer = std::nullopt) const;
 
   [[nodiscard]] RelBuilder memmove_scaleout(size_t slack) const;
 
@@ -591,7 +595,7 @@ class RelBuilder {
  private:
   [[nodiscard]] RelBuilder memmove(
       const std::vector<RecordAttribute*>& wantedFields, size_t slack,
-      DeviceType to) const;
+      DeviceType to, const std::vector<bool>& do_transfer) const;
 
   [[nodiscard]] RelBuilder memmove_scaleout(
       const std::vector<RecordAttribute*>& wantedFields, size_t slack) const;
