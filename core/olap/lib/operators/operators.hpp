@@ -168,25 +168,25 @@ class BinaryOperator : public Operator {
 
   [[nodiscard]] DeviceType getDeviceType() const override {
     auto dev = getLeftChild()->getDeviceType();
-    assert(dev == getRightChild()->getDeviceType());
+    CHECK(dev == getRightChild()->getDeviceType());
     return dev;
   }
 
   [[nodiscard]] DegreeOfParallelism getDOP() const override {
     auto dop = getLeftChild()->getDOP();
-    assert(dop == getRightChild()->getDOP());
-    return dop;
+    CHECK_EQ(dop, getRightChild()->getDOP());
+    return getRightChild()->getDOP();
   }
 
   [[nodiscard]] DegreeOfParallelism getDOPServers() const override {
     auto dop = getLeftChild()->getDOPServers();
-    assert(dop == getRightChild()->getDOPServers());
+    CHECK_EQ(dop, getRightChild()->getDOPServers());
     return dop;
   }
 
   [[nodiscard]] bool isPacked() const override {
     auto pckd = getLeftChild()->isPacked();
-    assert(pckd == getRightChild()->isPacked());
+    CHECK_EQ(pckd, getRightChild()->isPacked());
     return pckd;
   }
 
@@ -206,7 +206,7 @@ class POperator : public T {
 
   void consume(Context *const context, const OperatorState &childState) final {
     auto ctx = dynamic_cast<OlapParallelContext *>(context);
-    assert(ctx);
+    CHECK(ctx) << " context must be a OlapParallelContext for POperator";
 
     consume(ctx, childState);
   }
