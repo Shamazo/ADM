@@ -260,14 +260,12 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
                           int num_buffers, pb *pair_buffs,
                           MemMoveDevice::workunit *wu) noexcept {
   const static auto prt = profiling::ProfileRegionType("memmove:::make_mmd");
-  const bool any_iouring =
-      (target_device < 0) |
-      std::all_of(mmc->do_transfer.begin(), mmc->do_transfer.end(),
-                  [](bool v) { return !v; });
   auto prof_reg = profiling::ProfileRegion(prt);
   wu->complete = 0;
   wu->index_in_wu = 0;
   if (NvmePlugin::PageId_t::isPageIdPtr(src_ptrs[0]) && target_device >= 0) {
+    // for to GPU we do a batch push, this is for the compressed case where we
+    // want to do batch decompression
     std::vector<proteus::managed_ptr> src_ptrs_vec;
     src_ptrs_vec.reserve(num_buffers);
     for (int i = 0; i < num_buffers; i++) {
@@ -280,27 +278,18 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
       pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
       src_ptrs_vec[i].release();
     }
-    if (any_iouring) {
-      mmc->io_uring->submit();
-      /// poll until there are (probably) enough buffers for the next iteration
-      while (mmc->idle.size_unsafe() < num_buffers) {
-        mmc->io_uring->poll();
-      }
+  } else {
+    for (int i = 0; i < num_buffers; i++) {
+      auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
+                         target_device, srcServer, wu);
+      pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
     }
-    return;
   }
 
-  for (int i = 0; i < num_buffers; i++) {
-    auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
-                       target_device, srcServer, wu);
-    pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
-  }
-  if (NvmePlugin::PageId_t::isPageIdPtr(src_ptrs[0])) {
+  // if we have an mmc->io_uring instance it means we have some CPU IO
+  // so we submit the operations we just constructed
+  if (mmc->io_uring) {
     mmc->io_uring->submit();
-    /// poll until there are (probably) enough buffers for the next iteration
-    while (mmc->idle.size_unsafe() < num_buffers) {
-      mmc->io_uring->poll();
-    }
   }
 }
 
@@ -678,7 +667,13 @@ void MemMoveDevice::open(Pipeline *pip) {
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   if (dynamic_cast<NvmePlugin *>(pg)) {
     mmc->nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
-    mmc->io_uring = std::make_unique<proteus::storage::IoUringThreadUnsafe>(32);
+    // if this a mem-move NVMe->CPU or nvme->GPU with staging in CPU, we need an
+    // io_uring
+    if (to_cpu | std::all_of(mmc->do_transfer.begin(), mmc->do_transfer.end(),
+                             [](bool v) { return !v; })) {
+      mmc->io_uring =
+          std::make_unique<proteus::storage::IoUringThreadUnsafe>(32);
+    }
   }
   char *data_buff = (char *)mmc->data_buffs;
   for (size_t i = 0; i < slack; ++i) {
@@ -793,8 +788,17 @@ void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
   if (!is_noop) {
     gpu_run(cudaEventRecord(buff->event, strm));
   }
-
   tran.push(buff);
+
+  if (io_uring != nullptr) {
+    // 2 is a magic number, might need to tune or find a heuristic
+    while (idle.size_unsafe() < 2) {
+      // poll and handle io_uring completions
+      // Polling enters the kernel, reaps completions and executes the callbacks
+      io_uring->poll();
+      DLOG_EVERY_N(INFO, 100000) << "polling.... ";
+    }
+  }
 }
 
 MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
@@ -810,13 +814,17 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 }
 
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
-  if (!tran.pop(*ret)) return false;
+  if (!tran.pop(*ret)) {
+    return false;
+  }
 
   if (nvme_plugin != nullptr) {
     const static auto prt = profiling::ProfileRegionType("memmove:::get_prop");
     auto prof_reg = profiling::ProfileRegion(prt);
+    // wait for GPU decompression if any
     cudaStreamSynchronize((*ret)->cufile_strm);
     //    cudaStreamSynchronize(strm);
+    // wait for io_uring operations if any
     while ((*ret)->complete != 0) {
       std::this_thread::yield();
     }
