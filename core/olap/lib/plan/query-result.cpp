@@ -53,9 +53,10 @@ QueryResult::QueryResult(const std::string &outputfile)
   // mmap shared memory
   if (output_path.is_relative()) {
     auto p = "/dev/shm" / std::filesystem::path{outputfile};
-    assert(std::filesystem::exists(p));
+    CHECK(std::filesystem::exists(p));
 
-    int fd = linux_run(shm_open(outputfile.c_str(), O_RDONLY, S_IRWXU));
+    int fd = shm_open(outputfile.c_str(), O_RDONLY, S_IRWXU);
+    PCHECK(fd >= 0) << "shm_open failed to open: " << outputfile;
 
     if (std::filesystem::is_directory(p)) {
       fsize = 0;
@@ -66,16 +67,11 @@ QueryResult::QueryResult(const std::string &outputfile)
     if (fsize) {
       resultBuf = (char *)mmap(nullptr, fsize, PROT_READ | PROT_WRITE,
                                MAP_PRIVATE, fd, 0);
-      if (resultBuf == MAP_FAILED) {
-        auto msg =
-            std::string{"Opening result file failed ("} + strerror(errno) + ")";
-        LOG(ERROR) << msg;
-        throw std::runtime_error{msg};
-      }
-      assert(resultBuf != MAP_FAILED);
+      PCHECK(resultBuf != MAP_FAILED)
+          << "Opening result file with mmap failed " << outputfile;
     } else {
       resultBuf = static_cast<char *>(MAP_FAILED);
-      assert(resultBuf && "Destructor assumes MAP_FAILED != 0");
+      CHECK(resultBuf) << "Destructor assumes MAP_FAILED != 0";
     }
     close(fd);  // close the descriptor produced by the shm_open
   } else {
@@ -86,8 +82,11 @@ QueryResult::QueryResult(const std::string &outputfile)
       fsize = std::filesystem::file_size(output_path);
     }
     int fd = open(output_path.c_str(), O_RDONLY, 0);
+    PCHECK(fd >= 0) << "Failed to open new result file " << outputfile;
     resultBuf = (char *)mmap(nullptr, fsize, PROT_READ | PROT_WRITE,
                              MAP_PRIVATE, fd, 0);
+    PCHECK(resultBuf != MAP_FAILED)
+        << "Opening result file with mmap failed " << outputfile;
     close(fd);
   }
 }
