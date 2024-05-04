@@ -23,12 +23,15 @@
 
 #include "codegen/expressions/indexed-seq.hpp"
 
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Type.h>
 
 namespace type {
 
 llvm::Type *IndexedSeq::getLLVMType(llvm::LLVMContext &ctx) const {
-  return getNestedType().getLLVMType(ctx)->getPointerElementType();
+  CHECK(getNestedType().getLLVMType(ctx));
+  return llvm::PointerType::get(getNestedType().getLLVMType(ctx), 0);
+  //  return getNestedType().getLLVMType(ctx)->getNonOpaquePointerElementType();
 }
 
 }  // namespace type

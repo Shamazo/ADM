@@ -424,16 +424,20 @@ class RelBuilder {
 
   [[nodiscard]] RelBuilder unpack() const;
 
+  /**
+   * Apply a bloom filter probe to tuples block wise. Consumes and emits blocks
+   * @param pred expression to use to probe the bloom filter. Would usually be
+   * the same as the one used to build the bloom filter
+   * @param filterSize size of the bloom filter created with bloomfilter_build
+   * @param bloomId ID of the bloom filer created with bloomfilter_build
+   * @note there is currently a bug where bloom_filer_repack()->unpack() will
+   * not work due to the llvm types emitted by bloomfilter_repack.
+   * bloomfilter_repack emits ptrs to arrays while unpack expects regular ptrs
+   * e.g. [524288 x i32]* vs i32*
+   */
   [[nodiscard]] RelBuilder bloomfilter_repack(
       std::function<expression_t(expressions::InputArgument)> pred,
-      size_t filterSize, uint64_t bloomId) {
-    auto arg = getOutputArg();
-    std::vector<expression_t> attrs;
-    for (const auto& attr : arg.getProjections()) {
-      attrs.emplace_back(arg[attr]);
-    }
-    return bloomfilter_repack(pred(arg), attrs, filterSize, bloomId);
-  }
+      size_t filterSize, uint64_t bloomId) const;
 
   /**
    * Filters tuples using a predicate.

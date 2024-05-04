@@ -40,7 +40,7 @@ class BloomFilter : public experimental::UnaryOperator {
   expressions::RefExpression findInFilter(
       OlapParallelContext *context, const OperatorState &childState) const;
 
-  const expression_t e;
+  const expression_t bf_expr;
 
   StateVar filter_ptr;
 

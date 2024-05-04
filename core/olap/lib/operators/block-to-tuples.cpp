@@ -45,8 +45,8 @@ void BlockToTuples::produce_(OlapParallelContext *context) {
     }
   }
 
-  assert(!old_buffs.empty() &&
-         "There should be at least one BlockType'd argument");
+  CHECK(!old_buffs.empty())
+      << "There should be at least one BlockType'd argument in wantedFields";
   getChild()->produce(context);
 }
 

@@ -38,4 +38,10 @@ class BloomFilterBuild : public BloomFilter {
   [[nodiscard]] bool isFiltering() const override { return false; }
 };
 
+/**
+ * reset the bloom filter registry and free any memory allocated to bloom
+ * filters
+ */
+void cleanBloomFilterRegistry();
+
 #endif /* PROTEUS_BLOOM_FILTER_BUILD_HPP */

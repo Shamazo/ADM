@@ -23,6 +23,7 @@
 
 #include "expressions-generator.hpp"
 
+#include <codegen/expressions/indexed-seq.hpp>
 #include <codegen/expressions/ref-expression.hpp>
 #include <lib/util/project-record.hpp>
 
@@ -1033,10 +1034,23 @@ ProteusValue ExpressionGeneratorVisitor::visit(
     case BOOL:
       valWrapper.value = TheBuilder->CreateAdd(left.value, right.value);
       return valWrapper;
-    case INDEXEDSEQ:
-      valWrapper.value = TheBuilder->CreateGEP(
-          nullptr, left.value, {context->createInt64(0), right.value});
+    case INDEXEDSEQ: {
+      auto *t_element = dynamic_cast<const type::IndexedSeq &>(*childType)
+                            .getNestedType()
+                            .getLLVMType(context->getLLVMContext());
+      auto *t_ptr = dynamic_cast<const type::IndexedSeq &>(*childType)
+                        .getLLVMType(context->getLLVMContext());
+      // For IndexedSeq we assume a llvm type of t_element*. e.g. for an
+      // IndexedSeq containing i32, the IndexedSeq type is i32* In some code
+      // (bloomfilter) we create array types instead, e.g. [4096, i32]* Here we
+      // are casting from a ptr to an arry to a ptr to the first element of an
+      // array, essentially casting away the array size
+      llvm::Value *castedPtr =
+          context->getBuilder()->CreateBitCast(left.value, t_ptr);
+      valWrapper.value =
+          TheBuilder->CreateGEP(t_element, castedPtr, right.value);
       return valWrapper;
+    }
     case STRING:
       LOG(ERROR) << "[ExpressionGeneratorVisitor]: string operations not "
                     "supported yet";

@@ -206,14 +206,14 @@ RelBuilder RelBuilder::membrdcst_scaleout(size_t fanout, bool to_cpu,
 }
 
 RelBuilder RelBuilder::memmove(size_t slack, DeviceType to) const {
-  assert(root->isPacked() && "MemMove is not applicable to unpacked inputs");
+  CHECK(root->isPacked()) << "MemMove is not applicable to unpacked inputs";
   std::vector<RecordAttribute *> ret;
   for (const auto &attr : getOutputArg().getProjections()) {
     if (dynamic_cast<const BlockType *>(attr.getOriginalType())) {
       ret.emplace_back(new RecordAttribute{attr});
     }
   }
-  assert(!ret.empty());
+  DCHECK(!ret.empty()) << "No attributes to move!";
   return memmove(ret, slack, to);
 }
 
@@ -592,7 +592,8 @@ class HintRowCount : public experimental::UnaryOperator {
 using v_t =
     std::variant<RouterScaleOut *, Router *, DeviceCross *,
                  MemBroadcastScaleOut *, MemBroadcastDevice *, MemMoveDevice *,
-                 BlockToTuples *, HintRowCount *, Select *, Project *>;
+                 HashRearrange *, BloomFilterBuild *, BlockToTuples *,
+                 HintRowCount *, Select *, Project *, BloomFilterRepack *>;
 double expected(Operator *op);
 
 class ExpectedTuplesOutputSize {
@@ -611,6 +612,15 @@ class ExpectedTuplesOutputSize {
     return expected(op->getChild()) * op->getDOPServers();
   }
   double operator()(MemMoveDevice *op) const {
+    return expected(op->getChild());
+  }
+  double operator()(HashRearrange *op) const {
+    return expected(op->getChild());
+  }
+  double operator()(BloomFilterBuild *op) const {
+    return expected(op->getChild());
+  }
+  double operator()(BloomFilterRepack *op) const {
     return expected(op->getChild());
   }
   double operator()(DeviceCross *op) const { return expected(op->getChild()); }
@@ -988,6 +998,7 @@ RelBuilder RelBuilder::update(expression_t e) const {
 }
 
 RelBuilder RelBuilder::unpack() const {
+  CHECK(root->isPacked()) << "unpack is not applicable to unpacked inputs";
   return unpack(
       [&](const expressions::InputArgument &arg) -> std::vector<expression_t> {
         std::vector<expression_t> attrs;
@@ -996,6 +1007,18 @@ RelBuilder RelBuilder::unpack() const {
         }
         return attrs;
       });
+}
+
+RelBuilder RelBuilder::bloomfilter_repack(
+    std::function<expression_t(expressions::InputArgument)> pred,
+    size_t filterSize, uint64_t bloomId) const {
+  CHECK(root->isPacked()) << "unpack is not applicable to unpacked inputs";
+  auto arg = getOutputArg();
+  std::vector<expression_t> attrs;
+  for (const auto &attr : arg.getProjections()) {
+    attrs.emplace_back(arg[attr]);
+  }
+  return bloomfilter_repack(pred(arg), attrs, filterSize, bloomId);
 }
 
 RelBuilder RelBuilder::pack() const {
