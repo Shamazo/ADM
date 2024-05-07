@@ -28,13 +28,25 @@
 
 #include "util.hpp"
 
-std::string bench_ssb_nvme_vary_bw(int sf, int server_number,
-                                   Shaper shaper_type = Shaper::NVMECPU,
-                                   int num_iterations = 5,
-                                   int scan_router_slack = 2,
-                                   int scan_memmove_slack = 4,
-                                   bool compressed = false) {
-  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+std::vector<std::pair<decltype(&ssb::Query::prepare11), std::string>>
+standard_ssb_queries() {
+  return {
+      {ssb::Query::prepare11, "ssb_Q1.1"}, {ssb::Query::prepare12, "ssb_Q1.2"},
+      {ssb::Query::prepare13, "ssb_Q1.3"}, {ssb::Query::prepare21, "ssb_Q2.1"},
+      {ssb::Query::prepare22, "ssb_Q2.2"}, {ssb::Query::prepare23, "ssb_Q2.3"},
+      {ssb::Query::prepare31, "ssb_Q3.1"}, {ssb::Query::prepare32, "ssb_Q3.2"},
+      {ssb::Query::prepare33, "ssb_Q3.3"}, {ssb::Query::prepare34, "ssb_Q3.4"},
+      {ssb::Query::prepare41, "ssb_Q4.1"}, {ssb::Query::prepare42, "ssb_Q4.2"},
+      {ssb::Query::prepare43, "ssb_Q4.3"}};
+}
+
+std::string bench_queries_nvme_vary_bw(
+    int sf, int server_number,
+    std::vector<std::pair<decltype(&ssb::Query::prepare11), std::string>>
+        queries,
+    Shaper shaper_type = Shaper::NVMECPU, int num_iterations = 5,
+    int scan_router_slack = 2, int scan_memmove_slack = 4,
+    bool compressed = false) {
   std::stringstream result_string;
   result_string << "query,"
                 << "is_compressed,"
@@ -51,21 +63,7 @@ std::string bench_ssb_nvme_vary_bw(int sf, int server_number,
                                : get_input_dirs(sf, server_number);
 
   for (const auto& md_dirs : all_md_dirs) {
-    for (auto [query_prep_func, query_name] :
-         std::vector<std::pair<decltype(&ssb::Query::prepare11), std::string>>{
-             {ssb::Query::prepare11, "ssb_Q1.1"},
-             {ssb::Query::prepare12, "ssb_Q1.2"},
-             {ssb::Query::prepare13, "ssb_Q1.3"},
-             {ssb::Query::prepare21, "ssb_Q2.1"},
-             {ssb::Query::prepare22, "ssb_Q2.2"},
-             {ssb::Query::prepare23, "ssb_Q2.3"},
-             {ssb::Query::prepare31, "ssb_Q3.1"},
-             {ssb::Query::prepare32, "ssb_Q3.2"},
-             {ssb::Query::prepare33, "ssb_Q3.3"},
-             {ssb::Query::prepare34, "ssb_Q3.4"},
-             {ssb::Query::prepare41, "ssb_Q4.1"},
-             {ssb::Query::prepare42, "ssb_Q4.2"},
-             {ssb::Query::prepare43, "ssb_Q4.3"}}) {
+    for (auto [query_prep_func, query_name] : queries) {
       /// important, because the relations are all the same from the point of
       /// view of the catalog we need to drop the catalog to ensure we use the
       /// right plugin instance for each configurations of md files
@@ -79,6 +77,11 @@ std::string bench_ssb_nvme_vary_bw(int sf, int server_number,
           break;
         case Shaper::NVMEGPU:
           shaper = std::make_unique<proteus::GPUOnlyNVMe>(
+              md_dirs, "inputs/ssbm100", ssb::Query::getStats(sf), true,
+              scan_memmove_slack, scan_router_slack, 16);
+          break;
+        case Shaper::NVMEGPUPUSHDOWN:
+          shaper = std::make_unique<proteus::GPUOnlyNVMeProbeFilterPushdown>(
               md_dirs, "inputs/ssbm100", ssb::Query::getStats(sf), true,
               scan_memmove_slack, scan_router_slack, 16);
           break;
@@ -97,6 +100,34 @@ std::string bench_ssb_nvme_vary_bw(int sf, int server_number,
     }
   }
   return result_string.str();
+}
+
+std::string bench_ssb_nvme_vary_bw(int sf, int server_number,
+                                   Shaper shaper_type = Shaper::NVMECPU,
+                                   int num_iterations = 5,
+                                   int scan_router_slack = 2,
+                                   int scan_memmove_slack = 4,
+                                   bool compressed = false) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  return bench_queries_nvme_vary_bw(
+      sf, server_number, standard_ssb_queries(), shaper_type, num_iterations,
+      scan_router_slack, scan_memmove_slack, compressed);
+}
+
+std::string bench_ssb_q1_gpu_pushdown_vary_bw(int sf, int server_number,
+                                              int num_iterations = 5,
+                                              int scan_router_slack = 2,
+                                              int scan_memmove_slack = 4,
+                                              bool compressed = false) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  std::vector<std::pair<decltype(&ssb::Query::prepare11), std::string>>
+      q1_queries = {{prepare11_pushdown, "ssb_Q1.1_pushdown"},
+                    {prepare12_pushdown, "ssb_Q1.2_pushdown"},
+                    {prepare13_pushdown, "ssb_Q1.3_pushdown"}};
+
+  return bench_queries_nvme_vary_bw(
+      sf, server_number, q1_queries, Shaper::NVMEGPUPUSHDOWN, num_iterations,
+      scan_router_slack, scan_memmove_slack, compressed);
 }
 
 #endif  // PROTEUS_ADM_SSB_BENCHMARKS_HPP

@@ -42,4 +42,8 @@ PreparedStatement scan_six_columns(proteus::QueryShaper &morph,
                                    const std::string &lo_col5,
                                    const std::string &lo_col6);
 
+PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph);
+PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph);
+PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph);
+
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

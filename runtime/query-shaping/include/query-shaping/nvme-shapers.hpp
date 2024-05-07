@@ -47,7 +47,7 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
 
   RelBuilder distribute_build(RelBuilder input) override {
     auto rel = input
-                   .router(getDOP(), scan_rounter_slack, RoutingPolicy::LOCAL,
+                   .router(getDOP(), scan_router_slack, RoutingPolicy::LOCAL,
                            getDevice(), getAffinitizer())
                    .memmove(scan_memmove_slack, getDevice());
 
@@ -60,14 +60,14 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   CPUOnlyNVMeMorsel(std::vector<std::string> input_dirs,
                     const std::string &catalog_path,
                     decltype(input_sizes) input_sizes, bool allowMoves,
-                    size_t scan_memmove_slack, size_t scan_rounter_slack,
+                    size_t scan_memmove_slack, size_t scan_router_slack,
                     size_t slack)
       : InputPrefixQueryShaper("N/A", input_sizes, allowMoves, slack),
         input_dirs(sort_vector(
             input_dirs)),  // sort so we always iterate in the same order
         catalog_path(catalog_path),
         scan_memmove_slack(scan_memmove_slack),
-        scan_rounter_slack(scan_rounter_slack) {}
+        scan_router_slack(scan_router_slack) {}
 
  protected:
   std::vector<std::filesystem::path> getMdForAttribute(
@@ -104,11 +104,13 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
     std::sort(paths.begin(), paths.end());
     return paths;
   }
-  size_t scan_memmove_slack;
-  size_t scan_rounter_slack;
+
+ protected:
+  size_t scan_memmove_slack;  // 16
+  size_t scan_router_slack;   // 2
 };
 
-class GPUOnlyNVMeMorsel : public proteus::CPUOnlyNVMeMorsel {
+class GPUOnlyNVMe : public proteus::CPUOnlyNVMeMorsel {
   using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
 
@@ -126,14 +128,36 @@ class GPUOnlyNVMeMorsel : public proteus::CPUOnlyNVMeMorsel {
    */
   RelBuilder distribute_probe(RelBuilder input) override {
     auto rel = input.router(
-        DegreeOfParallelism(topology::getInstance().getGpuCount() * 12), 2,
-        RoutingPolicy::LOCAL, DeviceType::CPU, getAffinitizer());
+        DegreeOfParallelism(topology::getInstance().getGpuCount() * 12),
+        scan_router_slack, RoutingPolicy::LOCAL, DeviceType::CPU,
+        getAffinitizer());
 
-    if (doMove()) rel = rel.memmove(16, getDevice());
+    rel = rel.memmove(scan_memmove_slack, getDevice());
     rel = rel.router(getDOP(), 8, RoutingPolicy::LOCAL, DeviceType::CPU,
                      getAffinitizer());
 
     if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
+
+    return rel;
+  }
+};
+
+class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
+  using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
+  [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
+
+  /**
+   * For probe filter pushdown.
+   * Scan and filter happens on the CPU
+   * Expected that the caller packs and moves the data to the GPU
+   */
+  RelBuilder distribute_probe(RelBuilder input) override {
+    auto rel = input.router(
+        DegreeOfParallelism(topology::getInstance().getCoreCount()),
+        scan_router_slack, RoutingPolicy::LOCAL, DeviceType::CPU,
+        std::make_unique<CpuNumaNodeAffinitizer>());
+
+    rel = rel.memmove(scan_memmove_slack, DeviceType::CPU);
 
     return rel;
   }

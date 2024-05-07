@@ -67,6 +67,8 @@ std::string bench_nvme_vary_bw_compressed(int sf, int server_number,
             md_dirs, "inputs/ssbm100", ssb::Query::getStats(sf), true,
             scan_memmove_slack, scan_router_slack, 16);
         break;
+      default:
+        LOG(FATAL) << "Unexpected shaper type";
     }
 
     auto scan_query = small_scan(*shaper, "lo_commitdate");
@@ -118,6 +120,8 @@ std::string bench_nvme_vary_bw(int sf, int server_number,
             md_dirs, "inputs/ssbm100", ssb::Query::getStats(sf), true,
             scan_memmove_slack, scan_router_slack, 16);
         break;
+      default:
+        LOG(FATAL) << "Unexpected shaper type";
     }
     const auto prt = profiling::ProfileRegionType(
         std::string("bench_nvme_vary_bw::") +

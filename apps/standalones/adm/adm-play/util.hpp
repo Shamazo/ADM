@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-enum class Shaper { NVMECPU, NVMEGPU };
+enum class Shaper { NVMECPU, NVMEGPU, NVMEGPUPUSHDOWN };
 
 struct QueryBenchResult {
   std::vector<std::chrono::milliseconds> pipeline_times;

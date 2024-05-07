@@ -78,6 +78,18 @@ DEFINE_bool(bench_varybw_gpu_ssb_compressed, false,
             "GPU only vary number of NVMes used with compressed data using "
             "--scale_factor and varying the number of drives used");
 
+DECLARE_bool(bench_ssb_gpu_pushdown);
+DEFINE_bool(bench_ssb_gpu_pushdown, false,
+            "GPU only vary number of NVMes used for SSB Q1.x with the probe "
+            "filter pushed down to the CPU"
+            "--scale_factor and varying the number of drives used");
+
+DECLARE_bool(bench_ssb_gpu_pushdown_compressed);
+DEFINE_bool(bench_ssb_gpu_pushdown_compressed, false,
+            "GPU only vary number of NVMes used for SSB Q1.x with the probe "
+            "filter pushed down to the CPU. Use compressed data"
+            "--scale_factor and varying the number of drives used");
+
 DECLARE_int32(scale_factor);
 DEFINE_int32(scale_factor, 100, "SSB scale factor");
 
@@ -193,6 +205,28 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "running bench_varybw_gpu_ssb_compressed";
     auto res = bench_ssb_nvme_vary_bw(FLAGS_scale_factor, FLAGS_server_number,
                                       Shaper::NVMEGPU, 2, 4, true);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_ssb_gpu_pushdown) {
+    LOG(INFO) << "running bench_ssb_gpu_pushdown";
+    auto res = bench_ssb_q1_gpu_pushdown_vary_bw(
+        FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, false);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_ssb_gpu_pushdown_compressed) {
+    LOG(INFO) << "running bench_ssb_gpu_pushdown";
+    auto res = bench_ssb_q1_gpu_pushdown_vary_bw(
+        FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, true);
     ss << res;
     ss << std::endl;
     if (out.has_value()) {

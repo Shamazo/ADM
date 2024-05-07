@@ -267,6 +267,7 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
       check_vector_paths(twelve_drives);
       check_vector_paths(sixteen_drives);
       check_vector_paths(twentyfour_drives);
+      //      return {twentyfour_drives};
       return {one_drive,     two_drives,     four_drives,
               six_drives,    eight_drives,   ten_drives,
               twelve_drives, sixteen_drives, twentyfour_drives};
@@ -460,10 +461,10 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
       check_vector_paths(twelve_drives);
       check_vector_paths(sixteen_drives);
       check_vector_paths(twentyfour_drives);
-      //      return {one_drive,     two_drives,     four_drives,
-      //              six_drives,    eight_drives,   ten_drives,
-      //              twelve_drives, sixteen_drives, twentyfour_drives};
-      return {twentyfour_drives};
+      //      return {twentyfour_drives}
+      return {one_drive,     two_drives,     four_drives,
+              six_drives,    eight_drives,   ten_drives,
+              twelve_drives, sixteen_drives, twentyfour_drives};
     }
   }
   LOG(FATAL) << "not set up for this server: " << server_number;

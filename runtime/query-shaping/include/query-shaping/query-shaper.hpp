@@ -47,6 +47,7 @@ class QueryShaper {
   [[nodiscard]] virtual RelBuilder getBuilder() const;
   [[nodiscard]] virtual pg getPlugin() const;
 
+ public:
   [[nodiscard]] virtual std::unique_ptr<Affinitizer> getAffinitizer();
   [[nodiscard]] virtual std::unique_ptr<Affinitizer> getAffinitizerReduce();
 
@@ -55,11 +56,9 @@ class QueryShaper {
   [[nodiscard]] virtual int getSlackReduce();
   [[nodiscard]] virtual bool doMove();
 
- public:
   [[deprecated]] static double StorageDOPFactor;
   [[nodiscard]] virtual DegreeOfParallelism getDOP();
 
- public:
   /**
    * @param slack slack to be used for the router and mem-move operators
    */
