@@ -25,6 +25,7 @@
 
 #include <codegen/expressions/expressionTypes.hpp>
 #include <cstring>
+#include <fstream>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/plan/query-result.hpp>

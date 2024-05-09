@@ -22,6 +22,7 @@
 */
 #include <cli-flags.hpp>
 #include <codegen/expressions/expressionTypes.hpp>
+#include <fstream>
 #include <magic_enum.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/plan/catalog-parser.hpp>

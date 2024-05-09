@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <platform/memory/block-manager.hpp>
 #include <storage/test/test-utils.hpp>
 #include <vector>
