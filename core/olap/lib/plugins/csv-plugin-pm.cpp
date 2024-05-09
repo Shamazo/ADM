@@ -23,6 +23,10 @@
 
 #include "csv-plugin-pm.hpp"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include <iomanip>
 
 #include "lib/expressions/expressions-hasher.hpp"

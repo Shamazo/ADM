@@ -24,11 +24,10 @@
 #include "functions.hpp"
 
 #include <chrono>
-#include <iostream>
+#include <fstream>
 #include <olap/util/parallel-context.hpp>
 #include <ostream>
 #include <platform/common/error-handling.hpp>
-#include <platform/memory/memory-allocator.hpp>
 #include <storage/storage-manager.hpp>
 
 #include "catalog.hpp"

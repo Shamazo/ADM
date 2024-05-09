@@ -23,6 +23,11 @@
 
 #include "expression-parser.hpp"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+#include <fstream>
 #include <olap/util/parallel-context.hpp>
 
 inline bool ends_with(std::string const &value, std::string const &ending) {

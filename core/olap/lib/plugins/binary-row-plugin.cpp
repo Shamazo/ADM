@@ -23,6 +23,10 @@
 
 #include "binary-row-plugin.hpp"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include "lib/operators/operators.hpp"
 
 using namespace llvm;

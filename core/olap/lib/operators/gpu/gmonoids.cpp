@@ -24,6 +24,7 @@
 #include "gmonoids.hpp"
 
 #include <codegen/util/gpu/gpu-intrinsics.hpp>
+#include <deque>
 #include <olap/plugins/plugins.hpp>
 
 #include "llvm/IR/InlineAsm.h"

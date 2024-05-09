@@ -24,6 +24,7 @@
 #ifndef FUNCTIONS_HPP_
 #define FUNCTIONS_HPP_
 
+#include <deque>
 #include <platform/util/string-object.hpp>
 #include <platform/util/timing.hpp>
 #include <string>

@@ -24,9 +24,6 @@
 #ifndef COMMON_HPP_
 #define COMMON_HPP_
 
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -36,15 +33,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <fstream>
 #include <iostream>
 #include <list>
 #include <map>
 #include <memory>
 #include <platform/util/glog.hpp>
-#include <queue>
-#include <set>
-#include <sstream>
 #include <stdexcept>
 
 // #define DEBUG

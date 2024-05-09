@@ -24,7 +24,9 @@
 #ifndef PROTEUS_TOPOLOGY_PARSER_HPP
 #define PROTEUS_TOPOLOGY_PARSER_HPP
 
+#include <fstream>
 #include <sstream>
+#include <vector>
 
 class ThreadSiblingParser {
  public:
@@ -72,7 +74,7 @@ class ThreadSiblingParser {
   }
 
   static inline string getString(const string& filename) {
-    ifstream file(filename);
+    std::ifstream file(filename);
     string str;
 
     // Read the first string,

@@ -24,6 +24,7 @@
 #ifndef TOPOLOGY_HPP_
 #define TOPOLOGY_HPP_
 
+#include <filesystem>
 #include <iostream>
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/network/infiniband/devices/ib.hpp>

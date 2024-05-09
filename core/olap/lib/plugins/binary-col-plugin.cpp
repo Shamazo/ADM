@@ -23,6 +23,10 @@
 
 #include "binary-col-plugin.hpp"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include <storage/storage-manager.hpp>
 
 #include "lib/operators/operators.hpp"

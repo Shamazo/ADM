@@ -223,16 +223,6 @@ class BinaryBlockPlugin : public Plugin {
  protected:
   std::string fnamePrefix;
 
-  // Mapping attrNumber to
-  //  -> file descriptor of its dictionary
-  //  -> file size of its dictionary
-  //  -> mapped input of its dictionary
-  std::map<int, int> dictionaries;
-  std::map<int, off_t> dictionaryFilesizes;
-  // Note: char* buf can be cast to appropriate struct
-  // Struct will probably look like { implicit_oid, len, char* }
-  std::map<int, char *> dictionariesBuf;
-
   /**
    * Code-generation-related
    */

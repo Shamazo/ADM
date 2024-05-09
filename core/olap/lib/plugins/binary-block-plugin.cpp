@@ -271,18 +271,7 @@ ProteusValue BinaryBlockPlugin::hashValueEager(ProteusValue valWrapper,
   return hashValue(mem_tmpWrapper, type, context);
 }
 
-void BinaryBlockPlugin::finish() {
-  LOG(INFO) << "[BinaryBlockPlugin] Finish";
-  int cnt = 0;
-  for (const auto &attr : wantedFields) {
-    if (attr->getOriginalType()->getTypeID() == STRING) {
-      int dictionaryFd = dictionaries[cnt];
-      close(dictionaryFd);
-      munmap(dictionariesBuf[cnt], dictionaryFilesizes[cnt]);
-    }
-    cnt++;
-  }
-}
+void BinaryBlockPlugin::finish() { LOG(INFO) << "[BinaryBlockPlugin] Finish"; }
 
 llvm::Value *BinaryBlockPlugin::getValueSize(ProteusValueMemory mem_value,
                                              const ExpressionType *type,

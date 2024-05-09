@@ -21,6 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <sys/mman.h>
+
 #include <codegen/context/context.hpp>
 #include <codegen/expressions/binary-operators.hpp>
 #include <codegen/expressions/expressionTypes.hpp>

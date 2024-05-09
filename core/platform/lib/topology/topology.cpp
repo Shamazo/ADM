@@ -21,8 +21,10 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <fcntl.h>
 #include <numa.h>
 #include <numaif.h>
+#include <sys/mman.h>
 
 #include <array>
 #include <cmath>

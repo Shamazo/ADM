@@ -39,6 +39,9 @@
 #include "jsmn.h"
 // #define DEBUGJSMN
 
+// forward declaration
+struct stat;
+
 namespace jsonPipelined {
 
 struct pmJSON;

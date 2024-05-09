@@ -23,6 +23,10 @@
 
 #include "json-jsmn-plugin.hpp"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include "lib/operators/operators.hpp"
 // Definitely not enough as a solution
 // #define MAXTOKENS 1000
