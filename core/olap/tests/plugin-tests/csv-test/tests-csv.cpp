@@ -65,7 +65,7 @@ TEST(CSV, ScanCsvPM) {
 
   RecordType rec1 = RecordType(attrList);
 
-  vector<RecordAttribute *> whichFields;
+  std::vector<RecordAttribute *> whichFields;
   whichFields.push_back(sid);
   whichFields.push_back(age);
 
@@ -130,7 +130,7 @@ TEST(CSV, ScanCsvWideBuildPM) {
 
   RecordType rec1 = RecordType(attrList);
 
-  vector<RecordAttribute *> whichFields;
+  std::vector<RecordAttribute *> whichFields;
   whichFields.push_back(attr6);
   whichFields.push_back(attr10);
   whichFields.push_back(attr19);
@@ -198,7 +198,7 @@ void scanCsvWideUsePM_(size_t *newline, short **offsets) {
 
   RecordType rec1 = RecordType(attrList);
 
-  vector<RecordAttribute *> whichFields;
+  std::vector<RecordAttribute *> whichFields;
   whichFields.push_back(attr6);
   whichFields.push_back(attr10);
   whichFields.push_back(attr19);
@@ -266,7 +266,7 @@ TEST(CSV, scanCsvWideUsePM) {
 
   RecordType rec1 = RecordType(attrList);
 
-  vector<RecordAttribute *> whichFields;
+  std::vector<RecordAttribute *> whichFields;
   whichFields.push_back(attr6);
   whichFields.push_back(attr10);
   whichFields.push_back(attr19);
@@ -329,7 +329,7 @@ TEST(CSV, scanCsvWideUsePM) {
 //
 //  RecordType rec1 = RecordType(attrList);
 //
-//  vector<RecordAttribute *> whichFields;
+//  std::vector<RecordAttribute *> whichFields;
 //  whichFields.push_back(f1);
 //  whichFields.push_back(f2);
 //

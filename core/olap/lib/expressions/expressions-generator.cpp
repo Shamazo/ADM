@@ -107,7 +107,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
   Value *val_0 = context->createInt32(0);
   Value *val_1 = context->createInt32(1);
 
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(val_0);
   idxList.push_back(val_0);
   Value *structPtr = TheBuilder->CreateGEP(
@@ -460,7 +460,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 ////                val->getType()->dump();
 //                Function* debugInt = context->getFunction("printi");
 //                Function* debugInt64 = context->getFunction("printi64");
-//                vector<Value*> ArgsV;
+//                std::vector<Value*> ArgsV;
 //                ArgsV.clear();
 //                ArgsV.push_back(val);
 //                Builder->CreateCall(debugInt, ArgsV);
@@ -811,7 +811,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
       case FLOAT:
 #ifdef DEBUG
       {
-        vector<Value *> ArgsV;
+        std::vector<Value *> ArgsV;
         ArgsV.clear();
         ArgsV.push_back(left.value);
         Function *debugF = context->getFunction("printFloat");
@@ -921,7 +921,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
       case INT:
 #ifdef DEBUG
       {
-        vector<Value *> ArgsV;
+        std::vector<Value *> ArgsV;
         ArgsV.clear();
         ArgsV.push_back(left.value);
         Function *debugInt = context->getFunction("printi");
@@ -933,7 +933,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
       case FLOAT:
 #ifdef DEBUG
       {
-        vector<Value *> ArgsV;
+        std::vector<Value *> ArgsV;
         ArgsV.clear();
         ArgsV.push_back(left.value);
         Function *debugF = context->getFunction("printFloat");

@@ -32,7 +32,7 @@
 
 class Project : public UnaryOperator {
  public:
-  Project(vector<expression_t> outputExprs, string relName,
+  Project(std::vector<expression_t> outputExprs, string relName,
           Operator *const child, Context *context);
   ~Project() override { LOG(INFO) << "Collapsing Project operator"; }
   void produce_(OlapParallelContext *context) override;
@@ -53,7 +53,7 @@ class Project : public UnaryOperator {
   StateVar oid_id;
   string relName;
 
-  vector<expression_t> outputExprs;
+  std::vector<expression_t> outputExprs;
 
   const char *outPath;
 

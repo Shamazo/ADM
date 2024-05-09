@@ -209,7 +209,7 @@ class Catalog {
   map<string, Plugin *> plugins;
   map<string, int> htIdentifiers;
 
-  vector<multimap<int, void *> *> intHashtables;
+  std::vector<multimap<int, void *> *> intHashtables;
   map<string, multimap<size_t, void *> *> HTs;
 
   map<string, ExpressionType *> jsonTypeCatalog;

@@ -254,7 +254,7 @@ TEST_F(ParallelContextTest, ChainedPipelinesWithArguments) {
   // The first pipeline need to prepare arguments for the consume function. The
   // first argument will be our value, and the second will be the state of the
   // second pipeline
-  vector<llvm::Value*> args{secondPipInput};
+  std::vector<llvm::Value*> args{secondPipInput};
   auto subStateType = subPipelineConsumeFunctionType->getParamType(
       subPipelineConsumeFunctionType->getNumParams() - 1);
   llvm::Value* subStatePtr = parallelContext->getBuilder()->CreateBitCast(

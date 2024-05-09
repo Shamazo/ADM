@@ -154,7 +154,7 @@ class GPUAffinitizer : public Affinitizer {
     }
     // Find the closest CPU numa node with a GPU
     // initialize original index locations
-    vector<size_t> idx(c->distance.size());
+    std::vector<size_t> idx(c->distance.size());
     std::iota(idx.begin(), idx.end(), 0);
     stable_sort(idx.begin(), idx.end(),
                 [&v = std::as_const(c->distance)](size_t i1, size_t i2) {

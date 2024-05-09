@@ -136,7 +136,7 @@ ProteusValue ExpressionDotVisitor::visit(
   ProteusValue right = e2->accept(exprGenerator2);
 
   ProteusValue valWrapper;
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(left.value);
   ArgsV.push_back(right.value);
   Function *stringEquality = context->getFunction("equalStringObjs");
@@ -626,7 +626,7 @@ ProteusValue ExpressionDotVisitor::visit(
         //             if(e1->getProjectionName() == "age") {
         //                 cout << "AGE! " << endl;
         //                 Function* debugInt = context->getFunction("printi");
-        //                 vector<Value*> ArgsV;
+        //                 std::vector<Value*> ArgsV;
         //                 ArgsV.clear();
         //                 ArgsV.push_back(left.value);
         //                 Builder->CreateCall(debugInt, ArgsV);
@@ -648,7 +648,7 @@ ProteusValue ExpressionDotVisitor::visit(
         valWrapper.value = Builder->CreateICmpEQ(left.value, right.value);
         return valWrapper;
       case STRING: {
-        vector<Value *> ArgsV;
+        std::vector<Value *> ArgsV;
         ArgsV.push_back(left.value);
         ArgsV.push_back(right.value);
         Function *stringEquality = context->getFunction("equalStringObjs");
@@ -711,7 +711,7 @@ ProteusValue ExpressionDotVisitor::visit(const expressions::IfThenElse *e1,
       valWrapper.value = Builder->CreateICmpEQ(left.value, right.value);
       return valWrapper;
     case STRING: {
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(left.value);
       ArgsV.push_back(right.value);
       Function *stringEquality = context->getFunction("equalStringObjs");

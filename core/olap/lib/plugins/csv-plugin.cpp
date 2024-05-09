@@ -26,6 +26,7 @@
 #include "lib/operators/operators.hpp"
 
 using namespace llvm;
+using std::vector;
 
 CSVPlugin::CSVPlugin(Context *const context, string &fname, RecordType &rec,
                      vector<RecordAttribute *> &whichFields)
@@ -1003,7 +1004,7 @@ void CSVPlugin::scanCSV(const ::Operator &producer, Function *debug) {
     throw runtime_error(string("One of the functions needed not found!"));
   }
 
-  for (vector<RecordAttribute *>::iterator it = wantedFields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = wantedFields.begin();
        it != wantedFields.end(); it++) {
     int neededAttr = (*it)->getAttrNo() - 1;
     for (; cur_col < neededAttr; cur_col++) {

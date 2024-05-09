@@ -23,6 +23,7 @@
 #include "olap-pipeline.hpp"
 
 using namespace llvm;
+using std::vector;
 
 static void registerOlapFunctions(PipelineGen *pipelineGen) {
   Module *TheModule = pipelineGen->getModule();

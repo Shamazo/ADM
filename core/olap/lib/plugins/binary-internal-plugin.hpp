@@ -46,8 +46,10 @@ class BinaryInternalPlugin : public Plugin {
   /* Radix-related atm.
    * Resembles BinaryRowPg */
   BinaryInternalPlugin(Context *const context, RecordType rec,
-                       string structName, vector<RecordAttribute *> whichOIDs,
-                       vector<RecordAttribute *> whichFields, CacheInfo info);
+                       string structName,
+                       std::vector<RecordAttribute *> whichOIDs,
+                       std::vector<RecordAttribute *> whichFields,
+                       CacheInfo info);
   ~BinaryInternalPlugin() override;
   string &getName() override { return structName; }
   void init() override;
@@ -149,7 +151,7 @@ class BinaryInternalPlugin : public Plugin {
 
   void flushOutput(llvm::Value *fileName) override {
     llvm::Function *flushFunc = context->getFunction("flushOutput");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // Start 'array'
     ArgsV.push_back(fileName);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -164,7 +166,7 @@ class BinaryInternalPlugin : public Plugin {
 
   void flushDelim(llvm::Value *fileName, int depth) override {
     auto flushFunc = context->getFunction("flushChar");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // XXX JSON-specific -> Serializer business to differentiate
     ArgsV.push_back(context->createInt8((depth == 0) ? '\n' : ','));
     ArgsV.push_back(fileName);
@@ -174,7 +176,7 @@ class BinaryInternalPlugin : public Plugin {
   void flushDelim(llvm::Value *resultCtr, llvm::Value *fileName,
                   int depth) override {
     auto flushFunc = context->getFunction("flushDelim");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     ArgsV.push_back(resultCtr);
     // XXX JSON-specific -> Serializer business to differentiate
     ArgsV.push_back(context->createInt8((depth == 0) ? '\n' : ','));
@@ -200,8 +202,8 @@ class BinaryInternalPlugin : public Plugin {
   llvm::Value *val_entriesNo;
   /* Necessary if we are to iterate over the internal caches */
 
-  vector<RecordAttribute *> fields;
-  vector<RecordAttribute *> OIDs;
+  std::vector<RecordAttribute *> fields;
+  std::vector<RecordAttribute *> OIDs;
 
   llvm::StructType *payloadType;
   llvm::Value *mem_buffer;

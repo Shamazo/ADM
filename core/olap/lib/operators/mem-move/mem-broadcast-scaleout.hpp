@@ -47,7 +47,7 @@ class MemBroadcastScaleOut : public MemBroadcastDevice {
 
   MemBroadcastScaleOut(Operator *const child,
                        OlapParallelContext *const context,
-                       const vector<RecordAttribute *> &wantedFields,
+                       const std::vector<RecordAttribute *> &wantedFields,
                        int num_of_targets, bool to_cpu,
                        bool always_share = false)
       : MemBroadcastDevice(child, wantedFields, num_of_targets, to_cpu,

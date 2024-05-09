@@ -46,7 +46,7 @@ class MemMoveLocalTo : public MemMoveDevice {
 
  public:
   MemMoveLocalTo(Operator *const child,
-                 const vector<RecordAttribute *> &wantedFields,
+                 const std::vector<RecordAttribute *> &wantedFields,
                  size_t slack = 8)
       : MemMoveDevice(child, wantedFields, slack, true) {}
 

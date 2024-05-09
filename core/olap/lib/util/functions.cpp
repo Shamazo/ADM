@@ -122,7 +122,7 @@ HashtableBucketMetadata *getMetadataHT(char *HTname) {
   // same indirection here as above.
   multimap<size_t, void *> *HT = catalog.getHashTable(name);
 
-  vector<size_t> keys;
+  std::vector<size_t> keys;
   for (multimap<size_t, void *>::iterator it = HT->begin(), end = HT->end();
        it != end; it = HT->upper_bound(it->first)) {
     keys.push_back(it->first);

@@ -29,13 +29,13 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <cfloat>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -69,7 +69,6 @@ using std::runtime_error;
 using std::set;
 using std::string;
 using std::stringstream;
-using std::vector;
 
 double diff(struct timespec st, struct timespec end);
 

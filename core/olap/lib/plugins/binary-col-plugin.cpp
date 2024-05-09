@@ -31,7 +31,7 @@ using namespace llvm;
 
 BinaryColPlugin::BinaryColPlugin(Context *const context, string fnamePrefix,
                                  RecordType rec,
-                                 vector<RecordAttribute *> &whichFields,
+                                 std::vector<RecordAttribute *> &whichFields,
                                  bool sizeInFile)
     : rec(rec),
       wantedFields(whichFields),
@@ -68,7 +68,7 @@ BinaryColPlugin::BinaryColPlugin(Context *const context, string fnamePrefix,
 
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  vector<RecordAttribute *>::iterator it;
+  std::vector<RecordAttribute *>::iterator it;
   int cnt = 0;
   LOG(INFO) << "[BinaryColPlugin: ] " << fnamePrefix;
   files.reserve(wantedFields.size());
@@ -119,7 +119,8 @@ BinaryColPlugin::BinaryColPlugin(Context *const context, string fnamePrefix,
 
 /* No STRING yet in this mode */
 // BinaryColPlugin::BinaryColPlugin(Context* const context,
-// vector<RecordAttribute*>& whichFields, vector<CacheInfo> whichCaches)
+// std::vector<RecordAttribute*>& whichFields, std::vector<CacheInfo>
+// whichCaches)
 //    : rec(rec), wantedFields(whichFields), whichCaches(whichCaches),
 //    context(context), fnamePrefix(""),
 //      posVar("offset"), bufVar("buf"), fsizeVar("fileSize"), sizeVar("size"),
@@ -139,8 +140,8 @@ BinaryColPlugin::BinaryColPlugin(Context *const context, string fnamePrefix,
 //        LOG(ERROR)<< error_msg;
 //        throw runtime_error(error_msg);
 //    }
-//    vector<RecordAttribute*>::iterator it;
-//    vector<CacheInfo>::iterator itCaches;
+//    std::vector<RecordAttribute*>::iterator it;
+//    std::vector<CacheInfo>::iterator itCaches;
 //    LOG(INFO) << "[BinaryColPlugin *as cache*]";
 //}
 
@@ -170,8 +171,8 @@ BinaryColPlugin::~BinaryColPlugin() {
 //        val_size = context->createInt32(size);
 //    }
 //
-//    vector<CacheInfo>::iterator itCaches;
-//    vector<RecordAttribute*>::iterator it;
+//    std::vector<CacheInfo>::iterator itCaches;
+//    std::vector<RecordAttribute*>::iterator it;
 //    int cnt = 0;
 //    for (it = wantedFields.begin(); it != wantedFields.end(); it++,itCaches++)
 //    {
@@ -226,7 +227,7 @@ void BinaryColPlugin::init() {
   RecordAttribute projTuple =
       RecordAttribute(fnamePrefix, activeLoop, this->getOIDType());
   attrList.push_back(projTuple);
-  for (vector<RecordAttribute *>::iterator it = wantedFields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = wantedFields.begin();
        it != wantedFields.end(); it++) {
     attrList.push_back(*(*it));
   }
@@ -234,7 +235,7 @@ void BinaryColPlugin::init() {
       expressions::InputArgument(&rec, 0, attrList);
   /*******/
 
-  vector<RecordAttribute *>::iterator it;
+  std::vector<RecordAttribute *>::iterator it;
   int cnt = 0;
   for (it = wantedFields.begin(); it != wantedFields.end(); it++) {
     RecordAttribute *attr = *it;
@@ -297,7 +298,7 @@ void BinaryColPlugin::init() {
                 attr->getOriginalType()->getLLVMType(llvmContext)));
       }
 #ifdef DEBUG
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val_size);
       Function *debugInt = context->getFunction("printi64");
       Builder->CreateCall(debugInt, ArgsV, "printi64");
@@ -466,7 +467,7 @@ ProteusValue BinaryColPlugin::readCachedValue(
   valWrapper.isNull = context->createFalse();
 #ifdef DEBUG
   {
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
 
     Function *debugSth = context->getFunction("printi64");
     ArgsV.push_back(val_oid);
@@ -492,7 +493,7 @@ ProteusValue BinaryColPlugin::hashValue(ProteusValueMemory mem_value,
   switch (type->getTypeID()) {
     case BOOL: {
       Function *hashBoolean = context->getFunction("hashBoolean");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -510,7 +511,7 @@ ProteusValue BinaryColPlugin::hashValue(ProteusValueMemory mem_value,
     }
     case FLOAT: {
       Function *hashDouble = context->getFunction("hashDouble");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -523,7 +524,7 @@ ProteusValue BinaryColPlugin::hashValue(ProteusValueMemory mem_value,
     }
     case INT: {
       Function *hashInt = context->getFunction("hashInt");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -565,7 +566,7 @@ ProteusValue BinaryColPlugin::hashValueEager(ProteusValue valWrapper,
 }
 
 void BinaryColPlugin::finish() {
-  vector<RecordAttribute *>::iterator it;
+  std::vector<RecordAttribute *>::iterator it;
   int cnt = 0;
   for (it = wantedFields.begin(); it != wantedFields.end(); it++) {
     // close(fd[cnt]);
@@ -729,7 +730,7 @@ void BinaryColPlugin::readAsIntLLVM(
   variables[attName] = mem_valWrapper;
 
 #ifdef DEBUGBINCOL
-//        vector<Value*> ArgsV;
+//        std::vector<Value*> ArgsV;
 //        ArgsV.clear();
 //        ArgsV.push_back(parsedInt);
 //        Function* debugInt = context->getFunction("printi");
@@ -1139,7 +1140,7 @@ void BinaryColPlugin::scan(const ::Operator &producer) {
   (*variableBindings)[tupleIdentifier] = mem_posWrapper;
 
   // Actual Work (Loop through attributes etc.)
-  for (vector<RecordAttribute *>::iterator it = wantedFields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = wantedFields.begin();
        it != wantedFields.end(); it++) {
     RecordAttribute attr = *(*it);
     size_t offset = 0;

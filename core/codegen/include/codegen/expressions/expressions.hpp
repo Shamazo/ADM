@@ -735,7 +735,9 @@ class ExternExpression : public ExpressionCRTP<ExternExpression> {
 
   [[nodiscard]] string getName() const { return name; }
 
-  [[nodiscard]] const vector<expression_t> &getArgs() const { return args; }
+  [[nodiscard]] const std::vector<expression_t> &getArgs() const {
+    return args;
+  }
 
   [[nodiscard]] ExpressionId getTypeID() const override { return EXTERN; }
 
@@ -752,7 +754,7 @@ class ExternExpression : public ExpressionCRTP<ExternExpression> {
 
  private:
   string name;
-  vector<expression_t> args;
+  std::vector<expression_t> args;
 };
 
 class PlaceholderExpression : public ExpressionCRTP<PlaceholderExpression> {
@@ -862,7 +864,7 @@ class RecordConstruction : public ExpressionCRTP<RecordConstruction> {
 
   static RecordType *constructRecordType(
       const std::list<AttributeConstruction> &attrs) {
-    vector<RecordAttribute *> recs;
+    std::vector<RecordAttribute *> recs;
     for (const auto &a : attrs) {
       auto *type = a.getExpression().getExpressionType();
       auto attr = new RecordAttribute{"tmp", a.getBindingName(), type};

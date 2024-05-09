@@ -245,7 +245,7 @@ Value *Context::getArrayElemMem(Value *val_ptr, Value *offset) {
 }
 
 Value *Context::getStructElem(Value *mem_struct, int elemNo) {
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(elemNo));
   // Shift in struct ptr
@@ -259,7 +259,7 @@ Value *Context::getStructElem(Value *mem_struct, int elemNo) {
 }
 
 Value *Context::getStructElemMem(Value *mem_struct, int elemNo) {
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(elemNo));
   // Shift in struct ptr
@@ -270,7 +270,7 @@ Value *Context::getStructElemMem(Value *mem_struct, int elemNo) {
 }
 
 Value *Context::getStructElem(AllocaInst *mem_struct, int elemNo) {
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(elemNo));
   // Shift in struct ptr
@@ -284,7 +284,7 @@ Value *Context::getStructElem(AllocaInst *mem_struct, int elemNo) {
 }
 
 void Context::updateStructElem(Value *toStore, Value *mem_struct, int elemNo) {
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(elemNo));
   // Shift in struct ptr
@@ -364,7 +364,7 @@ Value *Context::CreateGlobalString(char *str) {
   AllocaInst *AllocaName =
       CreateEntryBlockAlloca(string("globalStr"), charPtrType);
 
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(0));
   Constant *shifted =
@@ -396,7 +396,7 @@ Value *Context::CreateGlobalString(const char *str) {
   AllocaInst *AllocaName =
       CreateEntryBlockAlloca(string("globalStr"), charPtrType);
 
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(createInt32(0));
   idxList.push_back(createInt32(0));
   Constant *shifted =
@@ -414,17 +414,17 @@ PointerType *Context::getPointerType(Type *type) {
 }
 
 StructType *Context::CreateCustomStruct(LLVMContext &ctx,
-                                        vector<Type *> innerTypes) {
+                                        std::vector<Type *> innerTypes) {
   return llvm::StructType::get(ctx, innerTypes);
 }
 
-StructType *Context::CreateCustomStruct(vector<Type *> innerTypes) {
+StructType *Context::CreateCustomStruct(std::vector<Type *> innerTypes) {
   return CreateCustomStruct(getLLVMContext(), std::move(innerTypes));
 }
 
 StructType *Context::ReproduceCustomStruct(list<typeID> innerTypes) {
   LLVMContext &ctx = getLLVMContext();
-  vector<Type *> llvmTypes;
+  std::vector<Type *> llvmTypes;
   list<typeID>::iterator it;
   for (it = innerTypes.begin(); it != innerTypes.end(); it++) {
     switch (*it) {
@@ -467,7 +467,7 @@ StructType *Context::ReproduceCustomStruct(list<typeID> innerTypes) {
 
 StructType *Context::CreateJSONPosStruct() {
   llvm::Type *int64_type = Type::getInt64Ty(getLLVMContext());
-  vector<Type *> json_pos_types;
+  std::vector<Type *> json_pos_types;
   json_pos_types.push_back(int64_type);
   json_pos_types.push_back(int64_type);
   return CreateCustomStruct(json_pos_types);
@@ -487,7 +487,7 @@ StructType *Context::CreateJSMNStruct() {
 }
 
 StructType *Context::CreateJSMNStruct(llvm::LLVMContext &ctx) {
-  vector<Type *> jsmn_pos_types;
+  std::vector<Type *> jsmn_pos_types;
 #ifndef JSON_TIGHT
   llvm::Type *int32_type = Type::getInt32Ty(ctx);
   jsmn_pos_types.push_back(int32_type);
@@ -510,7 +510,7 @@ llvm::StructType *Context::CreateStringStruct(llvm::LLVMContext &ctx) {
   llvm::Type *int32_type = Type::getInt32Ty(ctx);
   llvm::Type *char_type = Type::getInt8Ty(ctx);
   PointerType *ptr_char_type = PointerType::get(char_type, 0);
-  vector<Type *> string_obj_types;
+  std::vector<Type *> string_obj_types;
   string_obj_types.push_back(ptr_char_type);
   string_obj_types.push_back(int32_type);
 

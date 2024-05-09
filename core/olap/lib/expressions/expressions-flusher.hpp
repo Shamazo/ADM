@@ -139,7 +139,7 @@ class ExpressionFlusherVisitor : public ExprVisitor {
       // TODO: remove. deprecated exectuion path
       outputFileLLVM = context->CreateGlobalString(this->outputFile);
       llvm::Function *flushFunc = context->getFunction("flushChar");
-      vector<llvm::Value *> ArgsV;
+      std::vector<llvm::Value *> ArgsV;
       // Start 'array'
       ArgsV.push_back(context->createInt8('['));
       ArgsV.push_back(outputFileLLVM);
@@ -155,7 +155,7 @@ class ExpressionFlusherVisitor : public ExprVisitor {
       // TODO: remove. deprecated exectuion path
       outputFileLLVM = context->CreateGlobalString(this->outputFile);
       llvm::Function *flushFunc = context->getFunction("flushChar");
-      vector<llvm::Value *> ArgsV;
+      std::vector<llvm::Value *> ArgsV;
       // Start 'array'
       ArgsV.push_back(context->createInt8(']'));
       ArgsV.push_back(outputFileLLVM);
@@ -174,7 +174,7 @@ class ExpressionFlusherVisitor : public ExprVisitor {
       // TODO: remove. deprecated exectuion path
       outputFileLLVM = context->CreateGlobalString(this->outputFile);
       llvm::Function *flushFunc = context->getFunction("flushDelim");
-      vector<llvm::Value *> ArgsV;
+      std::vector<llvm::Value *> ArgsV;
       ArgsV.push_back(resultCtr);
       // XXX JSON-specific -> Serializer business to differentiate
       ArgsV.push_back(context->createInt8(','));
@@ -189,7 +189,7 @@ class ExpressionFlusherVisitor : public ExprVisitor {
     if (!pg) {
       // TODO: remove. deprecated exectuion path
       llvm::Function *flushFunc = context->getFunction("flushChar");
-      vector<llvm::Value *> ArgsV;
+      std::vector<llvm::Value *> ArgsV;
       // XXX JSON-specific -> Serializer business to differentiate
       ArgsV.push_back(context->createInt8(','));
       ArgsV.push_back(outputFileLLVM);

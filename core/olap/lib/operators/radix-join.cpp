@@ -28,6 +28,7 @@
 #include "lib/util/radix/joins/radix-join.hpp"
 
 using namespace llvm;
+using std::vector;
 
 RadixJoin::RadixJoin(const expressions::BinaryExpression &predicate,
                      Operator *leftChild, Operator *rightChild,

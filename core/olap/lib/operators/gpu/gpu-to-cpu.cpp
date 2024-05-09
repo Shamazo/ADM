@@ -40,7 +40,7 @@ void GpuToCpu::produce_(OlapParallelContext *context) {
 
   Plugin *pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
-  vector<Type *> child_params;
+  std::vector<Type *> child_params;
   for (const auto t : wantedFields) {
     child_params.emplace_back(t->getOriginalType()->getLLVMType(llvmContext));
   }

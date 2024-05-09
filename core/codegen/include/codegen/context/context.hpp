@@ -240,9 +240,9 @@ class Context {
   llvm::PointerType *CreateJSMNStructPtr();
   static llvm::PointerType *CreateJSMNStructPtr(llvm::LLVMContext &);
   llvm::StructType *CreateJSONPosStruct();
-  static llvm::StructType *CreateCustomStruct(llvm::LLVMContext &,
-                                              vector<llvm::Type *> innerTypes);
-  llvm::StructType *CreateCustomStruct(vector<llvm::Type *> innerTypes);
+  static llvm::StructType *CreateCustomStruct(
+      llvm::LLVMContext &, std::vector<llvm::Type *> innerTypes);
+  llvm::StructType *CreateCustomStruct(std::vector<llvm::Type *> innerTypes);
   llvm::StructType *ReproduceCustomStruct(std::list<typeID> innerTypes);
 
   template <typename InputIt>

@@ -28,7 +28,7 @@
 class Split : public Router {
  public:
   Split(Operator *const child, size_t numOfParents,
-        const vector<RecordAttribute *> &wantedFields, size_t slack,
+        const std::vector<RecordAttribute *> &wantedFields, size_t slack,
         std::optional<expression_t> hash = std::nullopt,
         RoutingPolicy policy_type = RoutingPolicy::LOCAL)
       : Router(child, DegreeOfParallelism{numOfParents}, wantedFields, slack,

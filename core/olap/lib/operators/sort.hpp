@@ -32,8 +32,8 @@
 class Sort : public UnaryOperator {
  public:
   Sort(Operator *const child, OlapParallelContext *const context,
-       const vector<expression_t> &orderByFields,
-       const vector<direction> &dirs);
+       const std::vector<expression_t> &orderByFields,
+       const std::vector<direction> &dirs);
 
   ~Sort() override { LOG(INFO) << "Collapsing Sort operator"; }
 
@@ -63,7 +63,7 @@ class Sort : public UnaryOperator {
   virtual void call_sort(llvm::Value *mem, llvm::Value *N);
 
   std::vector<expression_t> orderByFields;
-  const vector<direction> dirs;
+  const std::vector<direction> dirs;
 
   expressions::RecordConstruction outputExpr;
   std::string relName;

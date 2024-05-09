@@ -26,6 +26,7 @@
 #include <olap/util/parallel-context.hpp>
 
 using namespace llvm;
+using std::vector;
 
 /* (buf[0] - '0') */
 void atoi1(Value *buf, AllocaInst *mem_result, Context *context) {

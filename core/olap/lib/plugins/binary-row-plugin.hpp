@@ -35,7 +35,7 @@ class BinaryRowPlugin : public Plugin {
    * Plugin for binary files, organized in tabular format
    */
   BinaryRowPlugin(Context *const context, string &fname, RecordType &rec_,
-                  vector<RecordAttribute *> &whichFields);
+                  std::vector<RecordAttribute *> &whichFields);
   ~BinaryRowPlugin() override;
   string &getName() override { return fname; }
   void init() override;
@@ -169,7 +169,7 @@ class BinaryRowPlugin : public Plugin {
 
   void flushOutput(llvm::Value *fileName) override {
     llvm::Function *flushFunc = context->getFunction("flushOutput");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // Start 'array'
     ArgsV.push_back(fileName);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);

@@ -194,7 +194,7 @@ class JSONPlugin : public Plugin {
 
   void flushBeginList(llvm::Value *fileName) override {
     auto flushFunc = context->getFunction("flushChar");
-    vector<llvm::Value *> ArgsV{context->createInt8('['), fileName};
+    std::vector<llvm::Value *> ArgsV{context->createInt8('['), fileName};
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
   }
 
@@ -212,7 +212,7 @@ class JSONPlugin : public Plugin {
 
   void flushEndList(llvm::Value *fileName) override {
     auto flushFunc = context->getFunction("flushChar");
-    vector<llvm::Value *> ArgsV{context->createInt8(']'), fileName};
+    std::vector<llvm::Value *> ArgsV{context->createInt8(']'), fileName};
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
   }
 
@@ -230,7 +230,7 @@ class JSONPlugin : public Plugin {
 
   void flushDelim(llvm::Value *fileName, int depth) override {
     auto flushFunc = context->getFunction("flushChar");
-    vector<llvm::Value *> ArgsV{context->createInt8(','), fileName};
+    std::vector<llvm::Value *> ArgsV{context->createInt8(','), fileName};
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
   }
 
@@ -238,7 +238,8 @@ class JSONPlugin : public Plugin {
                   int depth) override {
     auto flushFunc = context->getFunction("flushDelim");
     // XXX JSON-specific -> Serializer business to differentiate
-    vector<llvm::Value *> ArgsV{resultCtr, context->createInt8(','), fileName};
+    std::vector<llvm::Value *> ArgsV{resultCtr, context->createInt8(','),
+                                     fileName};
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
   }
 
@@ -249,7 +250,7 @@ class JSONPlugin : public Plugin {
 
   void flushOutput(llvm::Value *fileName) override {
     llvm::Function *flushFunc = context->getFunction("flushOutput");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // Start 'array'
     ArgsV.push_back(fileName);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -292,7 +293,7 @@ class JSONPlugin : public Plugin {
   llvm::StructType *getOIDLLVMType() {
     llvm::LLVMContext &llvmContext = context->getLLVMContext();
     llvm::Type *int64Type = llvm::Type::getInt64Ty(llvmContext);
-    vector<llvm::Type *> tokenIdMembers;
+    std::vector<llvm::Type *> tokenIdMembers;
     tokenIdMembers.push_back(int64Type);
     tokenIdMembers.push_back(int64Type);
     tokenIdMembers.push_back(int64Type);

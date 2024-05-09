@@ -27,7 +27,7 @@
 
 #include "olap/util/parallel-context.hpp"
 
-Project::Project(vector<expression_t> outputExprs, string relName,
+Project::Project(std::vector<expression_t> outputExprs, string relName,
                  Operator *const child, Context *context)
     : UnaryOperator(child),
       context(context),

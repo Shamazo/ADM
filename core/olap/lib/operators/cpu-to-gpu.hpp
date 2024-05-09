@@ -29,7 +29,8 @@
 
 class CpuToGpu : public DeviceCross {
  public:
-  CpuToGpu(Operator *const child, const vector<RecordAttribute *> &wantedFields)
+  CpuToGpu(Operator *const child,
+           const std::vector<RecordAttribute *> &wantedFields)
       : DeviceCross(child), wantedFields(wantedFields) {}
 
   ~CpuToGpu() override { LOG(INFO) << "Collapsing CpuToGpu operator"; }
@@ -48,7 +49,7 @@ class CpuToGpu : public DeviceCross {
   }
 
  private:
-  const vector<RecordAttribute *> wantedFields;
+  const std::vector<RecordAttribute *> wantedFields;
 
   PipelineGen *gpu_pip;
   StateVar childVar_id;

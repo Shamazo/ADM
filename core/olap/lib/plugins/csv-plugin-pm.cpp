@@ -29,6 +29,7 @@
 #include "lib/operators/operators.hpp"
 
 using namespace llvm;
+using std::vector;
 
 namespace pm {
 

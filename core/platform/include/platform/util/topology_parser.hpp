@@ -61,8 +61,8 @@ class ThreadSiblingParser {
            "/topology/thread_siblings_list";
   }
 
-  static inline vector<string> split(const string& str, char delimiter) {
-    vector<string> tokens;
+  static inline std::vector<string> split(const string& str, char delimiter) {
+    std::vector<string> tokens;
     string token;
     std::istringstream tokenStream(str);
 

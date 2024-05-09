@@ -46,7 +46,8 @@ class MemMoveScaleOut : public MemMoveDevice {
   };
 
   MemMoveScaleOut(Operator *const child,
-                  const vector<RecordAttribute *> &wantedFields, size_t slack);
+                  const std::vector<RecordAttribute *> &wantedFields,
+                  size_t slack);
 
  protected:
   [[nodiscard]] MemMoveScaleOut::MemMoveConf *createMoveConf() const override;

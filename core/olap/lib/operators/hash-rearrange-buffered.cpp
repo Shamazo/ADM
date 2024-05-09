@@ -217,7 +217,7 @@ void HashRearrangeBuffered::consume(Context *const context,
   target = Builder->CreateURem(target, numOfBucketsV);
   target->setName("target");
 
-  vector<Type *> members;
+  std::vector<Type *> members;
   for (size_t i = 0; i < wantedFields.size(); ++i) {
     RecordAttribute tblock{wantedFields[i]->getRegisteredAs(), true};
     members.push_back(tblock.getLLVMType(llvmContext));
@@ -349,7 +349,7 @@ void HashRearrangeBuffered::consume(Context *const context,
     Type *charPtrType = Type::getInt8PtrTy(context->getLLVMContext());
 
     Function *copy_nt = context->getFunction("nonTemporalCopy");
-    vector<Value *> argsV;
+    std::vector<Value *> argsV;
     argsV.push_back(Builder->CreatePointerCast(in_block_ptr, charPtrType));
     argsV.push_back(Builder->CreatePointerCast(in_cache_ptr, charPtrType));
     argsV.push_back(context->createInt32(wantedFields[i]
@@ -595,7 +595,7 @@ void HashRearrangeBuffered::consume_flush1() {
     (*variableBindings)[*hashProject] = mem_hashWrapper;
   }
 
-  vector<Type *> members;
+  std::vector<Type *> members;
   members.push_back(target->getType());
 
   for (size_t i = 0; i < wantedFields.size(); ++i) {

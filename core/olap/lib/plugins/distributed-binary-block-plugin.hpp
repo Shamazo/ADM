@@ -34,7 +34,7 @@ class DistributedBinaryBlockPlugin : public BinaryBlockPlugin {
   static constexpr auto type = "distributed-block";
   DistributedBinaryBlockPlugin(OlapParallelContext *context,
                                const std::string &fnamePrefix, RecordType rec,
-                               vector<RecordAttribute *> &whichFields);
+                               std::vector<RecordAttribute *> &whichFields);
 };
 
 #endif /* DISTRIBUTED_BINARY_BLOCK_PLUGIN_HPP_ */

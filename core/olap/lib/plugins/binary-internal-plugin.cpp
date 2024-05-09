@@ -40,8 +40,8 @@ BinaryInternalPlugin::BinaryInternalPlugin(Context *const context,
 
 BinaryInternalPlugin::BinaryInternalPlugin(
     Context *const context, RecordType rec, string structName,
-    vector<RecordAttribute *> wantedOIDs,
-    vector<RecordAttribute *> wantedFields, CacheInfo info)
+    std::vector<RecordAttribute *> wantedOIDs,
+    std::vector<RecordAttribute *> wantedFields, CacheInfo info)
     : rec(rec),
       structName(structName),
       OIDs(wantedOIDs),
@@ -147,8 +147,8 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
       context->getArrayElemMem(val_structBufferPtr, lhs);
 
   int posInStruct = 0;
-  for (vector<RecordAttribute *>::iterator it = OIDs.begin(); it != OIDs.end();
-       it++) {
+  for (std::vector<RecordAttribute *>::iterator it = OIDs.begin();
+       it != OIDs.end(); it++) {
     RecordAttribute attr = *(*it);
     Value *val_cachedField =
         context->getStructElem(val_cacheShiftedPtr, posInStruct);
@@ -164,7 +164,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 #ifdef DEBUGBINCACHE
     {
       Function *debugInt = context->getFunction("printi64");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val_cachedField);
       Builder->CreateCall(debugInt, ArgsV);
       ArgsV.clear();
@@ -172,7 +172,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 #endif
   }
 
-  for (vector<RecordAttribute *>::iterator it = fields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = fields.begin();
        it != fields.end(); it++) {
     RecordAttribute attr = *(*it);
     Value *val_cachedField =
@@ -180,7 +180,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 #ifdef DEBUGBINCACHE
     {
       Function *debugInt = context->getFunction("printi");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val_cachedField);
       Builder->CreateCall(debugInt, ArgsV);
       ArgsV.clear();
@@ -198,7 +198,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 #ifdef DEBUGBINCACHE
   {
     Function *debugInt = context->getFunction("printi64");
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(Builder->getInt64(30003));
     Builder->CreateCall(debugInt, ArgsV);
     ArgsV.clear();
@@ -277,7 +277,7 @@ void BinaryInternalPlugin::scan(const ::Operator &producer) {
 #ifdef DEBUG
   {
     Function *debugInt = context->getFunction("printi64");
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     Value *val_pos = Builder->CreateLoad(
         mem_pos->getType()->getPointerElementType(), mem_pos);
     ArgsV.push_back(val_pos);
@@ -307,8 +307,8 @@ void BinaryInternalPlugin::scan(const ::Operator &producer) {
   list<RecordAttribute *> args = rec.getArgs();
   list<RecordAttribute *>::iterator iterSchema = args.begin();
   /* XXX No skipping atm!! */
-  for (vector<RecordAttribute *>::iterator it = OIDs.begin(); it != OIDs.end();
-       it++) {
+  for (std::vector<RecordAttribute *>::iterator it = OIDs.begin();
+       it != OIDs.end(); it++) {
     RecordAttribute attr = *(*it);
     switch (attr.getOriginalType()->getTypeID()) {
       case BOOL:
@@ -355,7 +355,7 @@ void BinaryInternalPlugin::scan(const ::Operator &producer) {
     Value *val_offset = context->createInt64(offset);
     skipLLVM(val_offset);
   }
-  for (vector<RecordAttribute *>::iterator it = fields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = fields.begin();
        it != fields.end(); it++) {
     RecordAttribute attr = *(*it);
     switch (attr.getOriginalType()->getTypeID()) {
@@ -466,7 +466,7 @@ ProteusValue BinaryInternalPlugin::hashValue(ProteusValueMemory mem_value,
   switch (type->getTypeID()) {
     case BOOL: {
       Function *hashBoolean = context->getFunction("hashBoolean");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -485,7 +485,7 @@ ProteusValue BinaryInternalPlugin::hashValue(ProteusValueMemory mem_value,
     }
     case FLOAT: {
       Function *hashDouble = context->getFunction("hashDouble");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -498,7 +498,7 @@ ProteusValue BinaryInternalPlugin::hashValue(ProteusValueMemory mem_value,
     }
     case INT: {
       Function *hashInt = context->getFunction("hashInt");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(Builder->CreateLoad(
           mem_value.mem->getType()->getPointerElementType(), mem_value.mem));
       Value *hashResult =
@@ -554,7 +554,7 @@ void BinaryInternalPlugin::flushValue(ProteusValueMemory mem_value,
   switch (type->getTypeID()) {
     case BOOL: {
       flushFunc = context->getFunction("flushBoolean");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val_attr);
       ArgsV.push_back(fileName);
       context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -568,14 +568,14 @@ void BinaryInternalPlugin::flushValue(ProteusValueMemory mem_value,
     }
     case FLOAT: {
       flushFunc = context->getFunction("flushDouble");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val_attr);
       ArgsV.push_back(fileName);
       context->getBuilder()->CreateCall(flushFunc, ArgsV);
       return;
     }
     case INT: {
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       flushFunc = context->getFunction("flushInt");
       ArgsV.push_back(val_attr);
       ArgsV.push_back(fileName);
@@ -699,7 +699,7 @@ void BinaryInternalPlugin::readAsIntLLVM(
 #ifdef DEBUGBINCACHE
   {
     Function *debugInt = context->getFunction("printi");
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     //        ArgsV.push_back(context->createInt32(-6));
     ArgsV.push_back(parsedInt);
     Builder->CreateCall(debugInt, ArgsV);
@@ -734,7 +734,7 @@ void BinaryInternalPlugin::readAsInt64LLVM(
 #ifdef DEBUGBINCACHE
   {
     Function *debugInt = context->getFunction("printi64");
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(parsedInt);
     Builder->CreateCall(debugInt, ArgsV);
   }
@@ -775,7 +775,7 @@ void BinaryInternalPlugin::readAsStringLLVM(
   Value *val_0 = context->createInt32(0);
   Value *val_1 = context->createInt32(1);
 
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(val_0);
   idxList.push_back(val_0);
   Value *structPtr = Builder->CreateGEP(

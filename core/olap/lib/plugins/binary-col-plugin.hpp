@@ -57,10 +57,10 @@ class BinaryColPlugin : public Plugin {
    */
 
   BinaryColPlugin(Context *const context, string fnamePrefix, RecordType rec,
-                  vector<RecordAttribute *> &whichFields,
+                  std::vector<RecordAttribute *> &whichFields,
                   bool sizeInFile = true);
-  //    BinaryColPlugin(Context* const context, vector<RecordAttribute*>&
-  //    whichFields, vector<CacheInfo> whichCaches);
+  //    BinaryColPlugin(Context* const context, std::vector<RecordAttribute*>&
+  //    whichFields, std::vector<CacheInfo> whichCaches);
   ~BinaryColPlugin() override;
   string &getName() override { return fnamePrefix; }
   void init() override;
@@ -196,7 +196,7 @@ class BinaryColPlugin : public Plugin {
 
   void flushOutput(llvm::Value *fileName) override {
     llvm::Function *flushFunc = context->getFunction("flushOutput");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // Start 'array'
     ArgsV.push_back(fileName);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -208,11 +208,11 @@ class BinaryColPlugin : public Plugin {
   std::vector<FileRequest> files;
   // Schema info provided
   RecordType rec;
-  vector<RecordAttribute *> wantedFields;
+  std::vector<RecordAttribute *> wantedFields;
 
   /* Used when we treat the col. files as internal caches! */
   bool isCached;
-  vector<CacheInfo> whichCaches;
+  std::vector<CacheInfo> whichCaches;
 
   string fnamePrefix;
   off_t *colFilesize;  // Size of each column

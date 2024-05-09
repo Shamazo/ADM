@@ -116,8 +116,8 @@ class MemMoveDevice : public experimental::UnaryOperator {
   };
 
   MemMoveDevice(Operator *const child,
-                const vector<RecordAttribute *> &wantedFields, size_t slack,
-                bool to_cpu, std::vector<bool> do_transfer)
+                const std::vector<RecordAttribute *> &wantedFields,
+                size_t slack, bool to_cpu, std::vector<bool> do_transfer)
       : UnaryOperator(child),
         wantedFields(wantedFields),
         slack(slack),
@@ -125,8 +125,8 @@ class MemMoveDevice : public experimental::UnaryOperator {
         do_transfer(std::move(do_transfer)) {}
 
   MemMoveDevice(Operator *const child,
-                const vector<RecordAttribute *> &wantedFields, size_t slack,
-                bool to_cpu)
+                const std::vector<RecordAttribute *> &wantedFields,
+                size_t slack, bool to_cpu)
       : MemMoveDevice(child, wantedFields, slack, to_cpu,
                       //                      {true, true, false, false}
                       std::vector<bool>(wantedFields.size(), true)) {}
@@ -148,7 +148,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
   virtual void genReleaseOldBuffer(OlapParallelContext *context,
                                    llvm::Value *pValue) const;
 
-  const vector<RecordAttribute *> wantedFields;
+  const std::vector<RecordAttribute *> wantedFields;
   StateVar device_id_var;
   StateVar memmvconf_var;
 

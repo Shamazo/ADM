@@ -175,7 +175,7 @@ void HashRearrange::consume(OlapParallelContext *context,
     variableBindings[*hashProject] = context->toMem(h);
   }
 
-  vector<Type *> members;
+  std::vector<Type *> members;
   for (const auto &wantedField : wantedFields) {
     RecordAttribute tblock{wantedField.getRegisteredAs(), true};
     members.push_back(tblock.getLLVMType(llvmContext));

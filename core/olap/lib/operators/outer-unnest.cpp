@@ -47,7 +47,7 @@ void OuterUnnest::generate(Context *const context,
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   Type *boolType = Type::getInt1Ty(llvmContext);
   Type *type_w = nullptr;
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
 
   /**
    *  Preparing if(v != NULL) condition
@@ -93,7 +93,7 @@ void OuterUnnest::generate(Context *const context,
 
     ProteusValue nestedValueAll = pathProj->accept(pathExprGenerator);
 #ifdef DEBUG  // pred condition printout
-//    vector<Value*> ArgsV;
+//    std::vector<Value*> ArgsV;
 //    Function* debugBoolean = context->getFunction("printBoolean");
 //    ArgsV.push_back(nestedValueAll.isNull);
 //    Builder->CreateCall(debugBoolean, ArgsV);

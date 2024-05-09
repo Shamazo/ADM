@@ -30,11 +30,11 @@
 
 class HashRearrangeBuffered : public UnaryOperator {
  public:
-  HashRearrangeBuffered(Operator *const child,
-                        OlapParallelContext *const context, int numOfBuckets,
-                        const vector<expressions::Expression *> &wantedFields,
-                        expression_t hashExpr,
-                        RecordAttribute *hashProject = nullptr)
+  HashRearrangeBuffered(
+      Operator *const child, OlapParallelContext *const context,
+      int numOfBuckets,
+      const std::vector<expressions::Expression *> &wantedFields,
+      expression_t hashExpr, RecordAttribute *hashProject = nullptr)
       : UnaryOperator(child),
         context(context),
         numOfBuckets(numOfBuckets),
@@ -63,7 +63,7 @@ class HashRearrangeBuffered : public UnaryOperator {
   virtual void open(Pipeline *pip);
   virtual void close(Pipeline *pip);
 
-  const vector<expressions::Expression *> wantedFields;
+  const std::vector<expressions::Expression *> wantedFields;
   const int numOfBuckets;
   RecordAttribute *hashProject;
 

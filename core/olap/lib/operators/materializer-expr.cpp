@@ -195,7 +195,7 @@ void ExprMaterializer::freeArenas() const {
   Value *val_arena = Builder->CreateLoad(
       opBuffer.mem_buffer->getType()->getPointerElementType(),
       opBuffer.mem_buffer);
-  vector<Value *> ArgsFree;
+  std::vector<Value *> ArgsFree;
   AllocaInst *mem_arena_void =
       Builder->CreateAlloca(void_ptr_type, nullptr, "voidArenaPtr");
   Builder->CreateStore(val_arena, mem_arena_void);
@@ -252,7 +252,7 @@ void ExprMaterializer::consume(Context *const context,
   Value *val_toMat = valWrapper.value;
 
   /* Creating the 'payload' type */
-  vector<Type *> types;
+  std::vector<Type *> types;
   types.push_back(val_toMat->getType());
   toMatType = context->CreateCustomStruct(types);
 
@@ -261,7 +261,7 @@ void ExprMaterializer::consume(Context *const context,
 
 #ifdef DEBUG
   {
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     Function *debugInt = context->getFunction("printi64");
 
     ArgsV.push_back(val_exprSize);
@@ -295,7 +295,7 @@ void ExprMaterializer::consume(Context *const context,
   /* true => realloc() */
   Builder->SetInsertPoint(ifArenaFull);
 
-  vector<Value *> ArgsRealloc;
+  std::vector<Value *> ArgsRealloc;
   Function *reallocLLVM = context->getFunction("increaseMemoryChunk");
   AllocaInst *mem_arena_void =
       Builder->CreateAlloca(void_ptr_type, nullptr, "voidArenaPtr");
@@ -335,7 +335,7 @@ void ExprMaterializer::consume(Context *const context,
       Builder->CreateBitCast(ptr_arenaShifted, ptr_payloadType);
 
   /* 3. Storing payload */
-  //    vector<Value*> idxList = vector<Value*>();
+  //    std::vector<Value*> idxList = std::vector<Value*>();
   //    idxList.push_back(context->createInt32(0));
   //    idxList.push_back(context->createInt32(0));
   //    //Shift in struct ptr

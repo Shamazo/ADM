@@ -81,7 +81,7 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
   LLVMContext &llvmContext = context->getLLVMContext();
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   Catalog &catalog = Catalog::getInstance();
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Function *debugInt = context->getFunction("printi");
 
 #ifdef DEBUG
@@ -128,7 +128,7 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
   // Creating and Populating Payload Struct
   int offsetInStruct =
       0;  // offset inside the struct (+current field manipulated)
-  vector<Type *> *materializedTypes = pg.getMaterializedTypes();
+  std::vector<Type *> *materializedTypes = pg.getMaterializedTypes();
 
   // Storing values in struct to be materialized in HT. Two steps
   // 2a. Materializing all 'activeTuples' (i.e. positional indices) met so far
@@ -153,7 +153,7 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
 
   // 2b. Materializing all explicitly requested fields
   int offsetInWanted = 0;
-  const vector<RecordAttribute *> &wantedFields = mat.getWantedFields();
+  const std::vector<RecordAttribute *> &wantedFields = mat.getWantedFields();
   for (const auto &wantedField : wantedFields) {
     auto memSearch = bindings.find(*wantedField);
 
@@ -167,7 +167,8 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
       //               This code would be relevant if materializer also
       //               supported 'expressions to be materialized     */
       //            cout << "Must actively materialize field now" << endl;
-      //            const vector<expressions::Expression*>& wantedExpressions =
+      //            const std::vector<expressions::Expression*>&
+      //            wantedExpressions =
       //                    mat.getWantedExpressions();
       //            expressions::Expression* currExpr =
       //            wantedExpressions.at(offsetInWanted);
@@ -186,7 +187,7 @@ void Nest::generateInsert(Context *context, const OperatorState &childState) {
     Value *valToMaterialize =
         pg.convert(llvmCurrVal->getType(),
                    materializedTypes->at(offsetInWanted), llvmCurrVal);
-    vector<Value *> idxList = vector<Value *>();
+    std::vector<Value *> idxList = std::vector<Value *>();
     idxList.push_back(context->createInt32(0));
     idxList.push_back(context->createInt32(offsetInStruct));
     // Shift in struct ptr
@@ -225,7 +226,7 @@ void Nest::generateProbe(OlapParallelContext *context) const {
   LLVMContext &llvmContext = context->getLLVMContext();
   Function *TheFunction = Builder->GetInsertBlock()->getParent();
   Catalog &catalog = Catalog::getInstance();
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *globalStr = context->CreateGlobalString(htName);
   Type *int64_type = IntegerType::get(llvmContext, 64);
 
@@ -364,7 +365,7 @@ void Nest::generateProbe(OlapParallelContext *context) const {
   // Retrieving activeTuple(s) from HT
   AllocaInst *mem_activeTuple = nullptr;
   Value *activeTuple = nullptr;
-  const vector<RecordAttribute *> &tuplesIdentifiers = mat.getWantedOIDs();
+  const std::vector<RecordAttribute *> &tuplesIdentifiers = mat.getWantedOIDs();
   for (auto attr : tuplesIdentifiers) {
     mem_activeTuple = context->CreateEntryBlockAlloca(
         TheFunction, "mem_activeTuple", str->getElementType(i));
@@ -379,7 +380,7 @@ void Nest::generateProbe(OlapParallelContext *context) const {
     i++;
   }
 
-  const vector<RecordAttribute *> &wantedFields = mat.getWantedFields();
+  const std::vector<RecordAttribute *> &wantedFields = mat.getWantedFields();
   Value *field = nullptr;
   for (auto wantedField : wantedFields) {
     string currField = wantedField->getName();
@@ -545,7 +546,7 @@ void Nest::generateSum(OlapParallelContext *context, const OperatorState &state,
   switch (outputExpr->getExpressionType()->getTypeID()) {
     case INT: {
 #ifdef DEBUGNEST
-//        vector<Value*> ArgsV;
+//       std::vector<Value*> ArgsV;
 //        Function* debugInt = context->getFunction("printi");
 //        ArgsV.push_back(val_accumulating);
 //        Builder->CreateCall(debugInt, ArgsV);
@@ -555,7 +556,7 @@ void Nest::generateSum(OlapParallelContext *context, const OperatorState &state,
       Builder->CreateBr(endBlock);
 #ifdef DEBUGNEST
 //        Builder->SetInsertPoint(endBlock);
-//        vector<Value*> ArgsV;
+//       std::vector<Value*> ArgsV;
 //        Function* debugInt = context->getFunction("printi");
 //        Value* finalResult =
 //        Builder->CreateLoad(mem_accumulating->getType()->getPointerElementType(),

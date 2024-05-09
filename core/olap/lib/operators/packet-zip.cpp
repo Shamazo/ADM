@@ -283,9 +283,9 @@ ZipCollect::ZipCollect(RecordAttribute *ptrAttr, RecordAttribute *splitter,
                        Operator *const rightChild,
                        OlapParallelContext *const context, int numOfBuckets,
                        RecordAttribute *hash_key_left,
-                       const vector<expression_t> &wantedFieldsLeft,
+                       const std::vector<expression_t> &wantedFieldsLeft,
                        RecordAttribute *hash_key_right,
-                       const vector<expression_t> &wantedFieldsRight,
+                       const std::vector<expression_t> &wantedFieldsRight,
                        string opLabel)
     : ptrAttr(ptrAttr),
       splitter(splitter),
@@ -571,7 +571,7 @@ void ZipCollect::generate_cache_left(Context *const context,
   Function* debugInt = context->getFunction("printi");
   Builder->CreateCall(debugInt, ArgsV1);
 
-  vector<Value*> ArgsV2;
+  std::vector<Value*> ArgsV2;
   ArgsV2.push_back(offset);
   debugInt = context->getFunction("printi");
   Builder->CreateCall(debugInt, ArgsV2);*/
@@ -954,8 +954,8 @@ void ZipCollect::close_pipe(Pipeline *pip) {
 
 ZipForward::ZipForward(RecordAttribute *targetAttr, Operator *const child,
                        OlapParallelContext *const context,
-                       const vector<expression_t> &wantedFields, string opLabel,
-                       ZipState &state)
+                       const std::vector<expression_t> &wantedFields,
+                       string opLabel, ZipState &state)
     : UnaryOperator(child),
       context(context),
       opLabel(opLabel),

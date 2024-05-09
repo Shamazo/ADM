@@ -31,6 +31,7 @@
 #include <thread>
 
 using namespace llvm;
+using std::vector;
 
 size_t PipelineGen::appendParameter(llvm::Type *ptype, bool noalias,
                                     bool readonly) {

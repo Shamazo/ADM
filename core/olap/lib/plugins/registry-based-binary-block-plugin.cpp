@@ -34,7 +34,7 @@ namespace proteus {
 
 RegistryBasedBinaryBlockPlugin::RegistryBasedBinaryBlockPlugin(
     OlapParallelContext *const context, const std::string &fnamePrefix,
-    RecordType rec, vector<RecordAttribute *> &whichFields)
+    RecordType rec, std::vector<RecordAttribute *> &whichFields)
     : BinaryBlockPlugin(context, fnamePrefix, std::move(rec), whichFields,
                         false) {
   loadData(context, FROM_REGISTRY);

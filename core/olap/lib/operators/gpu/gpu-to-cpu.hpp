@@ -32,7 +32,7 @@
 
 class GpuToCpu : public DeviceCross {
  public:
-  GpuToCpu(Operator *const child, vector<RecordAttribute *> wantedFields,
+  GpuToCpu(Operator *const child, std::vector<RecordAttribute *> wantedFields,
            size_t size, gran_t granularity = gran_t::GRID)
       : DeviceCross(child),
         wantedFields(std::move(wantedFields)),
@@ -58,7 +58,7 @@ class GpuToCpu : public DeviceCross {
   void open(Pipeline *pip);
   void close(Pipeline *pip);
 
-  const vector<RecordAttribute *> wantedFields;
+  const std::vector<RecordAttribute *> wantedFields;
 
   PipelineGen *cpu_pip;
 

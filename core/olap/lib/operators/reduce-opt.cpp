@@ -236,7 +236,7 @@ void Reduce::generate_flush(OlapParallelContext *context) {
 
   (*context)->setMaxWorkerSize(1, 1);
 
-  vector<size_t> params;
+  std::vector<size_t> params;
 
   for (const auto &agg : aggs) {
     switch (agg.getMonoid()) {
@@ -413,7 +413,7 @@ StateVar Reduce::resetAccumulator(const agg_t &agg, bool is_first, bool is_last,
               auto itAcc = aggs.begin();
               auto itMem = mem_accumulators.begin();
 
-              vector<Value *> args;
+              std::vector<Value *> args;
               for (; itAcc != aggs.end(); itAcc++, itMem++) {
                 auto acc = *itAcc;
 

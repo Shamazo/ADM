@@ -132,7 +132,7 @@ class Router : public experimental::UnaryOperator {
   std::mutex init_mutex;
 
  private:
-  const vector<RecordAttribute *> wantedFields;
+  const std::vector<RecordAttribute *> wantedFields;
 
   llvm::Type *params_type;
 

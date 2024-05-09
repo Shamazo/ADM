@@ -35,6 +35,7 @@
 #include <platform/util/timing.hpp>
 
 using namespace llvm;
+using std::vector;
 
 GpuPipelineGen::GpuPipelineGen(Context *context, std::string pipName,
                                PipelineGen *copyStateFrom)

@@ -61,6 +61,8 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
+using std::vector;
+
 std::string hyphenatedPluginToCamel(const std::string &line) {
   size_t len = line.size();
   char conv[len + 1];

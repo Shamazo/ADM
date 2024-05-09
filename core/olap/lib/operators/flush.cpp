@@ -29,7 +29,7 @@
 
 using namespace llvm;
 
-Flush::Flush(vector<expression_t> outputExprs_v, Operator *const child,
+Flush::Flush(std::vector<expression_t> outputExprs_v, Operator *const child,
              std::string outPath)
     : UnaryOperator(child),
       outPath(std::move(outPath)),

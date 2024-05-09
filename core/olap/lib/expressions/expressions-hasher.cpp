@@ -183,7 +183,7 @@ ProteusValue ExpressionHasherVisitor::visit(
   valWrapper.value = hashResult;
   valWrapper.isNull = context->createFalse();
 #ifdef DEBUG_HASH
-  vector<Value *> argsV;
+  std::vector<Value *> argsV;
   argsV.clear();
   argsV.push_back(hashResult);
   Function *debugInt64 = context->getFunction("printi64");
@@ -201,7 +201,7 @@ ProteusValue ExpressionHasherVisitor::visit(
 
   Function *hashCombine = context->getFunction("combineHashes");
   Value *hashedValue = context->createInt64(0);
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
 
   const map<RecordAttribute, ProteusValueMemory> &activeVars =
       currState.getBindings();

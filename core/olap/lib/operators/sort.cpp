@@ -33,7 +33,7 @@ using namespace llvm;
 
 expressions::RecordConstruction buildSortOutputExpression(
     OlapParallelContext *const context,
-    const vector<expression_t> &orderByFields) {
+    const std::vector<expression_t> &orderByFields) {
   size_t i = 0;
 
   list<expressions::AttributeConstruction> attrs;
@@ -48,8 +48,8 @@ expressions::RecordConstruction buildSortOutputExpression(
 }
 
 Sort::Sort(Operator *const child, OlapParallelContext *const context,
-           const vector<expression_t> &orderByFields,
-           const vector<direction> &dirs)
+           const std::vector<expression_t> &orderByFields,
+           const std::vector<direction> &dirs)
     : UnaryOperator(child),
       context(context),
       orderByFields(orderByFields),
@@ -142,7 +142,7 @@ void Sort::produce_(OlapParallelContext *context) {
 
         Type *substate_t = f_t->getParamType(f_t->getNumParams() - 1);
 
-        vector<Value *> args{
+        std::vector<Value *> args{
             context->getStateVar(memVar_id),
             Builder->CreateLoad(s->getType()->getPointerElementType(), s)};
 
@@ -224,7 +224,7 @@ void Sort::flush_sorted() {
   Plugin *pg = Catalog::getInstance().getPlugin(relName);
   auto *oid_type = (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 
-  vector<size_t> params;
+  std::vector<size_t> params;
   params.emplace_back(
       context->appendParameter(PointerType::getUnqual(mem_type), true, true));
   params.emplace_back(context->appendParameter(oid_type, false, false));

@@ -273,10 +273,10 @@ class platform::impl {
 
     LOG(INFO) << "Warming up threads...";
 
-    std::vector<std::thread> thrds;
-    thrds.reserve(1024);
-    for (int i = 0; i < 1024; ++i) thrds.emplace_back(thread_warm_up);
-    for (auto &t : thrds) t.join();
+    //    std::vector<std::thread> thrds;
+    //    thrds.reserve(32);
+    //    for (int i = 0; i < 32; ++i) thrds.emplace_back(thread_warm_up);
+    //    for (auto &t : thrds) t.join();
 
     // srand(time(0));
 

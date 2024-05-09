@@ -47,8 +47,8 @@ namespace opt {
 
 class Nest : public UnaryOperator {
  public:
-  Nest(vector<Monoid> accs, vector<expression_t> outputExprs,
-       vector<string> aggrLabels, expression_t pred,
+  Nest(std::vector<Monoid> accs, std::vector<expression_t> outputExprs,
+       std::vector<string> aggrLabels, expression_t pred,
        const list<expressions::InputArgument> &f_grouping,
        const list<expressions::InputArgument> &g_nullToZero,
        Operator *const child, char *opLabel, Materializer &mat);
@@ -88,13 +88,13 @@ class Nest : public UnaryOperator {
    */
   llvm::AllocaInst *resetAccumulator(expression_t outputExpr, Monoid acc) const;
 
-  vector<Monoid> accs;
-  vector<expression_t> outputExprs;
+  std::vector<Monoid> accs;
+  std::vector<expression_t> outputExprs;
   expression_t pred;
   expression_t f_grouping;
   const list<expressions::InputArgument> &__attribute__((unused)) g_nullToZero;
 
-  vector<string> aggregateLabels;
+  std::vector<string> aggregateLabels;
 
   char *htName;
   Materializer &mat;

@@ -58,7 +58,7 @@ HashPartitioner::HashPartitioner(const std::vector<GpuMatExpr> &parts_mat_exprs,
       context(context),
       maxInputSize(maxInputSize),
       opLabel(opLabel) {
-  // vector<expressions::Expression*> expr;
+  // std::vector<expressions::Expression*> expr;
   // for (size_t i = 0; i < parts_mat_exprs.size(); i++)
   //     expr.push_back(parts_mat_exprs[i].expr);
   // mat = new Materializer(expr);
@@ -140,7 +140,7 @@ void HashPartitioner::consume(Context *const context,
       childState.getBindings();
   // pg_out->setBindings(&childState.getBindings());
   // Value *val_payloadSize  = ConstantInt::get((IntegerType *) int64_type,
-  // context->getSizeOf(payloadType)); vector<Type*> *materializedTypes =
+  // context->getSizeOf(payloadType)); std::vector<Type*> *materializedTypes =
   // pg_out->getMaterializedTypes(); PointerType *ptr_payloadType =
   // PointerType::get(payloadType, 1);
 
@@ -180,7 +180,7 @@ void HashPartitioner::consume(Context *const context,
           valToMaterialize = currVal.value;
       //}
 
-      vector<Value*> idxList = vector<Value*>();
+      std::vector<Value*> idxList = std::vector<Value*>();
       idxList.push_back(context->createInt32(0));
       idxList.push_back(context->createInt32(offsetInStruct));
 
@@ -197,7 +197,7 @@ void HashPartitioner::consume(Context *const context,
 }
 
 void HashPartitioner::open(Pipeline *pip) {
-  vector<void *> param_ptr = state.cols[pip->getGroup()];
+  std::vector<void *> param_ptr = state.cols[pip->getGroup()];
 
   int device;
   cudaGetDevice(&device);
@@ -1133,7 +1133,7 @@ void GpuPartitionedHashJoinChained::generate_probe(
 
   Builder->SetInsertPoint(BlockSingleBB);
 
-  vector<Value*> ArgsV;
+  std::vector<Value*> ArgsV;
   Value* value = next_bucket;
   ArgsV.push_back(value);
   Function* debugInt = context->getFunction("printi");
@@ -1590,8 +1590,8 @@ void GpuPartitionedHashJoinChained::generate_probe(
 void GpuPartitionedHashJoinChained::allocate(Pipeline *pip) {
   std::cout << "GpuOptJoin::open " << pip->getGroup() << std::endl;
 
-  vector<void *> probe_param_ptr;
-  vector<void *> build_param_ptr;
+  std::vector<void *> probe_param_ptr;
+  std::vector<void *> build_param_ptr;
 
   uint32_t parts2 = 1 << (log_parts1 + log_parts2);
 
@@ -1735,8 +1735,8 @@ void GpuPartitionedHashJoinChained::open(Pipeline *pip) {
   PartitionMetadata pdata_probe = state_right.meta[pip->getGroup()];
   PartitionMetadata pdata_build = state_left.meta[pip->getGroup()];
 
-  vector<void *> build_param_ptr = state_left.cols[pip->getGroup()];
-  vector<void *> probe_param_ptr = state_right.cols[pip->getGroup()];
+  std::vector<void *> build_param_ptr = state_left.cols[pip->getGroup()];
+  std::vector<void *> probe_param_ptr = state_right.cols[pip->getGroup()];
 
   buffer[pip->getGroup()] = (int32_t *)MemoryManager::mallocGpu(
       8 * SHMEM_SIZE * 64 * sizeof(int32_t));
@@ -1784,8 +1784,8 @@ void GpuPartitionedHashJoinChained::open(Pipeline *pip) {
 void GpuPartitionedHashJoinChained::close(Pipeline *pip) {
   // std::cout << "GpuOptJoin::close" <<  std::endl;
 
-  vector<void *> build_param_ptr = state_left.cols[pip->getGroup()];
-  vector<void *> probe_param_ptr = state_right.cols[pip->getGroup()];
+  std::vector<void *> build_param_ptr = state_left.cols[pip->getGroup()];
+  std::vector<void *> probe_param_ptr = state_right.cols[pip->getGroup()];
 
   MemoryManager::freeGpu(buffer[pip->getGroup()]);
 

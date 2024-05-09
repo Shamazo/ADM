@@ -432,7 +432,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
       size_t pitch = 0;
       gpu_run(cudaMallocPitch(&mem, &pitch, h_vector_size * sizeof(T), size));
 
-      vector<T *> buffs;
+      std::vector<T *> buffs;
 
       buffs.reserve(size);
       for (size_t i = 0; i < size; ++i) {
@@ -502,7 +502,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
 
           h_h_buff_start[cpu.id] = mem;
 
-          vector<T *> buffs;
+          std::vector<T *> buffs;
           buffs.reserve(cpu_h_size);
           for (size_t j = 0; j < cpu_h_size; ++j) {
             T *m = mem + j * h_vector_size;
@@ -544,7 +544,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
   //         T      *mem;
   //         gpu_run(cudaMallocHost(&mem, buffer_t::capacity()*sizeof(T)*size));
 
-  //         vector<buffer_t *> buffs;
+  //         std::vector<buffer_t *> buffs;
   //         for (size_t i = 0 ; i < size ; ++i)
   //         buffs.push_back(cuda_new<buffer_t>(-1, mem + i *
   //         buffer_t::capacity(), -1)); numa_node_inited[numa_node] = new
@@ -556,7 +556,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
   // T      *mem;
   // gpu_run(cudaMallocHost(&mem, buffer_t::capacity()*sizeof(T)*size));
 
-  // vector<buffer_t *> buffs;
+  // std::vector<buffer_t *> buffs;
   // for (size_t i = 0 ; i < size ; ++i) buffs.push_back(cuda_new<buffer_t>(-1,
   // mem + i * buffer_t::capacity(), -1)); h_pool = new h_pool_t(size, buffs);
 
@@ -590,7 +590,7 @@ __host__ void buffer_manager<T>::destroy() {
 
   buffer_gc->join();
   // device_buffs_mutex = new mutex              [devices];
-  // device_buffs_pool  = new vector<buffer_t *> [devices];
+  // device_buffs_pool  = new std::vector<buffer_t *> [devices];
   // release_streams    = new cudaStream_t       [devices];
 
   // h_pool             = new h_pool_t *         [cores  ];

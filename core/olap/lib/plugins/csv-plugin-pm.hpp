@@ -48,15 +48,15 @@ class CSVPlugin : public Plugin {
    * XXX IMPORTANT: FIELDS MUST BE IN ORDER!!!
    */
   CSVPlugin(Context *const context, string &fname, RecordType &rec,
-            const vector<RecordAttribute *> &whichFields, int lineHint,
+            const std::vector<RecordAttribute *> &whichFields, int lineHint,
             int policy, bool stringBrackets = true);
   CSVPlugin(Context *const context, string &fname, RecordType &rec,
-            vector<RecordAttribute *> whichFields, char delimInner,
+            std::vector<RecordAttribute *> whichFields, char delimInner,
             int lineHint, int policy, bool stringBrackets = true,
             bool hasHeader = false);
   /* PM Ready */
   CSVPlugin(Context *const context, string &fname, RecordType &rec,
-            vector<RecordAttribute *> whichFields, char delimInner,
+            std::vector<RecordAttribute *> whichFields, char delimInner,
             int lineHint, int policy, size_t *newlines, short **offsets,
             bool stringBrackets = true, bool hasHeader = false);
   string &getName() override { return fname; }
@@ -157,7 +157,7 @@ class CSVPlugin : public Plugin {
 
   void flushDelim(llvm::Value *fileName, int depth) override {
     llvm::Function *flushFunc = context->getFunction("flushChar");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // XXX JSON-specific -> Serializer business to differentiate
     ArgsV.push_back(context->createInt8((depth == 0) ? '\n' : ','));
     ArgsV.push_back(fileName);
@@ -167,7 +167,7 @@ class CSVPlugin : public Plugin {
   void flushDelim(llvm::Value *resultCtr, llvm::Value *fileName,
                   int depth) override {
     llvm::Function *flushFunc = context->getFunction("flushDelim");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     ArgsV.push_back(resultCtr);
     // XXX JSON-specific -> Serializer business to differentiate
     ArgsV.push_back(context->createInt8((depth == 0) ? '\n' : ','));
@@ -177,7 +177,7 @@ class CSVPlugin : public Plugin {
 
   void flushOutput(llvm::Value *fileName) override {
     llvm::Function *flushFunc = context->getFunction("flushOutput");
-    vector<llvm::Value *> ArgsV;
+    std::vector<llvm::Value *> ArgsV;
     // Start 'array'
     ArgsV.push_back(fileName);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -192,7 +192,7 @@ class CSVPlugin : public Plugin {
   char *buf;
   // Schema info provided
   RecordType rec;
-  vector<RecordAttribute *> wantedFields;
+  std::vector<RecordAttribute *> wantedFields;
   bool stringBrackets;  // Are string literals wrapped in ""?
 
   /**

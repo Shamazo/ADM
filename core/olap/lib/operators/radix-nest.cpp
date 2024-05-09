@@ -27,6 +27,7 @@
 #include "lib/plugins/csv-plugin-pm.hpp"
 
 using namespace llvm;
+using std::vector;
 
 namespace radix {
 

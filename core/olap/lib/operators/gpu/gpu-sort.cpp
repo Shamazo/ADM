@@ -33,7 +33,8 @@ using namespace llvm;
 
 expressions::RecordConstruction buildSortOutputExpression(
     OlapParallelContext *const context,
-    const vector<expression_t> &orderByFields, const vector<direction> &dirs) {
+    const std::vector<expression_t> &orderByFields,
+    const std::vector<direction> &dirs) {
   size_t i = 0;
 
   list<expressions::AttributeConstruction> attrs;
@@ -51,7 +52,7 @@ expressions::RecordConstruction buildSortOutputExpression(
 }
 
 std::string computeSuffix(OlapParallelContext *const context,
-                          const vector<expression_t> &orderByFields) {
+                          const std::vector<expression_t> &orderByFields) {
   std::string suffix = "";
   for (auto expr : orderByFields) {
     size_t size = context->getSizeOf(
@@ -71,8 +72,8 @@ std::string computeSuffix(OlapParallelContext *const context,
 }
 
 GpuSort::GpuSort(Operator *const child, OlapParallelContext *const context,
-                 const vector<expression_t> &orderByFields,
-                 const vector<direction> &dirs, gran_t granularity)
+                 const std::vector<expression_t> &orderByFields,
+                 const std::vector<direction> &dirs, gran_t granularity)
     : UnaryOperator(child),
       context(context),
       orderByFields(orderByFields),
@@ -170,7 +171,7 @@ void GpuSort::produce_(OlapParallelContext *context) {
         context->CodegenMemcpy(size_mem, s, context->getSizeOf(size_type));
         auto size = Builder->CreateLoad(
             size_mem->getType()->getPointerElementType(), size_mem);
-        vector<llvm::Value *> args{context->getStateVar(memVar_id), size};
+        std::vector<llvm::Value *> args{context->getStateVar(memVar_id), size};
 
         this->call_sort(args[0], args[1]);
 
@@ -237,7 +238,7 @@ void GpuSort::consume(OlapParallelContext *const context,
 
   map<RecordAttribute, ProteusValueMemory> variableBindings;
 
-  // vector<Type *> members;
+  // std::vector<Type *> members;
   // for (size_t i = 0 ; i < orderByFields.size() ; ++i){
   //     RecordAttribute tblock{orderByFields[i]->getRegisteredAs(), true};
   //     members.push_back(tblock.getLLVMType(llvmContext));
@@ -297,7 +298,7 @@ void GpuSort::flush_sorted() {
   // //Get the ENTRY BLOCK
   // context->setCurrentEntryBlock(Builder->GetInsertBlock());
 
-  vector<size_t> params;
+  std::vector<size_t> params;
   params.emplace_back(
       context->appendParameter(PointerType::getUnqual(mem_type), true, true));
   params.emplace_back(context->appendParameter(oid_type, false, false));

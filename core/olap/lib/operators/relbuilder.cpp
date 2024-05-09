@@ -128,8 +128,9 @@ RelBuilder RelBuilder::scan(Plugin &pg) const {
   return RelBuilder{ctx, new Scan(pg)};
 }
 
-RelBuilder RelBuilder::memmove(const vector<RecordAttribute *> &wantedFields,
-                               size_t slack, DeviceType to) const {
+RelBuilder RelBuilder::memmove(
+    const std::vector<RecordAttribute *> &wantedFields, size_t slack,
+    DeviceType to) const {
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
@@ -138,7 +139,7 @@ RelBuilder RelBuilder::memmove(const vector<RecordAttribute *> &wantedFields,
 }
 
 RelBuilder RelBuilder::memmove_scaleout(
-    const vector<RecordAttribute *> &wantedFields, size_t slack) const {
+    const std::vector<RecordAttribute *> &wantedFields, size_t slack) const {
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
@@ -146,9 +147,9 @@ RelBuilder RelBuilder::memmove_scaleout(
   return apply(op);
 }
 
-RelBuilder RelBuilder::membrdcst(const vector<RecordAttribute *> &wantedFields,
-                                 DegreeOfParallelism fanout, bool to_cpu,
-                                 bool always_share) const {
+RelBuilder RelBuilder::membrdcst(
+    const std::vector<RecordAttribute *> &wantedFields,
+    DegreeOfParallelism fanout, bool to_cpu, bool always_share) const {
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
@@ -179,8 +180,8 @@ RelBuilder RelBuilder::membrdcst(DeviceType target, bool always_share) const {
 }
 
 RelBuilder RelBuilder::membrdcst_scaleout(
-    const vector<RecordAttribute *> &wantedFields, size_t fanout, bool to_cpu,
-    bool always_share) const {
+    const std::vector<RecordAttribute *> &wantedFields, size_t fanout,
+    bool to_cpu, bool always_share) const {
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
@@ -266,13 +267,14 @@ RelBuilder RelBuilder::to_cpu(gran_t granularity, size_t size) const {
 }
 
 RelBuilder RelBuilder::to_gpu(
-    const vector<RecordAttribute *> &wantedFields) const {
+    const std::vector<RecordAttribute *> &wantedFields) const {
   auto op = new CpuToGpu(root, wantedFields);
   return apply(op);
 }
 
-RelBuilder RelBuilder::to_cpu(const vector<RecordAttribute *> &wantedFields,
-                              gran_t granularity, size_t size) const {
+RelBuilder RelBuilder::to_cpu(
+    const std::vector<RecordAttribute *> &wantedFields, gran_t granularity,
+    size_t size) const {
   auto op = new GpuToCpu(root, wantedFields, size, granularity);
   return apply(op);
 }
@@ -288,20 +290,21 @@ RelBuilder RelBuilder::project(const std::vector<expression_t> &proj) const {
   return apply(op);
 }
 
-RelBuilder RelBuilder::unpack(const vector<expression_t> &projections) const {
+RelBuilder RelBuilder::unpack(
+    const std::vector<expression_t> &projections) const {
   return unpack(projections, (root->getDeviceType() == DeviceType::GPU)
                                  ? gran_t::GRID
                                  : gran_t::THREAD);
 }
 
-RelBuilder RelBuilder::unpack(const vector<expression_t> &projections,
+RelBuilder RelBuilder::unpack(const std::vector<expression_t> &projections,
                               gran_t granularity) const {
   auto op = new BlockToTuples(
       root, projections, root->getDeviceType() == DeviceType::GPU, granularity);
   return apply(op);
 }
 
-RelBuilder RelBuilder::pack(const vector<expression_t> &projections,
+RelBuilder RelBuilder::pack(const std::vector<expression_t> &projections,
                             expression_t hashExpr, size_t numOfBuckets) const {
   if (root->getDeviceType() == DeviceType::GPU) {
     auto op = new GpuHashRearrange(root, ctx, numOfBuckets, projections,
@@ -314,8 +317,8 @@ RelBuilder RelBuilder::pack(const vector<expression_t> &projections,
   }
 }
 
-RelBuilder RelBuilder::reduce(const vector<expression_t> &e,
-                              const vector<Monoid> &accs) const {
+RelBuilder RelBuilder::reduce(const std::vector<expression_t> &e,
+                              const std::vector<Monoid> &accs) const {
   assert(e.size() == accs.size());
   std::vector<agg_t> aggs;
   aggs.reserve(e.size());
@@ -348,8 +351,8 @@ RelBuilder RelBuilder::groupby(const std::vector<expression_t> &e,
   }
 }
 
-RelBuilder RelBuilder::sort(const vector<expression_t> &orderByFields,
-                            const vector<direction> &dirs) const {
+RelBuilder RelBuilder::sort(const std::vector<expression_t> &orderByFields,
+                            const std::vector<direction> &dirs) const {
   if (isPacked()) {
     std::string error = "Cannot sort packed input";
     LOG(ERROR) << error;
@@ -387,7 +390,7 @@ RelBuilder RelBuilder::sort(const vector<expression_t> &orderByFields,
   }
 }
 
-RelBuilder RelBuilder::print(const vector<expression_t> &e, Plugin *pg,
+RelBuilder RelBuilder::print(const std::vector<expression_t> &e, Plugin *pg,
                              bool may_overwrite) const {
   assert(!e.empty() && "Empty print");
   assert(e[0].isRegistered());
@@ -442,11 +445,11 @@ PreparedStatement RelBuilder::prepare() {
           std::shared_ptr<Operator>(std::shared_ptr<Operator>{}, root)};
 }
 
-RelBuilder RelBuilder::router(const vector<RecordAttribute *> &wantedFields,
-                              std::optional<expression_t> hash,
-                              DegreeOfParallelism fanout, size_t slack,
-                              RoutingPolicy p, DeviceType target,
-                              std::unique_ptr<Affinitizer> aff) const {
+RelBuilder RelBuilder::router(
+    const std::vector<RecordAttribute *> &wantedFields,
+    std::optional<expression_t> hash, DegreeOfParallelism fanout, size_t slack,
+    RoutingPolicy p, DeviceType target,
+    std::unique_ptr<Affinitizer> aff) const {
   if (aff) {
     auto op = new Router(root, fanout, wantedFields, slack, std::move(hash), p,
                          std::move(aff));
@@ -459,7 +462,7 @@ RelBuilder RelBuilder::router(const vector<RecordAttribute *> &wantedFields,
 }
 
 RelBuilder RelBuilder::router_scaleout(
-    const vector<RecordAttribute *> &wantedFields,
+    const std::vector<RecordAttribute *> &wantedFields,
     std::optional<expression_t> hash, DegreeOfParallelism fanout, size_t slack,
     RoutingPolicy p, DeviceType targets) const {
   assert((p == RoutingPolicy::HASH_BASED) == (hash.has_value()));
@@ -956,7 +959,7 @@ RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children) const {
 
 RelBuilder RelBuilder::unionAll(
     const std::vector<RelBuilder> &children,
-    const vector<RecordAttribute *> &wantedFields) const {
+    const std::vector<RecordAttribute *> &wantedFields) const {
   std::vector<Operator *> c2{root};
   c2.reserve(children.size() + 1);
   for (const auto &c : children) c2.emplace_back(c.root);

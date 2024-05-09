@@ -55,9 +55,10 @@ class ZipCollect : public BinaryOperator {
              RecordAttribute *inputRight, Operator *const leftChild,
              Operator *const rightChild, OlapParallelContext *const context,
              int numOfBuckets, RecordAttribute *hash_key_left,
-             const vector<expression_t> &wantedFieldsLeft,
+             const std::vector<expression_t> &wantedFieldsLeft,
              RecordAttribute *hash_key_right,
-             const vector<expression_t> &wantedFieldsRight, string opLabel);
+             const std::vector<expression_t> &wantedFieldsRight,
+             string opLabel);
 
   ~ZipCollect() override { LOG(INFO) << "Collapsing PacketZip operator"; }
 
@@ -108,8 +109,8 @@ class ZipCollect : public BinaryOperator {
 
   OlapParallelContext *context;
   string opLabel;
-  vector<expression_t> wantedFieldsLeft;
-  vector<expression_t> wantedFieldsRight;
+  std::vector<expression_t> wantedFieldsLeft;
+  std::vector<expression_t> wantedFieldsRight;
   RecordAttribute *splitter;
   RecordAttribute *hash_key_left;
   RecordAttribute *hash_key_right;
@@ -197,7 +198,7 @@ class ZipForward : public UnaryOperator {
  public:
   ZipForward(RecordAttribute *targetAttr, Operator *const child,
              OlapParallelContext *const context,
-             const vector<expression_t> &wantedFields, string opLabel,
+             const std::vector<expression_t> &wantedFields, string opLabel,
              ZipState &state);
 
   ~ZipForward() override {}
@@ -220,7 +221,7 @@ class ZipForward : public UnaryOperator {
 
   OlapParallelContext *context;
   string opLabel;
-  vector<expression_t> wantedFields;
+  std::vector<expression_t> wantedFields;
   RecordAttribute *targetAttr;
 
   ZipState &state;

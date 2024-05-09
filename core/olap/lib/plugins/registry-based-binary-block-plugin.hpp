@@ -33,7 +33,7 @@ class RegistryBasedBinaryBlockPlugin : public ::BinaryBlockPlugin {
   static constexpr auto type = "registry-based-block";
   RegistryBasedBinaryBlockPlugin(OlapParallelContext *context,
                                  const std::string &fnamePrefix, RecordType rec,
-                                 vector<RecordAttribute *> &whichFields);
+                                 std::vector<RecordAttribute *> &whichFields);
 };
 
 }  // namespace proteus

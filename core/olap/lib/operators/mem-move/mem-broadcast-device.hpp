@@ -60,7 +60,7 @@ class MemBroadcastDevice : public MemMoveDevice {
   };
 
   MemBroadcastDevice(Operator *const child,
-                     const vector<RecordAttribute *> &wantedFields,
+                     const std::vector<RecordAttribute *> &wantedFields,
                      int num_of_targets, bool to_cpu, bool always_share = false)
       : MemMoveDevice(child, wantedFields, 8 * num_of_targets, to_cpu),
         always_share(always_share) {

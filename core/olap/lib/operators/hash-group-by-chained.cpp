@@ -647,7 +647,7 @@ void HashGroupByChained::generate_scan(OlapParallelContext *context) {
   Type *t_cnt = PointerType::get(int32_type, /* address space */ 0);
   size_t cnt_ptr_param = context->appendParameter(t_cnt, true, true);
 
-  vector<size_t> out_param_ids_scan;
+  std::vector<size_t> out_param_ids_scan;
   for (const auto &p : ptr_types) {
     out_param_ids_scan.push_back(context->appendParameter(p, true, true));
   }
@@ -778,7 +778,7 @@ void HashGroupByChained::generate_scan(OlapParallelContext *context) {
 
   // Actual Work (Loop through attributes etc.)
 
-  vector<Value *> in_vals;
+  std::vector<Value *> in_vals;
   for (size_t i = 0; i < out_param_ids_scan.size(); ++i) {
     Value *out_ptr = context->getArgument(out_param_ids_scan[i]);
 

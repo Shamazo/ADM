@@ -29,7 +29,7 @@ using namespace llvm;
 
 BinaryRowPlugin::BinaryRowPlugin(Context *const context, string &fname,
                                  RecordType &rec,
-                                 vector<RecordAttribute *> &whichFields)
+                                 std::vector<RecordAttribute *> &whichFields)
     : fname(fname),
       rec(rec),
       wantedFields(whichFields),
@@ -330,7 +330,7 @@ void BinaryRowPlugin::readAsStringLLVM(
   Value *val_0 = context->createInt32(0);
   Value *val_1 = context->createInt32(1);
 
-  vector<Value *> idxList = vector<Value *>();
+  std::vector<Value *> idxList = std::vector<Value *>();
   idxList.push_back(val_0);
   idxList.push_back(val_0);
   Value *structPtr = Builder->CreateGEP(
@@ -554,7 +554,7 @@ void BinaryRowPlugin::generate(const ::Operator &producer,
   size_t offset = 0;
   list<RecordAttribute *> args = rec.getArgs();
   list<RecordAttribute *>::iterator iterSchema = args.begin();
-  for (vector<RecordAttribute *>::iterator it = wantedFields.begin();
+  for (std::vector<RecordAttribute *>::iterator it = wantedFields.begin();
        it != wantedFields.end(); it++) {
     RecordAttribute attr = *(*it);
 

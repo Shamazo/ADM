@@ -534,7 +534,7 @@ class RelBuilder {
    *                    the input name.
    */
   [[nodiscard]] RelBuilder reduce(const MultiExpressionFactory& expr,
-                                  const vector<Monoid>& accs) const {
+                                  const std::vector<Monoid>& accs) const {
     return reduce(expr(getOutputArg()), accs);
   }
 
@@ -545,7 +545,7 @@ class RelBuilder {
   }
 
   template <typename T>
-  RelBuilder sort(T e, const vector<direction>& dirs) const {
+  RelBuilder sort(T e, const std::vector<direction>& dirs) const {
     if (isPacked()) {
       std::string error = "Cannot sort packed input";
       LOG(ERROR) << error;
@@ -571,26 +571,27 @@ class RelBuilder {
   [[nodiscard]] bool isPacked() const;
 
  private:
-  [[nodiscard]] RelBuilder memmove(const vector<RecordAttribute*>& wantedFields,
-                                   size_t slack, DeviceType to) const;
+  [[nodiscard]] RelBuilder memmove(
+      const std::vector<RecordAttribute*>& wantedFields, size_t slack,
+      DeviceType to) const;
 
   [[nodiscard]] RelBuilder memmove_scaleout(
-      const vector<RecordAttribute*>& wantedFields, size_t slack) const;
+      const std::vector<RecordAttribute*>& wantedFields, size_t slack) const;
 
   [[nodiscard]] RelBuilder to_gpu(
-      const vector<RecordAttribute*>& wantedFields) const;
+      const std::vector<RecordAttribute*>& wantedFields) const;
 
-  [[nodiscard]] RelBuilder to_cpu(const vector<RecordAttribute*>& wantedFields,
-                                  gran_t granularity = gran_t::THREAD,
-                                  size_t size = 1024 * 1024 / 4) const;
+  [[nodiscard]] RelBuilder to_cpu(
+      const std::vector<RecordAttribute*>& wantedFields,
+      gran_t granularity = gran_t::THREAD, size_t size = 1024 * 1024 / 4) const;
 
   [[nodiscard]] RelBuilder unpack(
-      const vector<expression_t>& projections) const;
+      const std::vector<expression_t>& projections) const;
 
-  [[nodiscard]] RelBuilder unpack(const vector<expression_t>& projections,
+  [[nodiscard]] RelBuilder unpack(const std::vector<expression_t>& projections,
                                   gran_t granularity) const;
 
-  [[nodiscard]] RelBuilder pack(const vector<expression_t>& projections,
+  [[nodiscard]] RelBuilder pack(const std::vector<expression_t>& projections,
                                 expression_t hashExpr,
                                 size_t numOfBuckets) const;
 
@@ -608,10 +609,10 @@ class RelBuilder {
                                               size_t filterSize,
                                               uint64_t bloomId) const;
 
-  [[nodiscard]] RelBuilder project(const vector<expression_t>& e) const;
+  [[nodiscard]] RelBuilder project(const std::vector<expression_t>& e) const;
 
-  [[nodiscard]] RelBuilder reduce(const vector<expression_t>& e,
-                                  const vector<Monoid>& accs) const;
+  [[nodiscard]] RelBuilder reduce(const std::vector<expression_t>& e,
+                                  const std::vector<Monoid>& accs) const;
 
   [[nodiscard]] RelBuilder groupby(const std::vector<expression_t>& e,
                                    const std::vector<GpuAggrMatExpr>& agg_exprs,
@@ -624,10 +625,10 @@ class RelBuilder {
    * use direction::None
    * @param dirs Sort direction per orderByField
    */
-  [[nodiscard]] RelBuilder sort(const vector<expression_t>& orderByFields,
-                                const vector<direction>& dirs) const;
+  [[nodiscard]] RelBuilder sort(const std::vector<expression_t>& orderByFields,
+                                const std::vector<direction>& dirs) const;
 
-  RelBuilder print(const vector<expression_t>& e, Plugin* pg,
+  RelBuilder print(const std::vector<expression_t>& e, Plugin* pg,
                    bool may_overwrite = false) const;
 
   RelBuilder print(std::function<std::vector<expression_t>(
@@ -637,24 +638,24 @@ class RelBuilder {
 
   [[nodiscard]] RelBuilder unnest(expression_t e) const;
 
-  [[nodiscard]] RelBuilder router(const vector<RecordAttribute*>& wantedFields,
-                                  std::optional<expression_t> hash,
-                                  DegreeOfParallelism fanout, size_t slack,
-                                  RoutingPolicy p, DeviceType target,
-                                  std::unique_ptr<Affinitizer> aff) const;
+  [[nodiscard]] RelBuilder router(
+      const std::vector<RecordAttribute*>& wantedFields,
+      std::optional<expression_t> hash, DegreeOfParallelism fanout,
+      size_t slack, RoutingPolicy p, DeviceType target,
+      std::unique_ptr<Affinitizer> aff) const;
 
   [[nodiscard]] RelBuilder router_scaleout(
-      const vector<RecordAttribute*>& wantedFields,
+      const std::vector<RecordAttribute*>& wantedFields,
       std::optional<expression_t> hash, DegreeOfParallelism fanout,
       size_t slack, RoutingPolicy p, DeviceType cpu_targets) const;
 
   [[nodiscard]] RelBuilder unionAll(
       const std::vector<RelBuilder>& children,
-      const vector<RecordAttribute*>& wantedFields) const;
+      const std::vector<RecordAttribute*>& wantedFields) const;
 
   [[nodiscard]] RelBuilder membrdcst(
-      const vector<RecordAttribute*>& wantedFields, DegreeOfParallelism fanout,
-      bool to_cpu, bool always_share = false) const;
+      const std::vector<RecordAttribute*>& wantedFields,
+      DegreeOfParallelism fanout, bool to_cpu, bool always_share = false) const;
 
   [[nodiscard]] RelBuilder join(RelBuilder build, expression_t build_k,
                                 const std::vector<GpuMatExpr>& build_e,
@@ -665,8 +666,8 @@ class RelBuilder {
                                 int hash_bits, size_t maxBuildInputSize) const;
 
   [[nodiscard]] RelBuilder membrdcst_scaleout(
-      const vector<RecordAttribute*>& wantedFields, size_t fanout, bool to_cpu,
-      bool always_share = false) const;
+      const std::vector<RecordAttribute*>& wantedFields, size_t fanout,
+      bool to_cpu, bool always_share = false) const;
 
   [[nodiscard]] RelBuilder join(RelBuilder build, expression_t build_k,
                                 expression_t probe_k, int hash_bits,

@@ -28,8 +28,8 @@
 
 class UnionAll : public Router {
  public:
-  UnionAll(vector<Operator *> &children,
-           const vector<RecordAttribute *> &wantedFields)
+  UnionAll(std::vector<Operator *> &children,
+           const std::vector<RecordAttribute *> &wantedFields)
       : Router(children[0], DegreeOfParallelism{1}, wantedFields, 8,
                std::nullopt, RoutingPolicy::RANDOM,
                getDefaultAffinitizer(DeviceType::CPU)),
@@ -81,7 +81,7 @@ class UnionAll : public Router {
   std::vector<Operator *> getChildren() const { return children; }
 
  private:
-  vector<Operator *> children;
+  std::vector<Operator *> children;
 };
 
 #endif /* UNIONALL_HPP_ */

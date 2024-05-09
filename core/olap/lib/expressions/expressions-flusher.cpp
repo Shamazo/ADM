@@ -34,7 +34,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::IntConstant *e) {
   outputFileLLVM = context->CreateGlobalString(this->outputFile);
   Function *flushInt = context->getFunction("flushInt");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *val_int =
       ConstantInt::get(context->getLLVMContext(), APInt(32, e->getVal()));
   ArgsV.push_back(val_int);
@@ -47,7 +47,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::Int64Constant *e) {
   outputFileLLVM = context->CreateGlobalString(this->outputFile);
   Function *flushInt = context->getFunction("flushInt64");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *val_int64 =
       ConstantInt::get(context->getLLVMContext(), APInt(64, e->getVal()));
   ArgsV.push_back(val_int64);
@@ -60,7 +60,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::DateConstant *e) {
   outputFileLLVM = context->CreateGlobalString(this->outputFile);
   Function *flushInt = context->getFunction("flushDate");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *val_int64 =
       ConstantInt::get(context->getLLVMContext(), APInt(64, e->getVal()));
   ArgsV.push_back(val_int64);
@@ -73,7 +73,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::FloatConstant *e) {
   outputFileLLVM = context->CreateGlobalString(this->outputFile);
   Function *flushDouble = context->getFunction("flushDouble");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *val_double =
       ConstantFP::get(context->getLLVMContext(), APFloat(e->getVal()));
   ArgsV.push_back(val_double);
@@ -86,7 +86,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::BoolConstant *e) {
   outputFileLLVM = context->CreateGlobalString(this->outputFile);
   Function *flushBoolean = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   Value *val_boolean =
       ConstantInt::get(context->getLLVMContext(), APInt(1, e->getVal()));
   ArgsV.push_back(val_boolean);
@@ -114,7 +114,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
   const char *str = toFlush.c_str();
   Value *strLLVM = context->CreateGlobalString(str);
 
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(strLLVM);
   ArgsV.push_back(context->createInt64(start));
   ArgsV.push_back(context->createInt64(end));
@@ -367,7 +367,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -381,7 +381,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -395,7 +395,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -409,7 +409,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -423,7 +423,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -437,7 +437,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -451,7 +451,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -465,7 +465,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 
   ProteusValue exprResult = e->accept(exprGenerator);
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
   return placeholder;
@@ -521,7 +521,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -582,7 +582,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -643,7 +643,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -701,7 +701,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -759,7 +759,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -922,7 +922,7 @@ void ExpressionFlusherVisitor::flushValue(Value *val, typeID val_type) {
   switch (val_type) {
     case BOOL: {
       flushFunc = context->getFunction("flushBoolean");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val);
       ArgsV.push_back(outputFileLLVM);
       context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -931,7 +931,7 @@ void ExpressionFlusherVisitor::flushValue(Value *val, typeID val_type) {
     case STRING: {
       /* Untested */
       flushFunc = context->getFunction("flushStringObj");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val);
       ArgsV.push_back(outputFileLLVM);
       context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -939,14 +939,14 @@ void ExpressionFlusherVisitor::flushValue(Value *val, typeID val_type) {
     }
     case FLOAT: {
       flushFunc = context->getFunction("flushDouble");
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       ArgsV.push_back(val);
       ArgsV.push_back(outputFileLLVM);
       context->getBuilder()->CreateCall(flushFunc, ArgsV);
       return;
     }
     case INT64: {
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       flushFunc = context->getFunction("flushInt64");
       ArgsV.push_back(val);
       ArgsV.push_back(outputFileLLVM);
@@ -954,7 +954,7 @@ void ExpressionFlusherVisitor::flushValue(Value *val, typeID val_type) {
       return;
     }
     case INT: {
-      vector<Value *> ArgsV;
+      std::vector<Value *> ArgsV;
       flushFunc = context->getFunction("flushInt");
       ArgsV.push_back(val);
       ArgsV.push_back(outputFileLLVM);
@@ -1030,7 +1030,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -1090,7 +1090,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -1108,7 +1108,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
   ProteusValue exprResult = e->accept(exprGenerator);
 
   Function *flushFunc = context->getFunction("flushBoolean");
-  vector<Value *> ArgsV;
+  std::vector<Value *> ArgsV;
   ArgsV.push_back(exprResult.value);
   ArgsV.push_back(outputFileLLVM);
   context->getBuilder()->CreateCall(flushFunc, ArgsV);
@@ -1165,7 +1165,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
             string("[ExpressionFlusherVisitor]: Unknown Input"));
     }
     flushFunc = context->getFunction(instructionLabel);
-    vector<Value *> ArgsV;
+    std::vector<Value *> ArgsV;
     ArgsV.push_back(exprResult.value);
     ArgsV.push_back(outputFileLLVM);
     context->getBuilder()->CreateCall(flushFunc, ArgsV);
