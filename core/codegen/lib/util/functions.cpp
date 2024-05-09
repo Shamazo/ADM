@@ -365,7 +365,7 @@ size_t newlineAVX(const char *const target, size_t targetLength) {
     const char c = target[strIdx];
     if (nl == c) {
       // cout << "2. NL at pos " << strIdx << endl;
-      cout << "[AVX2:] Newline / End of line at pos " << strIdx << endl;
+      cout << "[AVX2:] Newline / End of line at pos " << strIdx << std::endl;
       return strIdx;
     }
   }

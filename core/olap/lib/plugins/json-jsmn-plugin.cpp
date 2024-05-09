@@ -1971,9 +1971,9 @@ void JSONPlugin::unnestObjectsInterpreted(list<string> path) {
     // We want token i to be one of the 'outermost' objects
     int curr = i;
 
-    cout << "PARENT: " << i << endl;
+    cout << "PARENT: " << i << std::endl;
     TOKEN_PRINT(tokens[i]);
-    cout << "KIDS: " << endl;
+    cout << "KIDS: " << std::endl;
     // Work done for every 'tuple'
     // TOKEN_PRINT(tokens[i]);
     int neededToken = readPathInterpreted(i, path);

@@ -45,28 +45,28 @@ class Catalog {
     it = htIdentifiers.find(tableName);
 
     if (it != htIdentifiers.end()) {
-      cout << "HT for label " << tableName << " found" << endl;
+      cout << "HT for label " << tableName << " found" << std::endl;
       return it->second;
     } else {
-      cout << "NEW HT for label " << tableName << endl;
+      cout << "NEW HT for label " << tableName << std::endl;
       int newIdentifier = intHashtables.size();
-      auto *newHT = new multimap<int, void *>();
+      auto *newHT = new std::multimap<int, void *>();
       intHashtables.push_back(newHT);
       htIdentifiers[tableName] = newIdentifier;
       return newIdentifier;
     }
   }
 
-  multimap<int, void *> *getIntHashTable(int tableID) {
+  std::multimap<int, void *> *getIntHashTable(int tableID) {
     return intHashtables[tableID];
   }
 
   // TODO NEED a more elegant way to group hashtables together - array?
-  multimap<size_t, void *> *getHashTable(const string &tableName) {
+  std::multimap<size_t, void *> *getHashTable(const string &tableName) {
     auto it = HTs.find(tableName);
     if (it == HTs.end()) {
       LOG(INFO) << "Creating HT for table " << tableName;
-      HTs[tableName] = new multimap<size_t, void *>();
+      HTs[tableName] = new std::multimap<size_t, void *>();
       return HTs[tableName];
     } else {
       LOG(INFO) << "HT found";
@@ -189,7 +189,7 @@ class Catalog {
   //        }
   //    }
 
-  stringstream &getSerializer(const string &fileName) {
+  std::stringstream &getSerializer(const string &fileName) {
     LOG_IF(INFO, serializers.count(fileName) == 0)
         << "Creating Serializer, flushing to " << fileName;
     return serializers[fileName];
@@ -209,12 +209,12 @@ class Catalog {
   map<string, Plugin *> plugins;
   map<string, int> htIdentifiers;
 
-  std::vector<multimap<int, void *> *> intHashtables;
-  map<string, multimap<size_t, void *> *> HTs;
+  std::vector<std::multimap<int, void *> *> intHashtables;
+  map<string, std::multimap<size_t, void *> *> HTs;
 
   map<string, ExpressionType *> jsonTypeCatalog;
   //    map<string, Writer<StringBuffer>>         jsonFlushers;
-  std::map<string, stringstream> serializers;
+  std::map<string, std::stringstream> serializers;
   // Initialized by Reduce() if accumulator type is set
   map<int, llvm::Value *> *reduceSetHT;
 

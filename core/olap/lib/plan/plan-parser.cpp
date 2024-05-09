@@ -1077,7 +1077,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
         mapOidsLeft[relName] = oid;
         auto oidL = projL->getExpr()[*oid];
         // Added in 'wanted expressions'
-        cout << "Injecting left OID for " << relName << endl;
+        cout << "Injecting left OID for " << relName << std::endl;
         exprsLeft.insert(exprsLeft.begin(), oidL);
         outputModesLeft.insert(outputModesLeft.begin(), EAGER);
       }
@@ -1125,7 +1125,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
         expressions::RecordProjection oidR = projR->getExpr()[*oid];
         // Added in 'wanted expressions'
         exprsRight.insert(exprsRight.begin(), oidR);
-        cout << "Injecting right OID for " << relName << endl;
+        cout << "Injecting right OID for " << relName << std::endl;
         outputModesRight.insert(outputModesRight.begin(), EAGER);
       }
     }
@@ -1795,7 +1795,7 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
       string err =
           string("WARNING - NO DELIMITER SPECIFIED. FALLING BACK TO DEFAULT");
       LOG(WARNING) << err;
-      cout << err << endl;
+      cout << err << std::endl;
     }
 
     bool stringBrackets = true;

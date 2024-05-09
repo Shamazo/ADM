@@ -44,7 +44,7 @@ DEFINE_double(gpu_buffers, 0.2,
               "Percentage (0.0-1.0) of GPU memory to dedicate for buffer "
               "management (per GPU)");
 DEFINE_validator(gpu_buffers, &validatePercentage);
-DEFINE_double(cpu_buffers, 0.1,
+DEFINE_double(cpu_buffers, 0.2,
               "Percentage (0.0-1.0) of CPU memory to dedicate for buffer "
               "management (per CPU)");
 DEFINE_validator(cpu_buffers, &validatePercentage);

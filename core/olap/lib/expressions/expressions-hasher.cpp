@@ -316,11 +316,11 @@ ProteusValue ExpressionHasherVisitor::visit(
     if (info.structFieldNo != -1 && it == currState.getBindings().end()) {
 #ifdef DEBUGCACHING
       cout << "[Hasher: ] Expression found for " << e->getOriginalRelationName()
-           << "." << e->getAttribute().getAttrName() << "!" << endl;
+           << "." << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
       if (!cache.getCacheIsFull(e)) {
 #ifdef DEBUGCACHING
-        cout << "...but is not useable " << endl;
+        cout << "...but is not useable " << std::endl;
 #endif
       } else {
         assert(dynamic_cast<OlapParallelContext *>(context));
@@ -341,7 +341,7 @@ ProteusValue ExpressionHasherVisitor::visit(
     } else {
 #ifdef DEBUGCACHING
       cout << "[Hasher: ] No cache found for " << e->getOriginalRelationName()
-           << "." << e->getAttribute().getAttrName() << "!" << endl;
+           << "." << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
     }
     //}

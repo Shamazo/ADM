@@ -190,7 +190,7 @@ JSONPlugin::JSONPlugin(Context *const context, string fname,
       cache(true),
       tokens(tokens),
       lines(linehint) {
-  cout << "JSON CONSTRUCTOR - EXISTING TOKENS" << endl;
+  cout << "JSON CONSTRUCTOR - EXISTING TOKENS" << std::endl;
 
   tokenType = context->CreateJSMNStruct();
 
@@ -219,7 +219,7 @@ void JSONPlugin::initPM() {
     /* PM */
     CachingService &cache = CachingService::getInstance();
     /* Might be already flushed */
-    ostringstream sstream;
+    std::ostringstream sstream;
     sstream << fname << ".pm";
     string pmPathStr = sstream.str();
     const char *pmPath = pmPathStr.c_str();
@@ -258,7 +258,7 @@ void JSONPlugin::initPM() {
 }
 
 void JSONPlugin::reusePM(pmJSON *pm) {
-  cout << "(JSON) PM IN-MEM REUSE" << endl;
+  cout << "(JSON) PM IN-MEM REUSE" << std::endl;
   jsmntok_t **tokens = pm->tokens;
   size_t *newlines = pm->newlines;
   this->tokens = tokens;
@@ -291,7 +291,7 @@ void JSONPlugin::reusePM(pmJSON *pm) {
 }
 
 void JSONPlugin::createPM() {
-  cout << "NEW (JSON) PM" << endl;
+  cout << "NEW (JSON) PM" << std::endl;
   //            tokenBuf = (char*) malloc(lines * sizeof(jsmntok_t*));
   //            if (tokenBuf == nullptr) {
   //                string msg = string(
@@ -339,7 +339,7 @@ void JSONPlugin::createPM() {
 
 void JSONPlugin::loadPMfromDisk(const char *pmPath, struct stat &pmStatBuffer) {
   /* Load from file */
-  cout << "READING PM FROM DISK: " << pmPath << endl;
+  cout << "READING PM FROM DISK: " << pmPath << std::endl;
   size_t pmsize = pmStatBuffer.st_size;
   // cout << pmsize << " vs " << lines * MAXTOKENS * sizeof(jsmntok_t) << endl;
   int fdPM = open(pmPath, O_RDONLY);
@@ -1485,7 +1485,7 @@ ProteusValueMemory JSONPlugin::readPredefinedPath(string activeRelation,
 
 #ifdef DEBUGJSON
   {
-    cout << attr.getAttrNo() << ". " << attr.getAttrName() << endl;
+    cout << attr.getAttrNo() << ". " << attr.getAttrName() << std::endl;
     if (attr.getAttrNo() == 1) {
       context->log(context->createInt64(10006));
     } else {

@@ -245,11 +245,11 @@ ProteusValue ExpressionFlusherVisitor::visit(
 #ifdef DEBUGCACHING
       cout << "[Flusher: ] Expression found for "
            << e->getOriginalRelationName() << "."
-           << e->getAttribute().getAttrName() << "!" << endl;
+           << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
       if (!cache.getCacheIsFull(e)) {
 #ifdef DEBUGCACHING
-        cout << "...but is not useable " << endl;
+        cout << "...but is not useable " << std::endl;
 #endif
       } else {
         assert(dynamic_cast<OlapParallelContext *>(context));
@@ -271,7 +271,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     } else {
 #ifdef DEBUGCACHING
       cout << "[Flusher: ] No cache found for " << e->getOriginalRelationName()
-           << "." << e->getAttribute().getAttrName() << "!" << endl;
+           << "." << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
     }
     //}

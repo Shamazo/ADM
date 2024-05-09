@@ -242,7 +242,7 @@ class RecordAttribute {
  public:
   RecordAttribute()
       : relName(""), attrName(""), type(nullptr), attrNo(-1), projected(false) {
-    cout << "ANONYMOUS CONSTRUCTOR!!" << endl;
+    cout << "ANONYMOUS CONSTRUCTOR!!" << std::endl;
   }
   RecordAttribute(int no, string relName, string attrName,
                   const ExpressionType *type, bool make_block = false)
@@ -389,7 +389,7 @@ class RecordType : public ExpressionTypeVisitable<RecordType, ExpressionType> {
   }
 
   [[nodiscard]] string getType() const override {
-    stringstream ss;
+    std::stringstream ss;
     ss << "Record(";
     int count = 0;
     int size = args.size();
@@ -471,7 +471,7 @@ void ExpressionTypeVisitable<T, Interface>::accept(ExprTypeVisitor &v) const {
  * If difference between hashed expressions boils down to this
  * point, I am doing sth wrong. */
 inline bool operator<(const ExpressionType &l, const ExpressionType &r) {
-  cout << "Comparing GENERIC EXPRESSION TYPE" << endl;
+  cout << "Comparing GENERIC EXPRESSION TYPE" << std::endl;
   return l.getType() < r.getType();
 }
 

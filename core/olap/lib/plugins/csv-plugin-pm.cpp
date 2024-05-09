@@ -347,11 +347,11 @@ ProteusValueMemory CSVPlugin::readPath(string activeRelation, Bindings bindings,
       string error_msg =
           string("[CSV plugin - readPath ]: Unknown variable name ") + pathVar;
       LOG(INFO) << "Nothing found for " << fname << "_" << pathVar << " in "
-                << csvProjections.size() << " bindings" << endl;
+                << csvProjections.size() << " bindings" << std::endl;
       for (it = csvProjections.begin(); it != csvProjections.end(); it++) {
         RecordAttribute attr = it->first;
         LOG(INFO) << attr.getRelationName() << "_" << attr.getAttrName()
-                  << endl;
+                  << std::endl;
       }
       LOG(ERROR) << error_msg;
       throw runtime_error(error_msg);
@@ -1861,7 +1861,7 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
   for (const auto &wantedField : wantedFields) {
 #ifdef DEBUGPM
     cout << "[CSV_PM: ] Need Field " << (*it)->getOriginalRelationName() << "."
-         << (*it)->getAttrName() << endl;
+         << (*it)->getAttrName() << std::endl;
 #endif
     /* Create search key for caches  */
     bool found = false;
@@ -1874,11 +1874,11 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
       if (info.structFieldNo != -1) {
 #ifdef DEBUGCACHING
         cout << "[CSV_PM: ] Field " << (*it)->getOriginalRelationName() << "."
-             << (*it)->getAttrName() << " found!" << endl;
+             << (*it)->getAttrName() << " found!" << std::endl;
 #endif
         if (!cache.getCacheIsFull(&thisField)) {
 #ifdef DEBUGCACHING
-          cout << "...but is not useable " << endl;
+          cout << "...but is not useable " << std::endl;
 #endif
         } else {
           int posInStruct = info.structFieldNo;
@@ -1955,7 +1955,7 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
 #ifdef DEBUGPM
         cout << "To get field " << (*it)->getAttrNo()
              << ", scan from current pos " << distanceFromCurr << " fields"
-             << endl;
+             << std::endl;
 #endif
         /* How many fields to skip */
         for (int i = 0; i < distanceFromCurr; i++) {
@@ -1971,7 +1971,7 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
       else if (pmDistanceBefore <= pmDistanceAfter) {
 #ifdef DEBUGPM
         cout << "To get field " << (*it)->getAttrNo() << ", scan forward "
-             << pmDistanceBefore << " fields" << endl;
+             << pmDistanceBefore << " fields" << std::endl;
 #endif
         int nearbyPM = neededAttr / policy;
         //            cout << "Array Field In PM: " << nearbyPM - 1 << endl;
@@ -2021,7 +2021,7 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
       else {
 #ifdef DEBUGPM
         cout << "To get field " << (*it)->getAttrNo() << ", scan backward "
-             << pmDistanceAfter << " fields" << endl;
+             << pmDistanceAfter << " fields" << std::endl;
 #endif
         int nearbyPM = (neededAttr / policy) + 1;
         // cout << "Array Field in PM: " << nearbyPM - 1 << endl;

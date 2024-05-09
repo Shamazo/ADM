@@ -43,7 +43,7 @@ class CachingService {
     auto it = pmCaches.find(fileName);
     if (it != pmCaches.end()) {
       LOG(WARNING) << "PM caches already contain " << fileName;
-      cout << "*Warning* PM caches already contain " << fileName << endl;
+      cout << "*Warning* PM caches already contain " << fileName << std::endl;
     }
     pmCaches[fileName] = payloadPtr;
   }
@@ -97,7 +97,7 @@ class CachingService {
       binCaches[expr] = payload;
       binCacheIsFull[expr] = entireDataset;
 #ifdef DEBUGCACHING
-      cout << "Registered in cache " << endl;
+      cout << "Registered in cache " << std::endl;
 #endif
     }
 #endif

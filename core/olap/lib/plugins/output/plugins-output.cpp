@@ -91,7 +91,7 @@ OutputPlugin::OutputPlugin(
       //                    << endl;
       // if (currAttr.getAttrName() == activeLoop) {
       cout << "HINT - OID MAT'D: " << oid->getOriginalRelationName() << " -- "
-           << oid->getRelationName() << "_" << oid->getName() << endl;
+           << oid->getRelationName() << "_" << oid->getName() << std::endl;
       llvm::Type *currType = oid->getOriginalType()->getLLVMType(
           context
               ->getLLVMContext());  // currentBindings.find(*oid)->second.mem->getAllocatedType();
@@ -134,7 +134,7 @@ OutputPlugin::OutputPlugin(
         isCached = true;
         cout << "[OUTPUT PG: ] *Cached* Expression found for "
              << e.getOriginalRelationName() << "."
-             << e.getAttribute().getAttrName() << "!" << endl;
+             << e.getAttribute().getAttrName() << "!" << std::endl;
       }
     }
 
@@ -155,7 +155,7 @@ OutputPlugin::OutputPlugin(
       LOG(INFO) << "[MATERIALIZER: ] PART OF PAYLOAD: "
                 << wantedField->getAttrName();
       cout << "[MATERIALIZER: ] PART OF PAYLOAD: " << wantedField->getAttrName()
-           << endl;
+           << std::endl;
 
       materialization_mode mode = (materializer.getOutputMode()).at(attrNo++);
       // gather datatypes

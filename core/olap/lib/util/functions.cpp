@@ -61,12 +61,12 @@ OlapParallelContext *prepareOlapContext(string moduleName, bool gpuRoot) {
 void insertToHT(char *HTname, size_t key, void *value, int type_size) {
   Catalog &catalog = Catalog::getInstance();
   // still, one unneeded indirection..... is there a quicker way?
-  multimap<size_t, void *> *HT = catalog.getHashTable(string(HTname));
+  std::multimap<size_t, void *> *HT = catalog.getHashTable(string(HTname));
 
   void *valMaterialized = malloc(type_size);
   memcpy(valMaterialized, value, type_size);
 
-  HT->insert(pair<size_t, void *>(key, valMaterialized));
+  HT->insert(std::pair<size_t, void *>(key, valMaterialized));
 
   //    HT->insert(pair<int,void*>(key,value));
   LOG(INFO) << "[Insert: ] Hash key " << key << " inserted successfully";
@@ -80,7 +80,7 @@ void **probeHT(char *HTname, size_t key) {
   Catalog &catalog = Catalog::getInstance();
 
   // same indirection here as above.
-  multimap<size_t, void *> *HT = catalog.getHashTable(name);
+  std::multimap<size_t, void *> *HT = catalog.getHashTable(name);
 
   auto results = HT->equal_range(key);
 
@@ -99,7 +99,7 @@ void **probeHT(char *HTname, size_t key) {
   }
 
   int curr = 0;
-  for (multimap<size_t, void *>::iterator it = results.first;
+  for (std::multimap<size_t, void *>::iterator it = results.first;
        it != results.second; ++it) {
     bindings[curr] = it->second;
     curr++;
@@ -120,10 +120,11 @@ HashtableBucketMetadata *getMetadataHT(char *HTname) {
   Catalog &catalog = Catalog::getInstance();
 
   // same indirection here as above.
-  multimap<size_t, void *> *HT = catalog.getHashTable(name);
+  std::multimap<size_t, void *> *HT = catalog.getHashTable(name);
 
   std::vector<size_t> keys;
-  for (multimap<size_t, void *>::iterator it = HT->begin(), end = HT->end();
+  for (std::multimap<size_t, void *>::iterator it = HT->begin(),
+                                               end = HT->end();
        it != end; it = HT->upper_bound(it->first)) {
     keys.push_back(it->first);
     // cout << it->first << ' ' << it->second << endl;
@@ -145,13 +146,13 @@ HashtableBucketMetadata *getMetadataHT(char *HTname) {
 void insertIntKeyToHT(int htIdentifier, int key, void *value, int type_size) {
   Catalog &catalog = Catalog::getInstance();
   // still, one unneeded indirection..... is there a quicker way?
-  multimap<int, void *> *HT = catalog.getIntHashTable(htIdentifier);
+  std::multimap<int, void *> *HT = catalog.getIntHashTable(htIdentifier);
 
   void *valMaterialized = malloc(type_size);
   // FIXME obviously expensive, but probably cannot be helped
   memcpy(valMaterialized, value, type_size);
 
-  HT->insert(pair<int, void *>(key, valMaterialized));
+  HT->insert(std::pair<int, void *>(key, valMaterialized));
   //    cout << "INSERTED KEY " << key << endl;
 
 #ifdef DEBUG
@@ -168,9 +169,10 @@ void **probeIntHT(int htIdentifier, int key, int typeIndex) {
   Catalog &catalog = Catalog::getInstance();
 
   // same indirection here as above.
-  multimap<int, void *> *HT = catalog.getIntHashTable(htIdentifier);
+  std::multimap<int, void *> *HT = catalog.getIntHashTable(htIdentifier);
 
-  pair<multimap<int, void *>::iterator, multimap<int, void *>::iterator>
+  std::pair<std::multimap<int, void *>::iterator,
+            std::multimap<int, void *>::iterator>
       results;
   results = HT->equal_range(key);
 
@@ -188,8 +190,8 @@ void **probeIntHT(int htIdentifier, int key, int typeIndex) {
   }
 
   int curr = 0;
-  for (multimap<int, void *>::iterator it = results.first; it != results.second;
-       ++it) {
+  for (std::multimap<int, void *>::iterator it = results.first;
+       it != results.second; ++it) {
     bindings[curr] = it->second;
     curr++;
   }
@@ -308,7 +310,7 @@ static std::map<std::ostream *, std::map<std::string, int32_t>> dicts;
 void flushDictIfExists(std::ostream *ptr, const char *fileName) {
   if (!dicts.count(ptr)) return;
   auto dictName = "/dev/shm/" + std::string{fileName} + ".dict";
-  LOG(INFO) << "Flushing dictionary to " << dictName << endl;
+  LOG(INFO) << "Flushing dictionary to " << dictName << std::endl;
   std::ofstream out{dictName};
 #ifndef NDEBUG
   auto prev = std::numeric_limits<int32_t>::lowest();
@@ -326,7 +328,7 @@ void flushDictIfExists(std::ostream *ptr, const char *fileName) {
 }
 
 void flushBinaryOutput(char *fileName, std::ostream *strBuffer) {
-  LOG(INFO) << "Flushing to " << fileName << endl;
+  LOG(INFO) << "Flushing to " << fileName << std::endl;
   {
     std::filesystem::path p{fileName};
     if (p.is_relative()) {

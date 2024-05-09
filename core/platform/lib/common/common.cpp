@@ -21,6 +21,7 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <fstream>
 #include <magic_enum.hpp>
 #include <mutex>
 #include <platform/common/common.hpp>
@@ -96,8 +97,8 @@ struct ranged_log_info {
 };
 
 // the definition order matters!
-static stringstream global_ranged_log;
-static stringstream global_log;
+static std::stringstream global_ranged_log;
+static std::stringstream global_log;
 // std::mutex                      global_log_lock    ;
 
 // logger::~logger(){
@@ -146,7 +147,7 @@ class flush_log {
       for (const auto &t : data) t.flush();
     }
     {
-      ofstream out("timeline.csv");
+      std::ofstream out("timeline.csv");
       if (out.is_open()) {
         out << "timestamp,operator,thread_id,coreid,op\n";
         out << global_log.str();
@@ -188,7 +189,7 @@ class flush_range_log {
       for (const auto &t : data) t.flush();
     }
     {
-      ofstream out("timeline-ranges.csv");
+      std::ofstream out("timeline-ranges.csv");
       if (out.is_open()) {
         out << "timestamp_start,timestamp_end,operator,thread_id,coreid_start,"
                "coreid_end,op,pipeline_id,instance_id\n";

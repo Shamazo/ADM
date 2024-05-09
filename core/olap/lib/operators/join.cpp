@@ -301,7 +301,7 @@ void Join::consume(Context *const context, const OperatorState &childState) {
       GetElementPtrInst *elem_ptr =
           GetElementPtrInst::Create(str->getElementType(i), result_cast,
                                     idxList, "ptr_activeTuple", loopBody);
-      stringstream ss;
+      std::stringstream ss;
       ss << activeLoop;
       ss << i;
       Builder->SetInsertPoint(loopBody);

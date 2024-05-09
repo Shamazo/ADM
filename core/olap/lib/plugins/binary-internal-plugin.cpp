@@ -231,7 +231,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 }
 
 void BinaryInternalPlugin::scan(const ::Operator &producer) {
-  cout << "Internal Binary PG scan" << endl;
+  cout << "Internal Binary PG scan" << std::endl;
   // Prepare
   LLVMContext &llvmContext = context->getLLVMContext();
   IRBuilder<> *Builder = context->getBuilder();

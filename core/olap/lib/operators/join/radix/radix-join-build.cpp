@@ -68,7 +68,7 @@ void RadixJoinBuild::produce_(OlapParallelContext *context) {
 
   if (newChild) {
 #ifdef DEBUGCACHING
-    cout << "NEW SCAN POSSIBLE!!" << endl;
+    cout << "NEW SCAN POSSIBLE!!" << std::endl;
 #endif
     cached = true;
     this->setChild(newChild);
@@ -411,7 +411,7 @@ void RadixJoinBuild::consume(OlapParallelContext *const context,
           isCached = true;
           cout << "[OUTPUT PG: ] *Cached* Expression found for "
                << e.getOriginalRelationName() << "."
-               << e.getAttribute().getAttrName() << "!" << endl;
+               << e.getAttribute().getAttrName() << "!" << std::endl;
         }
       }
 

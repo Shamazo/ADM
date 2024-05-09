@@ -86,7 +86,7 @@ class Materializer {
        * For example, it still breaks 3way joins */
       std::vector<RecordAttribute *> *newOIDs =
           new std::vector<RecordAttribute *>();
-      set<RecordAttribute>::iterator it = tupleIdentifiers.begin();
+      std::set<RecordAttribute>::iterator it = tupleIdentifiers.begin();
       for (; it != tupleIdentifiers.end(); it++) {
         RecordAttribute *attr = new RecordAttribute(
             it->getRelationName(), it->getAttrName(), it->getOriginalType());

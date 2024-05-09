@@ -355,7 +355,7 @@ void ExprMaterializer::consume(Context *const context,
    */
   {
 #ifdef DEBUGCACHING
-    cout << "[Materializer:] Register in cache" << endl;
+    cout << "[Materializer:] Register in cache" << std::endl;
 #endif
     CachingService &cache = CachingService::getInstance();
     bool fullRelation = !(this->getChild())->isFiltering();

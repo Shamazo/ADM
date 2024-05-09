@@ -38,7 +38,7 @@ int lookupInDictionary(string s, const rapidjson::Value &val) {
   // Input Path
   const char *nameJSON = val["path"].GetString();
   if (ends_with(nameJSON, ".dict")) {
-    ifstream is(nameJSON);
+    std::ifstream is(nameJSON);
     string str;
     string prefix = s + ":";
     while (getline(is, str)) {

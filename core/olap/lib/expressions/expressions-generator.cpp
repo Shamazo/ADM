@@ -158,12 +158,12 @@ ProteusValue ExpressionGeneratorVisitor::visit(
                                "tuple information for ") +
                            activeRelation + "." +
                            e->getProjections().front().getName();
-        cout << activeVars.size() << endl;
+        cout << activeVars.size() << std::endl;
         map<RecordAttribute, ProteusValueMemory>::const_iterator it =
             activeVars.begin();
         for (; it != activeVars.end(); it++) {
           cout << it->first.getRelationName() << "-" << it->first.getAttrName()
-               << "-" << it->first.getOriginalRelationName() << endl;
+               << "-" << it->first.getOriginalRelationName() << std::endl;
         }
         // cout << endl;
         // cout << activeRelation << endl;
@@ -260,18 +260,18 @@ ProteusValue ExpressionGeneratorVisitor::visit(
         currState.getBindings().find(e->getAttribute());
 #ifdef DEBUGCACHING
     if (it != currState.getBindings().end()) {
-      cout << "Even if cached, binding's already there!" << endl;
+      cout << "Even if cached, binding's already there!" << std::endl;
     }
 #endif
     if (info.structFieldNo != -1 && it == currState.getBindings().end()) {
 #ifdef DEBUGCACHING
       cout << "[Generator: ] Expression found for "
            << e->getOriginalRelationName() << "."
-           << e->getAttribute().getAttrName() << "!" << endl;
+           << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
       if (!cache.getCacheIsFull(e)) {
 #ifdef DEBUGCACHING
-        cout << "...but is not useable " << endl;
+        cout << "...but is not useable " << std::endl;
 #endif
       } else {
         assert(dynamic_cast<OlapParallelContext *>(context));
@@ -282,7 +282,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 #ifdef DEBUGCACHING
       cout << "[Generator: ] No cache found for "
            << e->getOriginalRelationName() << "."
-           << e->getAttribute().getAttrName() << "!" << endl;
+           << e->getAttribute().getAttrName() << "!" << std::endl;
 #endif
     }
     //}

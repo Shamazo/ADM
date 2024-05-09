@@ -56,19 +56,10 @@
 #define unlikely(x) __builtin_expect((x), 0)
 
 using std::cout;
-using std::endl;
-using std::fstream;
-using std::ifstream;
 using std::list;
 using std::map;
-using std::multimap;
-using std::ofstream;
-using std::ostringstream;
-using std::pair;
 using std::runtime_error;
-using std::set;
 using std::string;
-using std::stringstream;
 
 double diff(struct timespec st, struct timespec end);
 
