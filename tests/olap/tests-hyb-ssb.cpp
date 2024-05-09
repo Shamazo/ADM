@@ -61,8 +61,6 @@
 #include <platform/topology/topology.hpp>
 #include <storage/storage-manager.hpp>
 
-using namespace llvm;
-
 ::testing::Environment *const pools_env =
     ::testing::AddGlobalTestEnvironment(new OLAPTestEnvironment);
 

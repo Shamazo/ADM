@@ -70,8 +70,6 @@
 
 #include "olap/test/test-utils.hpp"
 
-using namespace llvm;
-
 // ::testing::Environment *const pools_env =
 //     ::testing::AddGlobalTestEnvironment(new OLAPTestEnvironment);
 

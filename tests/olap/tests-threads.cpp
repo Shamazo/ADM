@@ -56,8 +56,6 @@
 //
 // </TechnicalDetails>
 
-#include <sys/mman.h>
-
 #include <olap/test/environment.hpp>
 #include <platform/common/common.hpp>
 #include <platform/common/gpu/gpu-common.hpp>
@@ -67,8 +65,6 @@
 #include <storage/storage-manager.hpp>
 #include <thread>
 #include <vector>
-
-using namespace llvm;
 
 ::testing::Environment *const pools_env =
     ::testing::AddGlobalTestEnvironment(new OLAPTestEnvironment);

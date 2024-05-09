@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "binary-operators.hpp"
+#include "codegen/util/proteus-value.hpp"
 
 class ExprVisitor;  // Forward declaration
 template <typename T>

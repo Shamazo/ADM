@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2014
+                            Copyright (c) 2024
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -76,53 +76,6 @@ double diff(struct timespec st, struct timespec end);
 [[noreturn, deprecated]] void fatal(const char *err);
 
 [[noreturn, deprecated]] void exception(const char *err);
-
-namespace llvm {
-// forward declaration to avoid including the whole header
-class AllocaInst;
-class Value;
-}  // namespace llvm
-
-class ProteusBareValue {
- protected:
-  using value_t = llvm::Value *;
-
- public:
-  value_t value;
-
-  [[deprecated]] ProteusBareValue() = default;
-  constexpr ProteusBareValue(value_t value) : value(value) {}
-};
-
-class ProteusBareValueMemory {
- protected:
-  using value_t = llvm::AllocaInst *;
-
- public:
-  value_t mem;
-
-  [[deprecated]] ProteusBareValueMemory() = default;
-  constexpr ProteusBareValueMemory(value_t mem) : mem(mem) {}
-};
-
-template <typename T>
-class Nullable : public T {
- public:
-  llvm::Value *isNull;
-
-  [[deprecated]] Nullable() = default;
-  constexpr Nullable(typename T::value_t v, llvm::Value *isNull)
-      : T(std::move(v)), isNull(isNull) {}
-};
-
-/**
- * Wrappers for LLVM Value and Alloca.
- * Maintain information such as whether the corresponding value is 'NULL'
- * LLVM's interpretation of 'NULL' for primitive types is not sufficient
- * (e.g., lvvm_null(int) = 0
- */
-using ProteusValueMemory = Nullable<ProteusBareValueMemory>;
-using ProteusValue = Nullable<ProteusBareValue>;
 
 /*
  * Util Methods

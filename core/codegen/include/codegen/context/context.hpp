@@ -42,7 +42,7 @@
 
 #include "codegen/expressions/expressionTypes.hpp"
 #include "codegen/jit/control-flow/if-statement.hpp"
-#include "platform/common/common.hpp"
+#include "codegen/util/proteus-value.hpp"
 
 #define MODULEPASS 0
 

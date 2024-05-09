@@ -26,7 +26,7 @@
 
 #include <cassert>
 
-#include "platform/common/common.hpp"
+#include "codegen/util/proteus-value.hpp"
 
 class Context;
 
