@@ -25,6 +25,8 @@
 
 #include <codegen/jit/pipeline.hpp>
 
+#include "lib/util/radix/joins/radix-join.hpp"
+
 using namespace llvm;
 
 RadixJoin::RadixJoin(const expressions::BinaryExpression &predicate,

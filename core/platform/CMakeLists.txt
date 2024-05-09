@@ -26,8 +26,6 @@ set(platform_cxx
   lib/util/profiling.cpp
   lib/util/stacktrace.cpp
   lib/util/time-registry.cpp
-  lib/util/radix/aggregations/radix-aggr.cpp
-  lib/util/radix/joins/radix-join.cpp
   lib/util/linux-exec.cpp
   )
 

@@ -8,13 +8,13 @@
  *
  */
 
-#ifndef PRJ_PARAMS_AGG_H
-#define PRJ_PARAMS_AGG_H
+#ifndef PRJ_PARAMS_JOIN_H
+#define PRJ_PARAMS_JOIN_H
 
-#include "platform/util/radix/prj_params.h"
+#include "lib/util/radix/prj_params.h"
 
 /** number of tuples fitting into L1 */
-#define L1_CACHE_TUPLES_AGG (L1_CACHE_SIZE / sizeof(agg::tuple_t))
+#define L1_CACHE_TUPLES_JOIN (L1_CACHE_SIZE / sizeof(joins::tuple_t))
 
 /** \internal some padding space is allocated for relations in order to
  *  avoid L1 conflict misses and PADDING_TUPLES is placed between
@@ -26,13 +26,13 @@
  * Put an odd number of cache lines between partitions in pass-2:
  * Here we put 3 cache lines.
  */
-#define SMALL_PADDING_TUPLES_AGG (3 * CACHE_LINE_SIZE / sizeof(agg::tuple_t))
-#define PADDING_TUPLES_AGG (SMALL_PADDING_TUPLES_AGG * (FANOUT_PASS2 + 1))
+#define SMALL_PADDING_TUPLES_JOIN (3 * CACHE_LINE_SIZE / sizeof(joins::tuple_t))
+#define PADDING_TUPLES_JOIN (SMALL_PADDING_TUPLES_JOIN * (FANOUT_PASS2 + 1))
 
 /** @warning This padding must be allocated at the end of relation */
-#define RELATION_PADDING_AGG \
-  (PADDING_TUPLES_AGG * FANOUT_PASS1 * sizeof(agg::tuple_t))
+#define RELATION_PADDING_JOIN \
+  (PADDING_TUPLES_JOIN * FANOUT_PASS1 * sizeof(joins::tuple_t))
 
 /** \endinternal */
 
-#endif /* PRJ_PARAMS_AGG_H */
+#endif /* PRJ_PARAMS_JOIN_H */

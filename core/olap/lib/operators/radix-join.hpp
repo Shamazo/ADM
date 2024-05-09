@@ -25,7 +25,6 @@
 #define _RADIX_JOIN_HPP_
 
 #include <olap/util/parallel-context.hpp>
-#include <platform/util/radix/joins/radix-join.hpp>
 
 #include "lib/expressions/expressions-generator.hpp"
 #include "lib/operators/join/radix/radix-join-build.hpp"

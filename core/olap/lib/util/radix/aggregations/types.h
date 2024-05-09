@@ -8,17 +8,18 @@
  *
  *
  */
-#ifndef JOIN_TYPES_H
-#define JOIN_TYPES_H
+#ifndef AGG_TYPES_H
+#define AGG_TYPES_H
 
-#include "platform/util/radix/types.h"
+#include "lib/util/radix/types.h"
 
-namespace joins {
+namespace agg {
 /**
  * @defgroup Types Common Types
  * Common type definitions used by all join implementations.
  * @{
  */
+#define KEY_8B
 #ifdef KEY_8B /* 64-bit key/value, 16B tuples */
 typedef int64_t intkey_t;
 typedef int64_t value_t;
@@ -44,6 +45,5 @@ typedef struct relation_t {
 } relation_t;
 
 /** @} */
-}  // namespace joins
-
-#endif /* TYPES_H */
+}  // namespace agg
+#endif /* AGG_TYPES_H */

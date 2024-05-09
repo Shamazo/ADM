@@ -1,4 +1,4 @@
-#include "platform/util/radix/aggregations/radix-aggr.hpp"
+#include "lib/util/radix/aggregations/radix-aggr.hpp"
 
 /* #define RADIX_HASH(V)  ((V>>7)^(V>>13)^(V>>21)^V) */
 #define HASH_BIT_MODULO(K, MASK, NBITS) (((K)&MASK) >> NBITS)

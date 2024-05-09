@@ -96,6 +96,8 @@ set(olap_cxx
   lib/util/jit/olap-pipeline.cpp
   lib/util/parallel-context.cpp
   lib/util/project-record.cpp
+  lib/util/radix/aggregations/radix-aggr.cpp
+  lib/util/radix/joins/radix-join.cpp
   lib/util/slack-limiter.cpp
   )
 

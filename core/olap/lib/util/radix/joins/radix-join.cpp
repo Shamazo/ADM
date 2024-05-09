@@ -1,4 +1,4 @@
-#include "platform/util/radix/joins/radix-join.hpp"
+#include "lib/util/radix/joins/radix-join.hpp"
 
 #include <platform/util/timing.hpp>
 

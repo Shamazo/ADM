@@ -1,13 +1,13 @@
 #ifndef RADIX_AGG_STATIC_HPP_
 #define RADIX_AGG_STATIC_HPP_
 
-#include <platform/util/radix/aggregations/prj_params.h>
-#include <platform/util/radix/aggregations/types.h> /* relation_t */
-
 #include <platform/common/common.hpp>
 
+#include "lib/util/radix/aggregations/prj_params.h"
+#include "lib/util/radix/aggregations/types.h" /* relation_t */
+
 #ifdef DEBUG
-//#define DEBUGRADIX
+// #define DEBUGRADIX
 #endif
 
 /**

@@ -9,12 +9,11 @@ import subprocess
 
 parser = argparse.ArgumentParser(description='Check licenses.')
 parser.add_argument('--print-license', action='store_true',
-                   help='print suggested license')
+                    help='print suggested license')
 parser.add_argument('file', type=str, nargs='*',
-                   help='files to check for correct license')
+                    help='files to check for correct license')
 
 args = parser.parse_args()
-
 
 projectline = r"""[^\n]+"""
 year = r"""(\d+)"""
@@ -59,16 +58,16 @@ exts = [".cpp", ".hpp", ".cu", ".cuh", ".c", ".h", ".scala", ".java", ".td"]
 
 # Files that should not contain the header (usually files from external projects)
 external_files = [
-    "core/platform/include/platform/util/radix/aggregations/prj_params.h",
-    "core/platform/include/platform/util/radix/aggregations/radix-aggr.hpp",
-    "core/platform/include/platform/util/radix/aggregations/types.h",
-    "core/platform/include/platform/util/radix/joins/prj_params.h",
-    "core/platform/include/platform/util/radix/joins/radix-join.hpp",
-    "core/platform/include/platform/util/radix/joins/types.h",
-    "core/platform/include/platform/util/radix/prj_params.h",
-    "core/platform/include/platform/util/radix/types.h",
-    "core/platform/lib/util/radix/aggregations/radix-aggr.cpp",
-    "core/platform/lib/util/radix/joins/radix-join.cpp",
+    "core/olap/lib/util/radix/aggregations/prj_params.h",
+    "core/olap/lib/util/radix/aggregations/radix-aggr.hpp",
+    "core/olap/lib/util/radix/aggregations/types.h",
+    "core/olap/lib/util/radix/joins/prj_params.h",
+    "core/olap/lib/util/radix/joins/radix-join.hpp",
+    "core/olap/lib/util/radix/joins/types.h",
+    "core/olap/lib/util/radix/prj_params.h",
+    "core/olap/lib/util/radix/types.h",
+    "core/olap/lib/util/radix/aggregations/radix-aggr.cpp",
+    "core/olap/lib/util/radix/joins/radix-join.cpp",
     "external/jsmn/jsmn.c",
     "external/jsmn/include/jsmn.h",
     "core/planner/src/main/scala/ch/epfl/dias/emitter/PlanToJSON.scala",
@@ -137,6 +136,7 @@ exclude_dirs = [
 root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 found_bad = False
 
+
 def check_files(files, d, ignore_gitignored_files):
     global found_bad
     for f in files:
@@ -153,9 +153,11 @@ def check_files(files, d, ignore_gitignored_files):
                             found_bad = True
                     else:
                         if (not re.match(header, file.read())):
-                            if (not ignore_gitignored_files) or subprocess.Popen(["git", "check-ignore", "-q", relpath]).wait() != 0:
+                            if (not ignore_gitignored_files) or subprocess.Popen(
+                                    ["git", "check-ignore", "-q", relpath]).wait() != 0:
                                 print("Missing license: " + str(relpath))
                                 found_bad = True
+
 
 if args.print_license:
     if len(args.file) > 0:

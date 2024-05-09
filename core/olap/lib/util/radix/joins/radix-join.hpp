@@ -1,13 +1,13 @@
 #ifndef RADIX_JOIN_STATIC_HPP_
 #define RADIX_JOIN_STATIC_HPP_
 
-#include <platform/util/radix/joins/prj_params.h>
-#include <platform/util/radix/joins/types.h> /* relation_t */
-
 #include <platform/common/common.hpp>
 
+#include "lib/util/radix/joins/prj_params.h"
+#include "lib/util/radix/joins/types.h" /* relation_t */
+
 #ifdef DEBUG
-//#define DEBUGRADIX
+// #define DEBUGRADIX
 #endif
 
 /**
