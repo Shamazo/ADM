@@ -273,16 +273,12 @@ void JSONPlugin::reusePM(pmJSON *pm) {
   if (pmStored != 0) {
     FILE *f;
     f = fopen(pmPath, "wb");
-    if (f == nullptr) {
-      fatal("fopen");
-    }
+    PCHECK(f);
     // cout << "Peek before writing: " << tokens[0][0].start << " to " <<
     // tokens[0][0].end << endl;
     tokenBuf = (char *)tokens;
     for (int i = 0; i < lines; i++) {
-      if (fwrite(tokens[i], sizeof(jsmntok_t), MAXTOKENS, f) != MAXTOKENS) {
-        fatal("fwrite");
-      }
+      PCHECK(fwrite(tokens[i], sizeof(jsmntok_t), MAXTOKENS, f) == MAXTOKENS);
     }
     //            if (fwrite(tokenBuf, sizeof(jsmntok_t), linehint * MAXTOKENS,
     //                    f) != linehint * MAXTOKENS) {
@@ -348,8 +344,7 @@ void JSONPlugin::loadPMfromDisk(const char *pmPath, struct stat &pmStatBuffer) {
   // cout << pmsize << " vs " << lines * MAXTOKENS * sizeof(jsmntok_t) << endl;
   int fdPM = open(pmPath, O_RDONLY);
   if (fdPM == -1) {
-    LOG(ERROR) << "Could not open " << pmPath;
-    fatal("jsonpm.open");
+    LOG(FATAL) << "Could not open " << pmPath;
   }
   tokenBuf = (char *)malloc(lines * sizeof(jsmntok_t *));
   this->tokens = (jsmntok_t **)tokenBuf;

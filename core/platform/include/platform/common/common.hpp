@@ -47,9 +47,9 @@
 #include <sstream>
 #include <stdexcept>
 
-//#define DEBUG
+// #define DEBUG
 // #define LOCAL_EXEC
-//#undef DEBUG
+// #undef DEBUG
 #undef LOCAL_EXEC
 
 #define likely(x) __builtin_expect((x), 1)
@@ -72,10 +72,6 @@ using std::stringstream;
 using std::vector;
 
 double diff(struct timespec st, struct timespec end);
-
-[[noreturn, deprecated]] void fatal(const char *err);
-
-[[noreturn, deprecated]] void exception(const char *err);
 
 /*
  * Util Methods

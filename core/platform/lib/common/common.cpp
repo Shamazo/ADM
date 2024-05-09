@@ -45,16 +45,6 @@ double diff(struct timespec st, struct timespec end) {
   return tmp.tv_sec + tmp.tv_nsec * 1e-9;
 }
 
-void fatal(const char *err) {
-  perror(err);
-  exit(1);
-}
-
-void exception(const char *err) {
-  printf("Exception: %s\n", err);
-  exit(1);
-}
-
 std::ostream &operator<<(std::ostream &out, const bytes &b) {
   const char *units[]{"B", "KB", "MB", "GB", "TB", "ZB"};
   constexpr size_t max_i = sizeof(units) / sizeof(units[0]);
