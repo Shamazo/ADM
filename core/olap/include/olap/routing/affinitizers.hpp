@@ -30,11 +30,12 @@
 #include <platform/topology/device-types.hpp>
 #include <platform/topology/gpu-index.hpp>
 #include <platform/topology/topology.hpp>
+#include <utility>
 
 class Affinitizer {
  public:
   virtual ~Affinitizer() = default;
-  virtual size_t getAvailableCUIndex(size_t i) const = 0;
+  [[nodiscard]] virtual size_t getAvailableCUIndex(size_t i) const = 0;
 
   /**
    * This is in essence provides a mapping from i to a compute unit (CU).
@@ -42,19 +43,19 @@ class Affinitizer {
    * equal to or greater than size() will wrap around.
    * @return a reference to a topology::cu for input i
    */
-  virtual const topology::cu &getAvailableCU(size_t i) const = 0;
+  [[nodiscard]] virtual const topology::cu &getAvailableCU(size_t i) const = 0;
 
   /**
    * Number of locality (NUMA) nodes
    */
-  virtual size_t size() const = 0;
+  [[nodiscard]] virtual size_t size() const = 0;
 
   /**
    * @param ptr a pointer to memory
    * @return the index_in_topo of the NUMA node containing the data that ptr
    * points to
    */
-  virtual size_t getLocalCUIndex(void *ptr) const = 0;
+  [[nodiscard]] virtual size_t getLocalCUIndex(void *ptr) const = 0;
 };
 
 std::unique_ptr<Affinitizer> getDefaultAffinitizer(DeviceType);
@@ -98,19 +99,20 @@ class AffinityPolicy {
 
 class CpuNumaNodeAffinitizer : public Affinitizer {
  protected:
-  const topology::cu &getAvailableCU(size_t cpu_req) const override {
+  [[nodiscard]] const topology::cu &getAvailableCU(
+      size_t cpu_req) const override {
     return topology::getInstance()
         .getCpuNumaNodes()[cpu_req %
                            topology::getInstance().getCpuNumaNodeCount()];
   }
 
  public:
-  size_t getAvailableCUIndex(size_t i) const override {
+  [[nodiscard]] size_t getAvailableCUIndex(size_t i) const override {
     return dynamic_cast<const topology::cpunumanode &>(getAvailableCU(i))
         .index_in_topo;
   }
 
-  size_t size() const override {
+  [[nodiscard]] size_t size() const override {
     return topology::getInstance().getCpuNumaNodeCount();
   }
 
@@ -126,22 +128,138 @@ class CpuNumaNodeAffinitizer : public Affinitizer {
   }
 };
 
+class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
+ public:
+  /**
+   * Construct an affinitizer for the specified NUMA nodes.
+   * @param node_ids These are the NUMA IDs as reported by libnuma/numactl. (Not
+   * the indexes of cpunumanode in topology)
+   */
+  explicit SpecificCpuNumaNodeAffinitizer(std::vector<uint32_t> node_ids)
+      : m_node_ids(std::move(node_ids)) {
+    CHECK(!m_node_ids.empty()) << "Need at least one CPU NUMA node id to "
+                                  "construct a SpecificCpuNumaNodeAffinitizer";
+  }
+
+ protected:
+  [[nodiscard]] const topology::cu &getAvailableCU(
+      size_t cpu_req) const override {
+    return topology::getInstance().getCpuNumaNodeById(
+        m_node_ids[cpu_req % m_node_ids.size()]);
+  }
+  const std::vector<uint32_t> m_node_ids;
+
+ public:
+  [[nodiscard]] size_t getAvailableCUIndex(size_t i) const override {
+    return dynamic_cast<const topology::cpunumanode &>(getAvailableCU(i))
+        .index_in_topo;
+  }
+
+  [[nodiscard]] size_t size() const override {
+    return topology::getInstance().getCpuNumaNodeCount();
+  }
+
+  size_t getLocalCUIndex(void *p) const override {
+    auto &topo = topology::getInstance();
+    const auto *g = topo.getGpuAddressed(p);
+    auto *c = topo.getCpuNumaNodeAddressed(p);
+    if (c) {
+      if (std::find(m_node_ids.begin(), m_node_ids.end(), c->id) !=
+          m_node_ids.end()) {
+        return c->index_in_topo;
+      } else {
+        // find the closest node in m_node_ids
+        std::vector<size_t> idx(c->distance.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        stable_sort(idx.begin(), idx.end(),
+                    [&v = std::as_const(c->distance)](size_t i1, size_t i2) {
+                      return v[i1] < v[i2];
+                    });
+        for (const auto &i : idx) {
+          const auto &cpu_node = topo.getCpuNumaNodes()[i];
+          if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
+              m_node_ids.end()) {
+            return cpu_node.index_in_topo;
+          }
+        }
+        LOG(FATAL)
+            << "SpecificCpuNumaNodeAffinitizer unreachable code! (in theory)";
+      }
+    }
+    if (g) {
+      if (std::find(m_node_ids.begin(), m_node_ids.end(),
+                    g->getLocalCPUNumaNode().id) != m_node_ids.end()) {
+        return g->getLocalCPUNumaNode().index_in_topo;
+      } else {
+        // find the closest cpunode in m_node_ids with a local GPU
+        // Kinda wonky and assumes that CPU nodes "have" GPU nodes as we use
+        // CPU NUMA distance as a proxy for GPU distance
+        std::vector<size_t> idx(g->getLocalCPUNumaNode().distance.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        stable_sort(idx.begin(), idx.end(),
+                    [&v = std::as_const(g->getLocalCPUNumaNode().distance)](
+                        size_t i1, size_t i2) { return v[i1] < v[i2]; });
+        for (const auto &i : idx) {
+          const auto &cpu_node = topo.getCpuNumaNodes()[i];
+          const auto &local_gpus = cpu_node.local_gpus;
+          if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
+                  m_node_ids.end() &&
+              !local_gpus.empty()) {
+            return local_gpus[rand() % local_gpus.size()];
+          }
+        }
+        LOG(FATAL) << "SpecificCpuNumaNodeAffinitizer Could not find a CPU "
+                      "node with a GPU in the specified node_ids";
+      }
+    }
+
+    DCHECK(NvmePlugin::PageId_t::isPageIdPtr(p));
+    auto page_id = NvmePlugin::PageId_t::from_ptr(p);
+    const auto &node_local_to_nvme =
+        topo.getCpuNumaNodes()[page_id.getCpuNumaAffinity()];
+
+    if (std::find(m_node_ids.begin(), m_node_ids.end(),
+                  node_local_to_nvme.id) != m_node_ids.end()) {
+      return node_local_to_nvme.index_in_topo;
+    } else {
+      // find the closest node in m_node_ids
+      std::vector<size_t> idx(node_local_to_nvme.distance.size());
+      std::iota(idx.begin(), idx.end(), 0);
+      stable_sort(idx.begin(), idx.end(),
+                  [&v = std::as_const(node_local_to_nvme.distance)](
+                      size_t i1, size_t i2) { return v[i1] < v[i2]; });
+      for (const auto &i : idx) {
+        const auto &cpu_node = topo.getCpuNumaNodes()[i];
+        if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
+            m_node_ids.end()) {
+          return cpu_node.index_in_topo;
+        }
+      }
+      LOG(FATAL)
+          << "SpecificCpuNumaNodeAffinitizer unreachable code! (in theory)";
+    }
+  }
+};
+
 class GPUAffinitizer : public Affinitizer {
  protected:
-  const topology::gpunode &getAvailableCU(size_t gpu_req) const override {
+  [[nodiscard]] const topology::gpunode &getAvailableCU(
+      size_t gpu_req) const override {
     static const gpu_index index;
     size_t gpu_i = gpu_req % topology::getInstance().getGpuCount();
     return topology::getInstance().getGpus()[index.d[gpu_i]];
   }
 
  public:
-  size_t getAvailableCUIndex(size_t i) const override {
+  [[nodiscard]] size_t getAvailableCUIndex(size_t i) const override {
     return getAvailableCU(i).index_in_topo;
   }
 
-  size_t size() const override { return topology::getInstance().getGpuCount(); }
+  [[nodiscard]] size_t size() const override {
+    return topology::getInstance().getGpuCount();
+  }
 
-  size_t getLocalCUIndex(void *p) const override {
+  [[nodiscard]] size_t getLocalCUIndex(void *p) const override {
     auto &topo = topology::getInstance();
     const auto *g = topo.getGpuAddressed(p);
     if (g) return g->index_in_topo;
@@ -176,7 +294,8 @@ class GPUAffinitizer : public Affinitizer {
 
 class CpuCoreAffinitizer : public CpuNumaNodeAffinitizer {
  protected:
-  virtual const topology::core &getAvailableCore(size_t cpu_req) const {
+  [[nodiscard]] virtual const topology::core &getAvailableCore(
+      size_t cpu_req) const {
     size_t core_index = cpu_req % topology::getInstance().getCoreCount();
     // NOTE: Assuming all CPUs have the same number of cores!
     size_t cpunumacnt = topology::getInstance().getCpuNumaNodeCount();
@@ -187,11 +306,11 @@ class CpuCoreAffinitizer : public CpuNumaNodeAffinitizer {
   }
 
  protected:
-  const topology::cu &getAvailableCU(size_t cpu_req) const final {
+  [[nodiscard]] const topology::cu &getAvailableCU(size_t cpu_req) const final {
     return getAvailableCore(cpu_req);
   }
 
-  size_t getAvailableCUIndex(size_t i) const override {
+  [[nodiscard]] size_t getAvailableCUIndex(size_t i) const override {
     return getAvailableCore(i).getLocalCPUNumaNode().index_in_topo;
   }
 };
@@ -204,11 +323,12 @@ class SpecificCpuCoreAffinitizer : public CpuCoreAffinitizer {
   std::vector<coreid_t> core_ids;
 
  public:
-  SpecificCpuCoreAffinitizer(const std::vector<coreid_t> &core_ids)
+  explicit SpecificCpuCoreAffinitizer(const std::vector<coreid_t> &core_ids)
       : core_ids(core_ids) {}
 
  protected:
-  const topology::core &getAvailableCore(size_t cpu_req) const override {
+  [[nodiscard]] const topology::core &getAvailableCore(
+      size_t cpu_req) const override {
     assert(cpu_req < core_ids.size());
     return topology::getInstance().getCoreById(core_ids[cpu_req]);
   }
