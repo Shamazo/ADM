@@ -58,14 +58,15 @@ class ThreadSiblingParser {
   }
 
  private:
-  static inline string getThreadFileName(uint32_t core_id) {
+  static inline std::string getThreadFileName(uint32_t core_id) {
     return "/sys/devices/system/cpu/cpu" + std::to_string(core_id) +
            "/topology/thread_siblings_list";
   }
 
-  static inline std::vector<string> split(const string& str, char delimiter) {
-    std::vector<string> tokens;
-    string token;
+  static inline std::vector<std::string> split(const std::string& str,
+                                               char delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
     std::istringstream tokenStream(str);
 
     while (getline(tokenStream, token, delimiter)) tokens.push_back(token);
@@ -73,16 +74,33 @@ class ThreadSiblingParser {
     return tokens;
   }
 
-  static inline string getString(const string& filename) {
+  static inline std::string getString(const std::string& filename) {
     std::ifstream file(filename);
-    string str;
+    std::string str;
 
-    // Read the first string,
+    // Read the first std::string,
     // stops at any space character
     if (file && (file >> str))
       return str;
     else
       return {};
+  }
+};
+
+class CorePackageParser {
+ public:
+  static uint32_t getCorePackageId(uint32_t core_id) {
+    std::ifstream s(getCorePackagePath(core_id));
+    PCHECK(s.is_open()) << "Failed to open: " << getCorePackagePath(core_id);
+    uint32_t package_id;
+    s >> package_id;
+    return package_id;
+  }
+
+ private:
+  static inline std::string getCorePackagePath(uint32_t core_id) {
+    return "/sys/devices/system/cpu/cpu" + std::to_string(core_id) +
+           "/topology/physical_package_id";
   }
 };
 

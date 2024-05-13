@@ -763,9 +763,9 @@ std::ostream &operator<<(std::ostream &out, const topology &topo) {
   }
 
   for (const auto &node : topo.getCpuNumaNodes()) {
-    out << "node: " << std::setw(6) << node.id << " | ";
+    out << "node: " << std::setw(5) << node.id << " | ";
 
-    out << std::setw(4 + 4 + 3) << ' ' << " | ";
+    out << std::setw(4 + 4 + 3) << "package: " << node.package_id << " | ";
 
     out << "cores: ";
 
@@ -786,9 +786,9 @@ std::ostream &operator<<(std::ostream &out, const topology &topo) {
   for (const auto &gpu : topo.getGpus()) {
     unsigned int nvml_ind = 0;
     gpu_run(nvmlDeviceGetIndex(gpu.handle, &nvml_ind));
-    out << "gpu : " << std::setw(2) << gpu.id;
+    out << "gpu: " << std::setw(2) << gpu.id;
     out << std::setw(4) << ("(" + std::to_string(nvml_ind) + ")") << " | ";
-    out << "node : " << std::setw(4) << gpu.local_cpu_id << " | ";
+    out << "node: " << std::setw(6) << gpu.local_cpu_id << " | ";
     out << "cores: ";
 
     for (uint32_t i = 0; i < topo.core_cnt; ++i) core_mask[i] = ' ';
@@ -828,9 +828,26 @@ std::ostream &operator<<(std::ostream &out, const topology &topo) {
     out << '\n';
   }
 
-  // size_t sockets = topo.cpu_info.size();
-
   out << '\n';
+
+  for (const auto &nvme : topo.getNvmes()) {
+    out << "nvme: " << std::setw(5) << nvme.index_in_topo << " | ";
+    out << "node: " << std::setw(6) << nvme.local_cpu_id << " | ";
+
+    const auto &numanode = nvme.getLocalCPUNumaNode();
+    out << "cores: ";
+
+    // clear mask
+    for (uint32_t i = 0; i < topo.core_cnt; ++i) core_mask[i] = ' ';
+    // set mask
+    for (auto cpu_id : numanode.local_cores) {
+      core_mask[cpu_id] = 'x';
+    }
+    out << core_mask;
+
+    out << " |  " << nvme;
+    out << "\n";
+  }
 
   for (const auto &node : topo.getCpuNumaNodes()) {
     out << "node: ";
@@ -847,24 +864,6 @@ std::ostream &operator<<(std::ostream &out, const topology &topo) {
     out << '\n';
   }
 
-  for (const auto &nvme : topo.getNvmes()) {
-    out << "nvme: " << nvme.index_in_topo << " | ";
-    out << "node: " << nvme.local_cpu_id << " | ";
-
-    const auto &numanode = nvme.getLocalCPUNumaNode();
-    out << "cores: ";
-
-    // clear mask
-    for (uint32_t i = 0; i < topo.core_cnt; ++i) core_mask[i] = ' ';
-    // set mask
-    for (auto cpu_id : numanode.local_cores) {
-      core_mask[cpu_id] = 'x';
-    }
-    out << core_mask;
-
-    out << " |  " << nvme;
-    out << "\n";
-  }
   return out;
 }
 
@@ -942,6 +941,7 @@ topology::cpunumanode::cpunumanode(uint32_t id,
     : id(id),
       // distance(b.distance),
       index_in_topo(index_in_topo),
+      package_id(CorePackageParser::getCorePackageId(local_cores[0])),
       local_cores(local_cores) {
   CPU_ZERO(&local_cpu_set);
   for (const auto &c : local_cores) CPU_SET(c, &local_cpu_set);

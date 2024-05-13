@@ -161,6 +161,7 @@ class topology {
    public:
     const uint32_t id;
     const uint32_t index_in_topo;
+    const uint32_t package_id;
 
     std::vector<uint32_t> distance;
 
@@ -453,6 +454,17 @@ class topology {
  public:
   inline const cpunumanode &getCpuNumaNodeById(uint32_t id) const {
     return cpu_info[cpunuma_index[id]];
+  }
+
+  inline const std::vector<std::reference_wrapper<const cpunumanode>>
+  getCpuNumaNodesByPackageId(uint32_t package_id) const {
+    std::vector<std::reference_wrapper<const cpunumanode>> ret;
+    for (const auto &node : cpu_info) {
+      if (node.package_id == package_id) {
+        ret.emplace_back(node);
+      }
+    }
+    return ret;
   }
 
   friend class exec_location;
