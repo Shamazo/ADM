@@ -316,18 +316,6 @@ __global__ void get_buffer_host(void **buff, int buffs) {
 }
 #endif
 
-static int num_of_gpus;
-static int num_of_cpus;
-
-inline int get_gpu_count() { return num_of_gpus; }
-
-inline int get_cpu_numa_node_count() { return num_of_cpus; }
-
-static int cpu_cnt;
-// cpu_set_t                                          *gpu_affinity;
-static cpu_set_t *cpu_numa_affinity;
-static int *gpu_numa_node;
-
 #if defined(__clang__) && defined(__CUDA__)
 template <typename T>
 __device__ T *buffer_manager<T>::get_buffer() {

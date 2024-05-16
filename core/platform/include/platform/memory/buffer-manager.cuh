@@ -38,10 +38,6 @@
 template <typename T, T invalid_value>
 class threadsafe_device_stack;
 
-[[deprecated("Use topology")]] inline int get_gpu_count();
-
-[[deprecated("Use topology")]] inline int get_cpu_numa_node_count();
-
 template <typename T>
 class buffer_manager;
 
