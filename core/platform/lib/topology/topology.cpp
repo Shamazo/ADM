@@ -872,7 +872,8 @@ std::ostream &operator<<(std::ostream &out, const topology::nvmeStorage &nvme) {
   out << "model name: " << nvme.model_name
       << ", link_speed: " << nvme.link_speed
       << ", PCIe lanes: " << nvme.link_width
-      << ", device path: " << nvme.devPath;
+      << ", device path: " << nvme.devPath << ", mount path: "
+      << nvme.getMountPath().value_or("not mounted").string();
   return out;
 }
 
