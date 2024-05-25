@@ -1,0 +1,1 @@
+Tool to generate 100GiB of random integers. Size and domain is hardcoded, but easy to change. Random seed if fixed.
