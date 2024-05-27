@@ -91,6 +91,7 @@ std::vector<std::filesystem::path> CPUOnlyNVMeMorsel::getMdForAttribute(
     }
   }
   std::sort(md_paths.begin(), md_paths.end());
+  CHECK(!md_paths.empty()) << "No metadata files found for attribute " << attr;
   return md_paths;
 }
 

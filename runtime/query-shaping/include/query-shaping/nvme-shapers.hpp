@@ -57,17 +57,27 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   }
 
  public:
-  CPUOnlyNVMeMorsel(std::vector<std::string> input_dirs,
-                    const std::string &catalog_path,
-                    decltype(input_sizes) input_sizes, bool allowMoves,
-                    size_t scan_memmove_slack, size_t scan_router_slack,
-                    size_t slack)
+  CPUOnlyNVMeMorsel(
+      std::vector<std::string> input_dirs, const std::string &catalog_path,
+      decltype(input_sizes) input_sizes, bool allowMoves,
+      size_t scan_memmove_slack, size_t scan_router_slack, size_t slack,
+      std::optional<std::vector<uint32_t>> numa_nodes = std::nullopt)
       : InputPrefixQueryShaper("N/A", input_sizes, allowMoves, slack),
         input_dirs(sort_vector(
             input_dirs)),  // sort so we always iterate in the same order
         catalog_path(catalog_path),
         scan_memmove_slack(scan_memmove_slack),
-        scan_router_slack(scan_router_slack) {}
+        scan_router_slack(scan_router_slack),
+        numa_nodes(numa_nodes) {}
+
+  virtual std::unique_ptr<Affinitizer> getAffinitizer() override {
+    if (numa_nodes.has_value()) {
+      return std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+          numa_nodes.value());
+    } else {
+      return std::make_unique<CpuNumaNodeAffinitizer>();
+    }
+  }
 
  protected:
   std::vector<std::filesystem::path> getMdForAttribute(
@@ -106,13 +116,22 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   }
 
  protected:
-  size_t scan_memmove_slack;  // 16
-  size_t scan_router_slack;   // 2
+  size_t scan_memmove_slack;
+  size_t scan_router_slack;
+  std::optional<std::vector<uint32_t>> numa_nodes;
 };
 
 class GPUOnlyNVMe : public proteus::CPUOnlyNVMeMorsel {
   using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
+
+  virtual std::unique_ptr<Affinitizer> getAffinitizer() override {
+    if (numa_nodes.has_value()) {
+      LOG(FATAL) << "Should not pass numa_nodes to GPUOnlyNVMe";
+    } else {
+      return std::make_unique<GPUAffinitizer>();
+    }
+  }
 
   /**
    * For GPUS, we do scan -> router (fanout) -> memmove -> router (fanin to GPU
@@ -143,8 +162,35 @@ class GPUOnlyNVMe : public proteus::CPUOnlyNVMeMorsel {
 };
 
 class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
-  using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
+ public:
+  GPUOnlyNVMeProbeFilterPushdown(std::vector<std::string> input_dirs,
+                                 const std::string &catalog_path,
+                                 decltype(input_sizes) input_sizes,
+                                 bool allowMoves, size_t scan_memmove_slack,
+                                 size_t scan_router_slack, size_t slack,
+                                 DegreeOfParallelism pushdown_dop,
+                                 std::vector<uint32_t> pushdown_numa_nodes)
+      : CPUOnlyNVMeMorsel(input_dirs, catalog_path, input_sizes, allowMoves,
+                          scan_memmove_slack, scan_router_slack, slack),
+        pushdown_dop(pushdown_dop),
+        pushdown_numa_nodes(pushdown_numa_nodes) {}
+
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
+
+  virtual std::unique_ptr<Affinitizer> getPushdownAffinitizer() {
+    return std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+        pushdown_numa_nodes);
+  }
+
+  DegreeOfParallelism getDOP() override {
+    size_t num_compute_cores = 0;
+    for (const auto compute_node_id : pushdown_numa_nodes) {
+      num_compute_cores += topology::getInstance()
+                               .getCpuNumaNodeById(compute_node_id)
+                               .local_cores.size();
+    }
+    return DegreeOfParallelism{num_compute_cores};
+  }
 
   /**
    * For probe filter pushdown.
@@ -152,15 +198,80 @@ class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
    * Expected that the caller packs and moves the data to the GPU
    */
   RelBuilder distribute_probe(RelBuilder input) override {
-    auto rel = input.router(
-        DegreeOfParallelism(topology::getInstance().getCoreCount()),
-        scan_router_slack, RoutingPolicy::LOCAL, DeviceType::CPU,
-        std::make_unique<CpuNumaNodeAffinitizer>());
+    auto rel = input.router(DegreeOfParallelism(pushdown_dop),
+                            scan_router_slack, RoutingPolicy::LOCAL,
+                            DeviceType::CPU, getPushdownAffinitizer());
 
     rel = rel.memmove(scan_memmove_slack, DeviceType::CPU);
 
     return rel;
   }
+
+ protected:
+  const DegreeOfParallelism pushdown_dop;
+  const std::vector<uint32_t> pushdown_numa_nodes;
+};
+
+class CPUOnlyNvmeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
+ public:
+  CPUOnlyNvmeProbeFilterPushdown(std::vector<std::string> input_dirs,
+                                 const std::string &catalog_path,
+                                 decltype(input_sizes) input_sizes,
+                                 bool allowMoves, size_t scan_memmove_slack,
+                                 size_t scan_router_slack, size_t slack,
+                                 DegreeOfParallelism pushdown_dop,
+                                 std::vector<uint32_t> pushdown_numa_nodes,
+                                 std::vector<uint32_t> compute_numa_nodes)
+      : CPUOnlyNVMeMorsel(input_dirs, catalog_path, input_sizes, allowMoves,
+                          scan_memmove_slack, scan_router_slack, slack),
+        pushdown_dop(pushdown_dop),
+        pushdown_numa_nodes(pushdown_numa_nodes),
+        compute_numa_nodes(compute_numa_nodes) {
+    CHECK(!pushdown_numa_nodes.empty());
+    CHECK(!compute_numa_nodes.empty());
+  }
+
+  [[nodiscard]] DeviceType getDevice() override { return DeviceType::CPU; }
+
+  virtual std::unique_ptr<Affinitizer> getPushdownAffinitizer() {
+    return std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+        pushdown_numa_nodes);
+  }
+
+  DegreeOfParallelism getDOP() override {
+    size_t num_compute_cores = 0;
+    for (const auto compute_node_id : compute_numa_nodes) {
+      num_compute_cores += topology::getInstance()
+                               .getCpuNumaNodeById(compute_node_id)
+                               .local_cores.size();
+    }
+    return DegreeOfParallelism{num_compute_cores};
+  }
+
+  virtual std::unique_ptr<Affinitizer> getAffinitizer() override {
+    return std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes);
+  }
+
+  /**
+   * For probe filter pushdown.
+   * Scan and filter happens on one socket
+   * Expected that the caller packs and moves the data to the other socket fpr
+   * the rest of the query using getAffinitizer()
+   */
+  RelBuilder distribute_probe(RelBuilder input) override {
+    auto rel = input.router(DegreeOfParallelism(pushdown_dop),
+                            scan_router_slack, RoutingPolicy::LOCAL,
+                            DeviceType::CPU, getPushdownAffinitizer());
+
+    rel = rel.memmove(scan_memmove_slack, DeviceType::CPU);
+
+    return rel;
+  }
+
+ protected:
+  const DegreeOfParallelism pushdown_dop;
+  const std::vector<uint32_t> pushdown_numa_nodes;
+  const std::vector<uint32_t> compute_numa_nodes;
 };
 
 };  // namespace proteus
