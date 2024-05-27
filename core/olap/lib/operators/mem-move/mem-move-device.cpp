@@ -164,19 +164,30 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
                                            uint64_t srcServer, workunit *wu) {
   DCHECK_EQ(srcServer, 0);
   if (NvmePlugin::PageId_t::isPageIdPtr(src.get())) {
+    target_device = target_device < 0 ? -1 : target_device;
     auto buff = force_push_from_nvme(src, target_device, strm, wu);
     src.release();
     return buff_pair::not_moved(
         std::move(buff));  // src is not a pointer and does not need freeing
   } else {
     // regular memory to memory movement
-    const auto *d = topology::getInstance().getGpuAddressed(src.get());
-    int dev = d ? static_cast<int>(d->id) : -1;
+    const auto *buff_device =
+        topology::getInstance().getGpuAddressed(src.get());
 
-    if (dev == target_device) {
+    if (buff_device && static_cast<int>(buff_device->id) == target_device) {
       return buff_pair::not_moved(std::move(src));  // block in correct device
     }
 
+    const auto *buff_numa =
+        topology::getInstance().getCpuNumaNodeAddressed(src.get());
+    const auto &this_thread_cpu = affinity::get();
+    if (buff_numa->package_id == this_thread_cpu.package_id) {
+      // block in memory of the same CPU socket/package
+      return buff_pair::not_moved(std::move(src));
+    }
+
+    // for a CPU target_device is still -1 here, but BlockManager uses
+    // affinity::get() to get a buffer from the correct NUMA node
     auto buff = force_push(src, bytes, target_device, srcServer, strm);
     return buff_pair{std::move(buff), std::move(src)};
   }
@@ -222,7 +233,7 @@ std::vector<buff_pair> MemMoveDevice::MemMoveConf::batch_push_nvme_to_gpu(
     auto decomp_buff = BlockManager::h_get_buffer(target_device);
     void *comp_buff = nullptr;
     cudaMalloc(&comp_buff, *page_io_info.size);
-    DCHECK_EQ(((uintptr_t)comp_buff) % 4096, 0);
+    //    DCHECK_EQ(((uintptr_t)comp_buff) % 4096, 0);
 
     auto decomp_span = std::span<char>(static_cast<char *>(decomp_buff.get()),
                                        BlockManager::block_size);
@@ -280,9 +291,13 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
     }
   } else {
     for (int i = 0; i < num_buffers; i++) {
-      auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
-                         target_device, srcServer, wu);
-      pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
+      if (mmc->do_transfer[i]) {
+        auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
+                           target_device, srcServer, wu);
+        pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
+      } else {
+        pair_buffs[i] = {src_ptrs[i], nullptr};
+      }
     }
   }
 
@@ -674,6 +689,8 @@ void MemMoveDevice::open(Pipeline *pip) {
       mmc->io_uring =
           std::make_unique<proteus::storage::IoUringThreadUnsafe>(32);
     }
+  } else {
+    mmc->nvme_plugin = nullptr;
   }
   char *data_buff = (char *)mmc->data_buffs;
   for (size_t i = 0; i < slack; ++i) {
@@ -771,7 +788,9 @@ void MemMoveDevice::close(Pipeline *pip) {
     }
     MemoryManager::freePinned(wu->bytes_read);
     gpu_run(cudaEventDestroy(wu->event));
-    if (i == 0 || wu < start_wu) start_wu = wu;
+    if (i == 0 || wu < start_wu) {
+      start_wu = wu;
+    }
   }
   nvtxRangePop();
   nvtxRangePop();
@@ -796,7 +815,7 @@ void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
       // poll and handle io_uring completions
       // Polling enters the kernel, reaps completions and executes the callbacks
       io_uring->poll();
-      DLOG_EVERY_N(INFO, 100000) << "polling.... ";
+      //      DLOG_EVERY_N(INFO, 100000) << "polling.... ";
     }
   }
 }

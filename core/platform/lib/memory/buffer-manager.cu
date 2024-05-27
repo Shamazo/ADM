@@ -892,7 +892,10 @@ __host__ void buffer_manager<T>::overwrite_bytes(void *buff, const void *data,
                                                  cudaStream_t strm,
                                                  bool blocking) {
 #ifndef NCUDA
-  if (topology::getInstance().getGpuCount() > 0) {
+  // Check if either pointer points to GPU memory
+  const auto &topo = topology::getInstance();
+  if (topology::getInstance().getGpuCount() > 0 &&
+      (topo.getGpuAddressed(buff) || topo.getGpuAddressed(data))) {
     gpu_run(cudaMemcpyAsync(buff, data, bytes, cudaMemcpyDefault, strm));
     if (blocking) gpu_run(cudaStreamSynchronize(strm));
     return;

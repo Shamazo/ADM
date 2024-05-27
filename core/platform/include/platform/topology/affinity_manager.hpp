@@ -30,6 +30,8 @@
 template <typename T>
 class buffer_manager;
 
+class MemMoveDevice;
+
 /**
  * Really! do not touch this class!
  */
@@ -63,6 +65,7 @@ class affinity {
   friend class MemoryManager;
   friend class NUMAMemAllocator;
   friend class NUMAPinnedMemAllocator;
+  friend class MemMoveDevice;
   friend class buffer_manager<int32_t>;
   friend void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId);
   friend void *getBloomFilter(Pipeline *pip, uint64_t bloomId);
