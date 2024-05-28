@@ -4,6 +4,26 @@
 cd /tmp/tmp.YD2SgUVlV5/cmake-build-release/opt/pelago
 set -e
 
+## 100GiB random ints
+## 2 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme4/nicholso/data/random_ints_0_2,/nvme13/nicholso/data/random_ints_1_2
+
+# 4 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme2/nicholso/data/random_ints_0_4,/nvme12/nicholso/data/random_ints_1_4,/nvme7/nicholso/data/random_ints_2_4,/nvme10/nicholso/data/random_ints_3_4
+
+## 6 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme0/nicholso/data/random_ints_0_6,/nvme13/nicholso/data/random_ints_1_6,/nvme6/nicholso/data/random_ints_2_6,/nvme9/nicholso/data/random_ints_3_6,/nvme3/nicholso/data/random_ints_4_6,/nvme7/nicholso/data/random_ints_5_6
+
+# 8 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme2/nicholso/data/random_ints_0_8,/nvme13/nicholso/data/random_ints_1_8,/nvme14/nicholso/data/random_ints_2_8,/nvme6/nicholso/data/random_ints_3_8,/nvme3/nicholso/data/random_ints_4_8,/nvme10/nicholso/data/random_ints_5_8,/nvme9/nicholso/data/random_ints_6_8,/nvme4/nicholso/data/random_ints_7_8
+
+# 10 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme2/nicholso/data/random_ints_0_10,/nvme7/nicholso/data/random_ints_1_10,/nvme13/nicholso/data/random_ints_2_10,/nvme12/nicholso/data/random_ints_3_10,/nvme6/nicholso/data/random_ints_4_10,/nvme3/nicholso/data/random_ints_5_10,/nvme4/nicholso/data/random_ints_6_10,/nvme11/nicholso/data/random_ints_7_10,/nvme9/nicholso/data/random_ints_8_10,/nvme5/nicholso/data/random_ints_9_10
+
+# 12 drive
+./proteusadm-partition-ssb --input_directory=/nvme11/nicholso/data/random_ints --output_directories=/nvme1/nicholso/data/random_ints_0_12,/nvme7/nicholso/data/random_ints_1_12,/nvme13/nicholso/data/random_ints_2_12,/nvme14/nicholso/data/random_ints_3_12,/nvme6/nicholso/data/random_ints_4_12,/nvme9/nicholso/data/random_ints_5_12,/nvme3/nicholso/data/random_ints_6_12,/nvme11/nicholso/data/random_ints_7_12,/nvme5/nicholso/data/random_ints_8_12,/nvme10/nicholso/data/random_ints_9_12,/nvme2/nicholso/data/random_ints_10_12,/nvme15/nicholso/data/random_ints_11_12
+
+
 ## SSBM 1000
 #### compressed
 # 1 drive compressed
