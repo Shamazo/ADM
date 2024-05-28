@@ -39,8 +39,6 @@ void *getNvmePageIdPtr(NvmePlugin *pg, uint8_t attribute_no,
                        uint8_t partition_no, uint32_t block_no) noexcept {
   DCHECK_LT(attribute_no, pg->m_attribute_metadata.size());
   DCHECK_LT(partition_no, pg->m_attribute_metadata[attribute_no].size());
-  DCHECK_LT(partition_no,
-            pg->m_attribute_metadata[attribute_no][partition_no].num_blocks);
   const uint8_t cpu_numa_affinity =
       pg->m_attribute_metadata[attribute_no][partition_no].numa_node;
   uint64_t page_id =
@@ -98,7 +96,7 @@ NvmePlugin::NvmePlugin(
   m_attribute_metadata.reserve(whichFields.size());
   for (auto &field : whichFields) {
     size_t blocks_for_field = 0;
-    m_attribute_metadata.push_back({});
+    m_attribute_metadata.emplace_back();
     m_attribute_metadata.back().reserve(Nparts);
     for (auto &attr_part_meta : field.second) {
       m_attribute_metadata.back().emplace_back(attr_part_meta);
@@ -110,6 +108,7 @@ NvmePlugin::NvmePlugin(
     }
     LOG(INFO) << field.first->getAttrName() << " has " << blocks_for_field
               << " total blocks";
+    CHECK_GT(blocks_for_field, 0);
     //  TODO store dict path in metadata
     //  this is ugly
     const auto data_path =
@@ -352,9 +351,6 @@ void NvmePlugin::scan(const ::Operator &producer,
   Builder->CreateStore(zero_idx, mem_blockCtr);
   NamedValuesBinaryCol[blockCtrVar] = mem_blockCtr;
 
-  auto blockSize =
-      ConstantInt::get(size_type, BlockManager::block_size / max_field_size);
-
   BasicBlock *CondBB = BasicBlock::Create(llvmContext, "scanCond", F);
 
   // Make the new basic block for the loop header (BODY), inserting after
@@ -428,6 +424,7 @@ void NvmePlugin::scan(const ::Operator &producer,
   variableBindings[tupleIdentifier] = mem_posWrapper;
 
   // Actual Work (Loop through attributes etc.)
+  DCHECK_LE(wantedFields.size(), std::numeric_limits<uint8_t>::max());
   for (size_t i = 0; i < wantedFields.size(); ++i) {
     RecordAttribute attr(*(wantedFields[i]));
     RecordAttribute block_attr(attr, true);
@@ -442,9 +439,10 @@ void NvmePlugin::scan(const ::Operator &producer,
         context->createInt64((uintptr_t)this),
         Type::getInt8PtrTy(context->getLLVMContext()));
 
+    // static cast just to silence a warning, the bit representation is the same
     Value *page_id = context->gen_call(
-        getNvmePageIdPtr,
-        {this_ptr, context->createInt8(i), part_idx, block_idx_32bit});
+        getNvmePageIdPtr, {this_ptr, context->createInt8(static_cast<char>(i)),
+                           part_idx, block_idx_32bit});
 
     string bufVarStr = string(bufVar);
     string currBufVar = bufVarStr + "." + attr.getAttrName() + "_ptr";
@@ -623,7 +621,7 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     }
 
     // It is possible for a partition to be empty
-    if (block_sizes.size() > 0) {
+    if (block_sizes.empty()) {
       max_compressed_block_size =
           *std::max_element(block_sizes.begin(), block_sizes.end());
     } else {
