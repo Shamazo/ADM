@@ -1,0 +1,33 @@
+{
+    "random_ints_100GB_10000": {
+        "path": "inputs/random_ints/random_ints_100GB_10000.csv",
+        "type": {
+            "type": "bag",
+            "inner": {
+                "attributes": [
+                    {
+                        "attrName": "col1",
+                        "relName": "inputs/random_ints/random_ints_100GB_10000.csv",
+                        "type": {
+                            "type": "int"
+                        },
+                        "attrNo": 1
+                    },
+                    {
+                        "attrName": "col2",
+                        "relName": "inputs/random_ints/random_ints_100GB_10000.csv",
+                        "type": {
+                            "type": "int"
+                        },
+                        "attrNo": 2
+                    }
+                ],
+                "type": "record"
+            }
+        },
+        "plugin": {
+            "type": "block",
+            "linehint": 26843545600
+        }
+    }
+}

@@ -73,7 +73,29 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
   DCHECK_NE(nvme_plugin, nullptr);
   const auto page_io_info = nvme_plugin->getPageIoInfo(page_id);
 
-  auto buff = BlockManager::h_get_buffer(target_device);
+  proteus::managed_ptr buff;
+  if (do_transfer[wu->index_in_wu]) {
+    /// "direct" load to data local to the target device
+    buff = BlockManager::h_get_buffer(target_device);
+
+  } else {
+    DCHECK_LT(target_device, 0)
+        << "force_push_from_nvme cannot have do_transfer[false] for a GPU. "
+           "Staging for a GPU should move to CPU memory";
+    /// "staging"
+    /// load to memory local to nvme drive
+    auto &nvme_cpu_aff =
+        topology::getInstance().getCpuNumaNodes()[page_id.getCpuNumaAffinity()];
+    buff = BlockManager::get_buffer_numa(nvme_cpu_aff);
+  }
+
+  //  auto buff_numa =
+  //  topology::getInstance().getCpuNumaNodeAddressed(buff.get()); LOG(INFO) <<
+  //  "moving col: " << std::to_string(wu->index_in_wu)
+  //            << " with a thread on: " << affinity::get().id
+  //            << " moving a buffer from nvme: "
+  //            << std::to_string(page_id.getCpuNumaAffinity())
+  //            << " to a buffer on " << buff_numa->id;
 
   if (page_io_info.is_compressed && target_device < 0) {
     // CPU target and compressed case
@@ -125,7 +147,6 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
       // cuFiles does not respect event synchronization. Hence, each WU has its
       // own stream
       //      static off_t buff_offset = 0;
-      //      wu->bytes_read[wu->index_in_wu] = 0;
       // required lifetimes of pointers passed to cuFileReadAsync is unknown
       //      CUfileError_t status = cuFileReadAsync(
       //          page_io_info.cufile_handle, buff.get(),
@@ -140,7 +161,6 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
           cuFileRead(page_io_info.cufile_handle, buff.get(), *page_io_info.size,
                      *page_io_info.offset, 0);
       CHECK_GT(bytes_read, 0) << "cuFileRead failed with: " << bytes_read;
-      //      wu->index_in_wu += 1;
     } else {
       // CPU case
       wu->complete += 1;
@@ -291,13 +311,15 @@ void make_mem_move_device(char **src_ptrs, size_t *bytes, int target_device,
     }
   } else {
     for (int i = 0; i < num_buffers; i++) {
-      if (mmc->do_transfer[i]) {
+      if (mmc->do_transfer[i] ||
+          NvmePlugin::PageId_t::isPageIdPtr(src_ptrs[i])) {
         auto x = mmc->push(proteus::managed_ptr{src_ptrs[i]}, bytes[i],
                            target_device, srcServer, wu);
         pair_buffs[i] = {x.new_buff.release(), x.old_buff.release()};
       } else {
         pair_buffs[i] = {src_ptrs[i], nullptr};
       }
+      wu->index_in_wu += 1;
     }
   }
 
@@ -415,7 +437,7 @@ void MemMoveDevice::produce_(OlapParallelContext *context) {
   catch_pip = context->removeLatestPipeline();
 
   // push new pipeline for the throw part
-  context->pushPipeline();
+  context->pushPipeline(nullptr, "memmove_");
 
   device_id_var = context->appendStateVar(int32_type);
   memmvconf_var = context->appendStateVar(charPtrType);

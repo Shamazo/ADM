@@ -10,6 +10,7 @@ add_executable(${PROJECT_NAME}
   q1_2_pushdown.cpp
   q1_3_pushdown.cpp
   util.cpp
+  prepared-scan-sum-micro.cpp
   )
 
 # Depending on the olap libraries

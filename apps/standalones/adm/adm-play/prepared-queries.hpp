@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2019
+                            Copyright (c) 2024
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -30,6 +30,26 @@
 PreparedStatement small_scan(proteus::QueryShaper &morph,
                              const std::string &lo_column);
 
+/**
+ * Filter on column 1, sum the values of column 2 that pass the filter
+ * Operates on data generated with adm-data-gen
+ * @param selectivity selectivity of the filter, value in [0, 1]
+ * @param move_after_pushdown for CPU execution if true, perform an explicit
+ * move after the filter push down. i.e. move the packed output blocks after the
+ * filter from the pushdown CPU socket to the compute CPU socket.
+ */
+PreparedStatement scan_sum_micro_pushdown(proteus::QueryShaper &morph,
+                                          double selectivity,
+                                          bool move_after_pushdown = false);
+
+/**
+ * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter
+ * and summation are in the same pipeline
+ * @param selectivity selectivity of the filter, value in [0, 1]
+ */
+PreparedStatement scan_sum_micro(proteus::QueryShaper &morph,
+                                 double selectivity);
+
 PreparedStatement scan_two_columns(proteus::QueryShaper &morph,
                                    const std::string &lo_col1,
                                    const std::string &lo_col2);
@@ -42,8 +62,16 @@ PreparedStatement scan_six_columns(proteus::QueryShaper &morph,
                                    const std::string &lo_col5,
                                    const std::string &lo_col6);
 
-PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph);
-PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph);
-PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph);
+/**
+ * @param move_after_pushdown for CPU execution if true, perform an explicit
+ * move after the filter push down. i.e. move the packed output blocks after the
+ * filter from the pushdown CPU socket to the comput CPU socket.
+ */
+PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
+                                     bool move_after_pushdown = false);
+PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
+                                     bool move_after_pushdown = false);
+PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph,
+                                     bool move_after_pushdown = false);
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

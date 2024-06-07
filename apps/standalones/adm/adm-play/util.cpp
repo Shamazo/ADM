@@ -25,6 +25,7 @@
 
 #include <numeric>
 #include <platform/util/profiling.hpp>
+#include <utility>
 
 std::string get_current_date_str() {
   auto now = std::chrono::system_clock::now();
@@ -35,19 +36,70 @@ std::string get_current_date_str() {
   return {buffer};
 }
 
+LogTimeRange::LogTimeRange(std::string label, TimeStampLogger* logger)
+    : m_label(std::move(label)), m_logger(logger) {
+  m_logger->log_start(m_label);
+}
+
+LogTimeRange::~LogTimeRange() { m_logger->log_end(m_label); }
+
+std::string timepoint_to_string(
+    const std::chrono::high_resolution_clock::time_point& tp) {
+  // Convert to time_t
+  auto duration = tp.time_since_epoch();
+  auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
+  std::time_t t = std::chrono::system_clock::to_time_t(
+      std::chrono::system_clock::time_point(seconds));
+
+  // Convert to struct tm in UTC time
+  std::tm* tm = std::gmtime(&t);
+
+  // Format time as "HH:MM:SS"
+  std::stringstream ss;
+  ss << std::put_time(tm, "%H:%M:%S");
+
+  // Calculate milliseconds
+  auto millis =
+      std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() %
+      1000;
+
+  // Append milliseconds to the formatted time
+  ss << ':' << std::setfill('0') << std::setw(3) << millis;
+
+  return ss.str();
+}
+
 QueryBenchResult benchmark_query(const std::string& label,
                                  PreparedStatement& statement,
                                  size_t num_iterations) {
   std::vector<std::vector<std::chrono::milliseconds>> pipeline_times(
       num_iterations);
   // warmup
-  statement.execute();
+  std::string warmup_query_output;
+  {
+    LOG(INFO) << "warmup_begin";
+    auto ts = global_timestamp_logger->log_time_range("query_warmup");
+    auto res = statement.execute();
+    LOG(INFO) << "warmup_end";
+    std::stringstream ss;
+    ss << res;
+    warmup_query_output = ss.str();
+  }
   profiling::ProfileRegionType pr_type = profiling::ProfileRegionType(label);
   for (int i = 0; i < num_iterations; i++) {
+    LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
+              << label;
+    auto ts = global_timestamp_logger->log_time_range("query_iter_" +
+                                                      std::to_string(i));
     profiling::resume();
     profiling::ProfileRegion pr(pr_type);
 
     auto res = statement.execute(pipeline_times[i]);
+    LOG(INFO) << "end_run_iteration " << i << "/" << num_iterations << " for "
+              << label;
+    std::stringstream ss;
+    ss << res;
+    CHECK_EQ(ss.str(), warmup_query_output);
   }
   profiling::pause();
 
@@ -71,6 +123,7 @@ QueryBenchResult benchmark_query(const std::string& label,
   result.average_query_time = std::chrono::milliseconds(
       std::accumulate(mean_pipeline_times.begin(), mean_pipeline_times.end(),
                       std::chrono::milliseconds(0)));
+  result.query_result = warmup_query_output;
   return result;
 }
 
@@ -274,6 +327,183 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
     }
   }
 
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
+    int server_number) {
+  CHECK_EQ(server_number, 49);
+  std::vector<std::string> twelve_drives = {
+      "/nvme1/nicholso/data/random_ints_0_12",   // node 0
+      "/nvme7/nicholso/data/random_ints_1_12",   // node 1
+      "/nvme13/nicholso/data/random_ints_2_12",  // node 2
+      "/nvme14/nicholso/data/random_ints_3_12",  // node 2
+      "/nvme6/nicholso/data/random_ints_4_12",   // node 1
+      "/nvme9/nicholso/data/random_ints_5_12",   // node 3
+      "/nvme3/nicholso/data/random_ints_6_12",   // node 0
+      "/nvme11/nicholso/data/random_ints_7_12",  // node 3
+      "/nvme5/nicholso/data/random_ints_8_12",   // node 1
+      "/nvme10/nicholso/data/random_ints_9_12",  // node 3
+      "/nvme2/nicholso/data/random_ints_10_12",  // node 0
+      "/nvme15/nicholso/data/random_ints_11_12"  // node 2
+  };
+
+  check_vector_paths(twelve_drives);
+
+  return twelve_drives;
+}
+
+std::vector<std::vector<std::string>> get_ran_ints_input_dirs_socket_zero(
+    int server_number) {
+  if (server_number == 49) {
+    std::vector<std::string> two_drives = {
+        "/nvme4/nicholso/data/random_ints_0_2",  // node 2 move to nvme 4 on
+                                                 // node 1
+        "/nvme13/nicholso/data/random_ints_1_2"  // node 3
+    };
+
+    std::vector<std::string> four_drives = {
+        "/nvme2/nicholso/data/random_ints_0_4",   // node 0
+        "/nvme12/nicholso/data/random_ints_1_4",  // node 2
+        "/nvme7/nicholso/data/random_ints_2_4",   // node 1
+        "/nvme10/nicholso/data/random_ints_3_4"   // node 3
+    };
+
+    std::vector<std::string> six_drives = {
+        "/nvme0/nicholso/data/random_ints_0_6",   // node 0
+        "/nvme13/nicholso/data/random_ints_1_6",  // node 2
+        "/nvme6/nicholso/data/random_ints_2_6",   // node 1
+        "/nvme9/nicholso/data/random_ints_3_6",   // node 3
+        "/nvme3/nicholso/data/random_ints_4_6",   // node 0
+        "/nvme7/nicholso/data/random_ints_5_6",   // node 1
+    };
+
+    std::vector<std::string> eight_drives = {
+        "/nvme2/nicholso/data/random_ints_0_8",   // node 0
+        "/nvme13/nicholso/data/random_ints_1_8",  // node 2
+        "/nvme12/nicholso/data/random_ints_2_8",  // node 2
+        "/nvme6/nicholso/data/random_ints_3_8",   // node 1
+        "/nvme3/nicholso/data/random_ints_4_8",   // node 0
+        "/nvme10/nicholso/data/random_ints_5_8",  // node 3
+        "/nvme9/nicholso/data/random_ints_6_8",   // node 3
+        "/nvme4/nicholso/data/random_ints_7_8",   // node 1
+    };
+
+    std::vector<std::string> ten_drives = {
+        "/nvme2/nicholso/data/random_ints_0_10",   // node 0
+        "/nvme7/nicholso/data/random_ints_1_10",   // node 1
+        "/nvme13/nicholso/data/random_ints_2_10",  // node 2
+        "/nvme12/nicholso/data/random_ints_3_10",  // node 2
+        "/nvme6/nicholso/data/random_ints_4_10",   // node 1
+        "/nvme3/nicholso/data/random_ints_5_10",   // node 0
+        "/nvme4/nicholso/data/random_ints_6_10",   // node 1
+        "/nvme11/nicholso/data/random_ints_7_10",  // node 3
+        "/nvme9/nicholso/data/random_ints_8_10",   // node 3
+        "/nvme5/nicholso/data/random_ints_9_10"    // node 1
+    };
+
+    std::vector<std::string> twelve_drives =
+        get_ran_ints_input_dirs_socket_zero_12_drives(server_number);
+
+    //    check_vector_paths(one_drive);
+    check_vector_paths(two_drives);
+    check_vector_paths(four_drives);
+    check_vector_paths(six_drives);
+    check_vector_paths(eight_drives);
+    check_vector_paths(ten_drives);
+    check_vector_paths(twelve_drives);
+    //      return {twelve_drives}
+    return {two_drives,   four_drives, six_drives,
+            eight_drives, ten_drives,  twelve_drives};
+  }
+
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
+    int sf, int server_number) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  if (server_number == 49) {
+    if (sf == 100) {
+      LOG(FATAL) << "no sf100 on diascld49 yet";
+    }
+
+    if (sf == 1000) {
+      std::vector<std::string> one_drive = {
+          "/nvme11/nicholso/data/sbm1000"  // node 3
+      };
+
+      std::vector<std::string> two_drives = {
+          "/nvme12/nicholso/data/sbm1000_0_2",  // node 2
+          "/nvme11/nicholso/data/sbm1000_1_2"   // node 3
+      };
+
+      std::vector<std::string> four_drives = {
+          "/nvme0/nicholso/data/sbm1000_0_4",   // node 0
+          "/nvme12/nicholso/data/sbm1000_1_4",  // node 2
+          "/nvme7/nicholso/data/sbm1000_2_4",   // node 1
+          "/nvme10/nicholso/data/sbm1000_3_4"   // node 3
+      };
+
+      std::vector<std::string> six_drives = {
+          "/nvme0/nicholso/data/sbm1000_0_6",   // node 0
+          "/nvme13/nicholso/data/sbm1000_1_6",  // node 2
+          "/nvme6/nicholso/data/sbm1000_2_6",   // node 1
+          "/nvme9/nicholso/data/sbm1000_3_6",   // node 3
+          "/nvme3/nicholso/data/sbm1000_4_6",   // node 0
+          "/nvme7/nicholso/data/sbm1000_5_6",   // node 1
+      };
+
+      std::vector<std::string> eight_drives = {
+          "/nvme0/nicholso/data/sbm1000_0_8",   // node 0
+          "/nvme13/nicholso/data/sbm1000_1_8",  // node 2
+          "/nvme14/nicholso/data/sbm1000_2_8",  // node 2
+          "/nvme6/nicholso/data/sbm1000_3_8",   // node 1
+          "/nvme3/nicholso/data/sbm1000_4_8",   // node 0
+          "/nvme10/nicholso/data/sbm1000_5_8",  // node 3
+          "/nvme9/nicholso/data/sbm1000_6_8",   // node 3
+          "/nvme4/nicholso/data/sbm1000_7_8",   // node 1
+      };
+
+      std::vector<std::string> ten_drives = {
+          "/nvme0/nicholso/data/sbm1000_0_10",   // node 0
+          "/nvme7/nicholso/data/sbm1000_1_10",   // node 1
+          "/nvme13/nicholso/data/sbm1000_2_10",  // node 2
+          "/nvme14/nicholso/data/sbm1000_3_10",  // node 2
+          "/nvme6/nicholso/data/sbm1000_4_10",   // node 1
+          "/nvme3/nicholso/data/sbm1000_5_10",   // node 0
+          "/nvme4/nicholso/data/sbm1000_6_10",   // node 1
+          "/nvme11/nicholso/data/sbm1000_7_10",  // node 3
+          "/nvme9/nicholso/data/sbm1000_8_10",   // node 3
+          "/nvme5/nicholso/data/sbm1000_9_10"    // node 1
+      };
+
+      std::vector<std::string> twelve_drives = {
+          "/nvme0/nicholso/data/sbm1000_0_12",   // node 0
+          "/nvme7/nicholso/data/sbm1000_1_12",   // node 1
+          "/nvme13/nicholso/data/sbm1000_2_12",  // node 2
+          "/nvme14/nicholso/data/sbm1000_3_12",  // node 2
+          "/nvme6/nicholso/data/sbm1000_4_12",   // node 1
+          "/nvme9/nicholso/data/sbm1000_5_12",   // node 3
+          "/nvme3/nicholso/data/sbm1000_6_12",   // node 0
+          "/nvme11/nicholso/data/sbm1000_7_12",  // node 3
+          "/nvme5/nicholso/data/sbm1000_8_12",   // node 1
+          "/nvme10/nicholso/data/sbm1000_9_12",  // node 3
+          "/nvme2/nicholso/data/sbm1000_10_12",  // node 0
+          "/nvme15/nicholso/data/sbm1000_11_12"  // node 2
+      };
+      check_vector_paths(one_drive);
+      check_vector_paths(two_drives);
+      check_vector_paths(four_drives);
+      check_vector_paths(six_drives);
+      check_vector_paths(eight_drives);
+      check_vector_paths(ten_drives);
+      check_vector_paths(twelve_drives);
+      //      return {twelve_drives}
+      return {one_drive,    two_drives, four_drives,  six_drives,
+              eight_drives, ten_drives, twelve_drives};
+    }
+  }
   LOG(FATAL) << "not set up for this server: " << server_number;
 }
 

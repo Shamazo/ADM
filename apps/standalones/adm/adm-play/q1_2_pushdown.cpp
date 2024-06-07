@@ -25,7 +25,8 @@
 
 constexpr auto query = "ssb100_Q1_2_pushdown";
 
-PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph) {
+PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
+                                     bool move_after_pushdown) {
   morph.setQueryName(query);
 
   auto rel4483 = morph.scan("date", {"d_datekey", "d_yearmonthnum"});
@@ -36,7 +37,8 @@ PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph) {
   return morph
       .parallel(
           rel, {rel4483},
-          [&morph](RelBuilder probe, std::vector<RelBuilder> build) {
+          [&morph, &move_after_pushdown](RelBuilder probe,
+                                         std::vector<RelBuilder> build) {
             auto rel4483_d =
                 build.at(0)
                     .unpack()
@@ -62,12 +64,13 @@ PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph) {
                     .pack()
                     .router(morph.getDOP(), morph.getSlack(),
                             RoutingPolicy::LOCAL, morph.getDevice(),
-                            morph.getAffinitizer())
-                    .memmove(morph.getSlack(), morph.getDevice());
+                            morph.getAffinitizer());
+            if (move_after_pushdown || morph.getDevice() == DeviceType::GPU) {
+              filtered_probe =
+                  filtered_probe.memmove(morph.getSlack(), morph.getDevice());
+            }
             if (morph.getDevice() == DeviceType::GPU) {
               filtered_probe = filtered_probe.to_gpu();
-            } else {
-              filtered_probe = filtered_probe.to_cpu();
             }
 
             return filtered_probe.unpack()

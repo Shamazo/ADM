@@ -35,6 +35,7 @@
 
 #include "microbenchmarks.hpp"
 #include "prepared-queries.hpp"
+#include "selectivity-micros.hpp"
 #include "ssb-benchmarks.hpp"
 #include "util.hpp"
 
@@ -91,6 +92,61 @@ DEFINE_bool(bench_ssb_gpu_pushdown_compressed, false,
             "filter pushed down to the CPU. Use compressed data"
             "--scale_factor and varying the number of drives used");
 
+DECLARE_bool(bench_ssb_cpu_socket_pushdown);
+DEFINE_bool(bench_ssb_cpu_socket_pushdown, false,
+            "CPU only vary number of NVMes used for SSB Q1.x with the probe "
+            "filter pushed down to CPU socket 0 and the rest of the "
+            "query processing on socket 1. All data is on NVMe drives on "
+            "socket 0.  Degree of parallelism for the pushed-down filter is "
+            "set by --pushdown_dop");
+
+DECLARE_bool(bench_ssb_cpu_socket_pushdown_baseline);
+DEFINE_bool(bench_ssb_cpu_socket_pushdown_baseline, false,
+            "CPU only vary number of NVMes used for SSB Q1.x using the CPU "
+            "NUMA nodes of socket 1 and data on NVMe drives on socket 0.");
+
+DECLARE_bool(bench_micro_cpu_socket_pushdown_baseline);
+DEFINE_bool(
+    bench_micro_cpu_socket_pushdown_baseline, false,
+    "CPU only vary the selectivity of a 2 col scan->filter->sum query."
+    "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
+    "drives on socket 0. Data is moved directly from NVMes to socket 1.");
+
+DECLARE_bool(bench_micro_cpu_socket_stage_both);
+DEFINE_bool(bench_micro_cpu_socket_stage_both, false,
+            "CPU only vary the selectivity of a 2 col scan->filter->sum query."
+            "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
+            "drives on socket 0. Data is moved from NVMes to socket 0 then "
+            "accessed over the interconnect.");
+
+DECLARE_bool(bench_micro_cpu_socket_stage_one);
+DEFINE_bool(bench_micro_cpu_socket_stage_one, false,
+            "CPU only vary the selectivity of a 2 col scan->filter->sum query."
+            "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
+            "drives on socket 0. Data for the first column is moved directly "
+            "from NVMes to socket 1. Data for the second column is moved from "
+            "NVMes to socket 0 then accessed over the interconnect.");
+
+DECLARE_bool(bench_micro_cpu_socket_pushdown_filter);
+DEFINE_bool(bench_micro_cpu_socket_pushdown_filter, false,
+            "CPU only vary the selectivity of a 2 col scan->filter->sum query "
+            "with filter pushdown. Compute (the sum) uses the NUMA nodes of "
+            "socket 1. The data is on NVMe drives on socket 0. The filter runs "
+            "on socket 0, the filtered values are written to memory on socket "
+            "1 and accessed over the interconnect by the sum operator. The "
+            "filter parallelism of the filter is set by --pushdown_dop");
+
+DECLARE_bool(bench_micro_cpu_socket_pushdown_filter_memmove);
+DEFINE_bool(bench_micro_cpu_socket_pushdown_filter_memmove, false,
+            "Identical to bench_micro_cpu_socket_pushdown_filter, but the "
+            "filtered data is explicitly mem-moved to socket 1");
+
+DECLARE_int32(pushdown_dop);
+DEFINE_int32(
+    pushdown_dop, -1,
+    "Number of threads to use for pushed-down operators. Default of -1 is a "
+    "thread per core on the socket used for pushdown operators.");
+
 DECLARE_int32(scale_factor);
 DEFINE_int32(scale_factor, 100, "SSB scale factor");
 
@@ -104,7 +160,16 @@ DECLARE_string(result_file);
 DEFINE_string(result_file, "",
               "[optional] output file for results [default: stdout]");
 
+DECLARE_string(timestamp_file);
+DEFINE_string(timestamp_file, "adm-play-timestamps.csv",
+              "[optional] output file for TimeStampLogger logs  [default: "
+              "adm-play-timestamps.csv]");
+
+TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, false);
+  global_timestamp_logger = new TimeStampLogger(FLAGS_timestamp_file);
+
   auto ctx = proteus::from_cli::olap("adm-play", &argc, &argv);
 
   std::stringstream ss;
@@ -228,6 +293,90 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "running bench_ssb_gpu_pushdown";
     auto res = bench_ssb_q1_gpu_pushdown_vary_bw(
         FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, true);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_ssb_cpu_socket_pushdown) {
+    std::optional<size_t> pushdown_dop =
+        (FLAGS_pushdown_dop == -1) ? std::nullopt
+                                   : std::make_optional(FLAGS_pushdown_dop);
+    LOG(INFO) << "running bench_ssb_cpu_socket_pushdown";
+    auto res = bench_ssb_q1_cpu_socket_pushdown_vary_bw(
+        FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, false, pushdown_dop);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  /**
+   * Selectivity microbenchmarks
+   * ##############################
+   */
+
+  if (FLAGS_bench_micro_cpu_socket_pushdown_baseline) {
+    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_baseline";
+    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, true}, false);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_stage_both) {
+    LOG(INFO) << "running bench_micro_cpu_socket_stage_both";
+    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {false, false}, false);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_stage_one) {
+    LOG(INFO) << "running bench_micro_cpu_socket_stage_one";
+    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, false}, false);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_pushdown_filter) {
+    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_filter";
+    DCHECK_NE(FLAGS_pushdown_dop, 0) << "cannot have a pushdown DOP of 0. This "
+                                        "is not the equivalent of no pushdown";
+    std::optional<size_t> pushdown_dop =
+        (FLAGS_pushdown_dop == -1) ? std::nullopt
+                                   : std::make_optional(FLAGS_pushdown_dop);
+    auto res = bench_micro_cpu_socket_pushdown_filter_vary_sel(
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_pushdown_filter_memmove) {
+    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_filter_memmove";
+    DCHECK_NE(FLAGS_pushdown_dop, 0) << "cannot have a pushdown DOP of 0. This "
+                                        "is not the equivalent of no pushdown";
+    std::optional<size_t> pushdown_dop =
+        (FLAGS_pushdown_dop == -1) ? std::nullopt
+                                   : std::make_optional(FLAGS_pushdown_dop);
+    auto res = bench_micro_cpu_socket_pushdown_filter_memmove_vary_sel(
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop);
     ss << res;
     ss << std::endl;
     if (out.has_value()) {
