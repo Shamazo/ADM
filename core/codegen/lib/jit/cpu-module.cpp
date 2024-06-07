@@ -282,6 +282,8 @@ class JITer_impl {
 
   std::mutex vtuneLock;
   JITEventListener *vtuneProfiler;
+  JITEventListener *PerfListener;
+  JITEventListener *GDBListener;
 
  public:
   ~JITer_impl() {
@@ -330,7 +332,9 @@ class JITer_impl {
               return std::move(TSM);
             }),
         MainJD(llvm::cantFail(ES.createJITDylib("main"))),
-        vtuneProfiler(JITEventListener::createIntelJITEventListener()) {
+        vtuneProfiler(JITEventListener::createIntelJITEventListener()),
+        PerfListener(JITEventListener::createPerfJITEventListener()),
+        GDBListener(JITEventListener::createGDBRegistrationListener()) {
     if (vtuneProfiler == nullptr) {
       LOG(WARNING) << "Could not create VTune listener";
     } else {
@@ -343,6 +347,19 @@ class JITer_impl {
               vtuneProfiler->notifyObjectLoaded(k, Obj, loi);
             }));
           });
+    }
+
+    if (PerfListener == nullptr) {
+      LOG(WARNING) << "Could not create Perf listener. Perhaps LLVM was not "
+                      "compiled with perf support (LLVM_USE_PERF).";
+    } else {
+      ObjectLayer.registerJITEventListener(*PerfListener);
+    }
+
+    if (GDBListener == nullptr) {
+      LOG(WARNING) << "Could not create GDB listener.";
+    } else {
+      ObjectLayer.registerJITEventListener(*GDBListener);
     }
 
     //    ObjectLayer.setNotifyEmitted(
