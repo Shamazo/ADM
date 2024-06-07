@@ -56,8 +56,6 @@ class PipelineGen;
 class GpuPipelineGen;
 class Context;
 
-extern bool print_generated_code;
-
 class StateVar {
  public:
   size_t index_in_pip;

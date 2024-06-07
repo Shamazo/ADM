@@ -22,6 +22,10 @@
 */
 #include <codegen/jit/jit-module.hpp>
 
+bool print_generated_code = true;
+bool insert_preopt_debug_info = true;
+bool insert_postopt_debug_info = false;
+
 using namespace llvm;
 
 IRBuilder<> *JITModule::TheBuilder = nullptr;

@@ -165,12 +165,15 @@ void ParallelContext::pushDeviceProvider(PipelineGenFactory *factory) {
 
 void ParallelContext::popDeviceProvider() { pipFactories.pop_back(); }
 
-void ParallelContext::pushPipeline(PipelineGen *copyStateFrom) {
+void ParallelContext::pushPipeline(PipelineGen *copyStateFrom,
+                                   std::optional<std::string> pip_name_prefix) {
   // static so that each pipeline has a unique name
   static size_t pip_cnt = 0;
   TheFunction = nullptr;
-  generators.emplace_back(pipFactories.back()->create(
-      this, kernelName + "_pip" + std::to_string(pip_cnt++), copyStateFrom));
+  const std::string pip_name = pip_name_prefix.value_or("") + kernelName +
+                               "_pip" + std::to_string(pip_cnt++);
+  generators.emplace_back(
+      pipFactories.back()->create(this, pip_name, copyStateFrom));
 
   TheBuilder = new llvm::IRBuilder<>(getLLVMContext());
 }

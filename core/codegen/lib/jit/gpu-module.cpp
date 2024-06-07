@@ -464,8 +464,10 @@ llvm::orc::ThreadSafeModule optimizeGpuModule(
   return TSM;
 }
 
+// defined in cpu-module.cpp
 Expected<llvm::orc::ThreadSafeModule> printIR(orc::ThreadSafeModule module,
-                                              const std::string &suffix = "");
+                                              const std::string &suffix = "",
+                                              bool add_debug_info = false);
 
 class GPUJITer_impl : public llvm::orc::ResourceManager {
  public:

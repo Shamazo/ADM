@@ -68,6 +68,8 @@ external_files = [
     "core/olap/lib/util/radix/types.h",
     "core/olap/lib/util/radix/aggregations/radix-aggr.cpp",
     "core/olap/lib/util/radix/joins/radix-join.cpp",
+    "core/codegen/lib/jit/DebugIR.hpp",
+    "core/codegen/lib/jit/DebugIR.cpp",
     "external/jsmn/jsmn.c",
     "external/jsmn/include/jsmn.h",
     "core/planner/src/main/scala/ch/epfl/dias/emitter/PlanToJSON.scala",

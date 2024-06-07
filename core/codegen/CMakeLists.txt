@@ -16,6 +16,7 @@ set(codegen_cxx
   lib/jit/gpu-pipeline.cpp
   lib/jit/jit-module.cpp
   lib/jit/pipeline.cpp
+  lib/jit/DebugIR.cpp
   lib/util/functions.cpp
   lib/util/gpu/gpu-intrinsics.cpp
 )

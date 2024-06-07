@@ -53,6 +53,8 @@
 #include <platform/threadpool/threadpool.hpp>
 #include <platform/util/timing.hpp>
 
+#include "DebugIR.hpp"
+
 using namespace llvm;
 
 CpuModule::CpuModule(Context *context, std::string pipName)
@@ -173,12 +175,18 @@ llvm::orc::ThreadSafeModule optimizeModule(llvm::orc::ThreadSafeModule TSM,
 }
 
 Expected<llvm::orc::ThreadSafeModule> printIR(orc::ThreadSafeModule module,
-                                              const std::string &suffix = "") {
-  module.withModuleDo([&suffix](Module &m) {
+                                              const std::string &suffix = "",
+                                              bool add_debug_info = false) {
+  module.withModuleDo([&suffix, &add_debug_info](Module &m) {
     std::error_code EC;
-    raw_fd_ostream out("generated_code/" + m.getName().str() + suffix + ".ll",
-                       EC, llvm::sys::fs::OpenFlags::OF_None);
+    const std::string output_directory = "generated_code/";
+    const std::string output_file = m.getName().str() + suffix + ".ll";
+    raw_fd_ostream out(output_directory + output_file, EC,
+                       llvm::sys::fs::OpenFlags::OF_None);
     m.print(out, nullptr, false, true);
+    if (add_debug_info) {
+      createDebugInfo(m, output_directory, output_file);
+    }
   });
   return std::move(module);
 }
@@ -310,7 +318,20 @@ class JITer_impl {
             [](llvm::orc::ThreadSafeModule TSM,
                const llvm::orc::MaterializationResponsibility &R)
                 -> Expected<llvm::orc::ThreadSafeModule> {
-              if (print_generated_code) return printIR(std::move(TSM), "_opt");
+              if (print_generated_code) {
+                LOG_IF(WARNING,
+                       insert_postopt_debug_info && insert_preopt_debug_info)
+                    << "Both insert_preopt_debug_info and "
+                       "insert_postopt_debug_info are set. "
+                       "insert_postopt_debug_info will override "
+                       "insert_preopt_debug_info.";
+                return printIR(std::move(TSM), "_opt",
+                               insert_postopt_debug_info);
+              }
+              LOG_IF(WARNING, insert_postopt_debug_info)
+                  << "insert_postopt_debug_info is set, but "
+                     "print_generated_code is not. There will be no debug "
+                     "symbols in the compiled generated code.";
               return std::move(TSM);
             }),
         TransformLayer(
@@ -328,7 +349,13 @@ class JITer_impl {
             [](llvm::orc::ThreadSafeModule TSM,
                const llvm::orc::MaterializationResponsibility &R)
                 -> Expected<llvm::orc::ThreadSafeModule> {
-              if (print_generated_code) return printIR(std::move(TSM));
+              if (print_generated_code) {
+                return printIR(std::move(TSM), "", insert_preopt_debug_info);
+              }
+              LOG_IF(WARNING, insert_preopt_debug_info)
+                  << "insert_preopt_debug_info is set, but "
+                     "print_generated_code is not. There will be no debug "
+                     "symbols in the compiled generated code.";
               return std::move(TSM);
             }),
         MainJD(llvm::cantFail(ES.createJITDylib("main"))),

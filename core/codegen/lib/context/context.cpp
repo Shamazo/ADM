@@ -25,8 +25,6 @@
 
 #include <dlfcn.h>
 
-bool print_generated_code = true;
-
 using namespace llvm;
 
 // FIXME: memory leak

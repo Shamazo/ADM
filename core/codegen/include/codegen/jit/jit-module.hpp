@@ -28,6 +28,13 @@
 
 #include <codegen/context/context.hpp>
 
+// globals initialized in jit-module.cpp
+// can be set by binaries/libraries that link to libcodegen.
+// e.g. based on command line flags
+extern bool print_generated_code;
+extern bool insert_preopt_debug_info;
+extern bool insert_postopt_debug_info;
+
 class JITModule {
  protected:
   static llvm::IRBuilder<> *TheBuilder;

@@ -136,8 +136,12 @@ class ParallelContext : public Context {
    * pipeline. Note: if this parameter is passed, then ParallelContext will
    * store the state of the copyStateFrom as the state variable in the current
    * Pipeline. See ChainedPipelinesWithArguments test as an example of usage
+   * @param pip_name_prefix optional prefix for the pipeline name. Can be useful
+   * for debugging to more easily find the relevant generated IR when
+   * print_generated_code is set
    */
-  void pushPipeline(PipelineGen *copyStateFrom = nullptr);
+  void pushPipeline(PipelineGen *copyStateFrom = nullptr,
+                    std::optional<std::string> pip_name_prefix = std::nullopt);
   void popPipeline();
 
   /**
