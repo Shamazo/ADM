@@ -25,6 +25,7 @@
 bool print_generated_code = true;
 bool insert_preopt_debug_info = true;
 bool insert_postopt_debug_info = false;
+bool dump_compiled_object_files = false;
 
 using namespace llvm;
 

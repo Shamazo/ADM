@@ -34,6 +34,7 @@
 extern bool print_generated_code;
 extern bool insert_preopt_debug_info;
 extern bool insert_postopt_debug_info;
+extern bool dump_compiled_object_files;
 
 class JITModule {
  protected:

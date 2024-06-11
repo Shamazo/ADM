@@ -41,6 +41,7 @@
 #include <llvm/ExecutionEngine/Orc/IRCompileLayer.h>
 #include <llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ObjectTransformLayer.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #include <llvm/IR/PassManager.h>
@@ -280,6 +281,8 @@ class JITer_impl {
 #else
   llvm::orc::ExecutionSession ES;
 #endif
+  llvm::orc::ObjectTransformLayer::TransformFunction DumpObjectTransform;
+  llvm::orc::ObjectTransformLayer DumpObjectTransformLayer;
   llvm::orc::RTDyldObjectLinkingLayer ObjectLayer;
   llvm::orc::IRCompileLayer CompileLayer;
   llvm::orc::IRTransformLayer PrintOptimizedIRLayer;
@@ -308,10 +311,22 @@ class JITer_impl {
         Mangle(ES, this->DL),
         Ctx(std::make_unique<LLVMContext>()),
         PassConf(llvm::cantFail(JTMB.createTargetMachine())),
+        DumpObjectTransform{orc::DumpObjects("generated_code/")},
         ObjectLayer(
             ES,
             []() { return std::make_unique<proteus::SectionMemoryManager>(); }),
-        CompileLayer(ES, ObjectLayer,
+        DumpObjectTransformLayer(
+            ES, ObjectLayer,
+            [&transform =
+                 this->DumpObjectTransform](std::unique_ptr<MemoryBuffer> buf)
+                -> Expected<std::unique_ptr<MemoryBuffer>> {
+              if (dump_compiled_object_files) {
+                return transform(std::move(buf));
+              } else {
+                return std::move(buf);
+              }
+            }),
+        CompileLayer(ES, DumpObjectTransformLayer,
                      std::make_unique<llvm::orc::ConcurrentIRCompiler>(JTMB)),
         PrintOptimizedIRLayer(
             ES, CompileLayer,
@@ -483,29 +498,6 @@ void CpuModule::compileAndLoad() {
 
   ::ThreadPool::getInstance().enqueue(
       [name = getModule()->getName()]() { getJiter().p_impl->lookup(name); });
-  // #ifdef DEBUGCTX
-  //   if (print_generated_code) {
-  //     string assembly;
-  //     {
-  //       raw_string_ostream stream(assembly);
-  //       buffer_ostream ostream(stream);
-  //
-  //       legacy::PassManager PM;
-  //
-  //       // Ask the target to add backend passes as necessary.
-  //       TheExecutionEngine->getTargetMachine()->addPassesToEmitFile(
-  //           PM, ostream,
-  // #if LLVM_VERSION_MAJOR >= 7
-  //           nullptr,
-  // #endif
-  //           llvm::CGFT_AssemblyFile, false);
-  //
-  //       PM.run(*(getModule()));
-  //     }
-  //     std::ofstream oassembly("generated_code/" + pipName + ".s");
-  //     oassembly << assembly;
-  //   }
-  // #endif
   //   for (Function &f : *getModule()) {
   //     if (!f.isDeclaration()) {
   //       auto addr = getJiter().p_impl->lookup(f.getName());
