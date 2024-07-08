@@ -549,6 +549,13 @@ ProteusValue ExpressionDotVisitor::visit(
 }
 
 ProteusValue ExpressionDotVisitor::visit(
+    const expressions::ExternExpression *e1,
+    const expressions::ExternExpression *e2) {
+  ExpressionGeneratorVisitor visitor{context, currStateLeft};
+  return eq(*e1, *e2).accept(visitor);
+}
+
+ProteusValue ExpressionDotVisitor::visit(
     const expressions::HintExpression *e1,
     const expressions::HintExpression *e2) {
   return e1->getExpr().acceptTandem(*this, e2->getExpr());

@@ -1352,6 +1352,79 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 }
 
 ProteusValue ExpressionGeneratorVisitor::visit(
+    const expressions::ExternExpression *e) {
+  ProteusValue valWrapper;
+
+  // Check if the function was properly linked
+  auto fun = context->getModule()->getFunction(e->getName());
+  if (!fun) {
+    LOG(ERROR) << "[ExpressionGeneratorVisitor]: extern function "
+               << e->getName() << " not found! Did you link the module?";
+    throw runtime_error(
+        std::string("[ExpressionGeneratorVisitor]: extern function " +
+                    e->getName() + " not found! Did you link the module?"));
+  }
+
+  context->registerFunction(e->getName(), fun);
+  auto funType = fun->getFunctionType();
+
+  // check if number of arguments matches
+  if (funType->getNumParams() != e->getArgs().size()) {
+    //  && "Mismatch in argument count for extern function"
+    LOG(ERROR) << "[ExpressionGeneratorVisitor]: number of arguments for "
+                  "extern function "
+               << e->getName()
+               << " doesn't match! Expected: " << funType->getNumParams()
+               << " Have: " << e->getArgs().size();
+    throw runtime_error(std::string(
+        "[ExpressionGeneratorVisitor]: number of arguments for "
+        "extern function " +
+        e->getName() +
+        " doesn't match! Expected: " + std::to_string(funType->getNumParams()) +
+        " Have: " + std::to_string(e->getArgs().size())));
+  }
+
+  if (funType->getReturnType() !=
+      e->getExpressionType()->getLLVMType(context->getLLVMContext())) {
+    LOG(ERROR)
+        << "[ExpressionGeneratorVisitor]: return type for extern function "
+        << e->getName() << " doesn't match!";
+    throw runtime_error(std::string(
+        "[ExpressionGeneratorVisitor]: return type for extern function " +
+        e->getName() + " doesn't match!"));
+  }
+
+  // Compute and convert arguments
+  std::vector<llvm::Value *> convertedArgs;
+  convertedArgs.reserve(e->getArgs().size());
+
+  for (size_t idx = 0; const auto &arg_expr : e->getArgs()) {
+    auto computed_value = arg_expr.accept(*this);
+
+    const auto computedType = computed_value.value->getType();
+    const auto expectedType = funType->getParamType(idx);
+    if (computedType != expectedType) {
+      LOG(ERROR)
+          << "[ExpressionGeneratorVisitor]: argument type for extern function "
+          << e->getName() << " with id " << std::to_string(idx)
+          << " doesn't match!";
+      throw runtime_error(std::string(
+          "[ExpressionGeneratorVisitor]: argument type for extern function " +
+          e->getName() + " with id " + std::to_string(idx) +
+          " doesn't match!"));
+    }
+
+    convertedArgs.push_back(computed_value.value);
+    idx++;
+  }
+
+  valWrapper.value = context->gen_call(fun, convertedArgs);
+  valWrapper.isNull = fun->getReturnType()->isVoidTy() ? context->createTrue()
+                                                       : context->createFalse();
+  return valWrapper;
+}
+
+ProteusValue ExpressionGeneratorVisitor::visit(
     const expressions::HintExpression *e) {
   auto tmp = e->getExpr().accept(*this);
 

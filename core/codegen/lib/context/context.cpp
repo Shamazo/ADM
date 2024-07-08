@@ -526,6 +526,11 @@ void Context::registerFunction(const char *funcName, Function *func) {
   availableFunctions[funcName] = func;
 }
 
+// Provide support for some extern functions
+void Context::registerFunction(const string &funcName, Function *func) {
+  availableFunctions[funcName] = func;
+}
+
 StateVar Context::appendStateVar(llvm::Type *ptype, std::string name) {
   return appendStateVar(
       ptype, [ptype](llvm::Value *) { return UndefValue::get(ptype); },
@@ -646,6 +651,11 @@ llvm::Value *Context::gen_call(std::string func,
   }
 
   return gen_call(f, args);
+}
+
+llvm::Value *Context::gen_call(llvm::Function *f,
+                               const std::vector<llvm::Value *> &args) {
+  return getBuilder()->CreateCall(f, args);
 }
 
 if_branch Context::gen_if(ProteusBareValue cond) {

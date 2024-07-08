@@ -156,6 +156,8 @@ class TestExpressionVisitor : public ExprVisitor {
     return {};
   }
 
+  ProteusValue visit(const expressions::ExternExpression *e) override;
+
   ProteusValue visit(const expressions::HintExpression *e) override {
     return {};
   }

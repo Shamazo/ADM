@@ -75,6 +75,7 @@ enum ExpressionId {
   REF_EXPRESSION,
   ASSIGN_EXPRESSION,
   PLACEHOLDER,
+  EXTERN,
 };
 
 class RefExpression;
@@ -716,6 +717,39 @@ class RandExpression : public ExpressionCRTP<RandExpression> {
   }
 };
 
+class ExternExpression : public ExpressionCRTP<ExternExpression> {
+ public:
+  ExternExpression(const std::string &name,
+                   const std::vector<expression_t> &args,
+                   const ExpressionType *type)
+      : ExpressionCRTP(type), name(name), args(args) {}
+
+  ExternExpression(std::string &&name, std::vector<expression_t> &&args,
+                   const ExpressionType *type)
+      : ExpressionCRTP(type), name(std::move(name)), args(std::move(args)) {}
+
+  [[nodiscard]] string getName() const { return name; }
+
+  [[nodiscard]] const vector<expression_t> &getArgs() const { return args; }
+
+  [[nodiscard]] ExpressionId getTypeID() const override { return EXTERN; }
+
+  inline bool operator<(const ExternExpression &r) const override {
+    if (this->getTypeID() == r.getTypeID()) {
+      if (getArgs().size() >= r.getArgs().size()) {
+        return getName() < r.getName();
+      }
+      return true;
+    } else {
+      return this->getTypeID() < r.getTypeID();
+    }
+  }
+
+ private:
+  string name;
+  vector<expression_t> args;
+};
+
 class PlaceholderExpression : public ExpressionCRTP<PlaceholderExpression> {
  public:
   PlaceholderExpression(const ExpressionType *type, size_t index)
@@ -1291,6 +1325,7 @@ class ExprVisitor {
   virtual ProteusValue visit(const expressions::MinExpression *e) = 0;
   virtual ProteusValue visit(const expressions::MaxExpression *e) = 0;
   virtual ProteusValue visit(const expressions::RandExpression *e) = 0;
+  virtual ProteusValue visit(const expressions::ExternExpression *e) = 0;
   virtual ProteusValue visit(const expressions::HintExpression *e) = 0;
   virtual ProteusValue visit(const expressions::HashExpression *e) = 0;
   //  virtual ProteusValue visit(const expressions::AtExpression *e) = 0;
@@ -1377,6 +1412,8 @@ class ExprTandemVisitorT {
                   const expressions::MaxExpression *e2) = 0;
   virtual T visit(const expressions::RandExpression *e1,
                   const expressions::RandExpression *e2) = 0;
+  virtual T visit(const expressions::ExternExpression *e1,
+                  const expressions::ExternExpression *e2) = 0;
   virtual T visit(const expressions::HintExpression *e1,
                   const expressions::HintExpression *e2) = 0;
   virtual T visit(const expressions::HashExpression *e1,

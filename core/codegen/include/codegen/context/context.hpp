@@ -370,6 +370,7 @@ class Context {
   void CodegenMemset(llvm::Value *dst, llvm::Value *bytes, llvm::Value *size);
 
   virtual void registerFunction(const char *, llvm::Function *);
+  virtual void registerFunction(const string &, llvm::Function *);
   virtual llvm::BasicBlock *getEndingBlock() { return codeEnd; }
   virtual void setEndingBlock(llvm::BasicBlock *cdEnd) {
     this->codeEnd = cdEnd;
@@ -480,6 +481,9 @@ class Context {
 
   virtual llvm::Value *gen_call(llvm::Function *func,
                                 std::initializer_list<llvm::Value *> args);
+
+  virtual llvm::Value *gen_call(llvm::Function *func,
+                                const std::vector<llvm::Value *> &args);
 
   /**
    * Not sure the HT methods belong here

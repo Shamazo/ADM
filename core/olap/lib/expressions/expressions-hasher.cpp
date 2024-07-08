@@ -599,6 +599,11 @@ ProteusValue ExpressionHasherVisitor::visit(
 }
 
 ProteusValue ExpressionHasherVisitor::visit(
+    const expressions::ExternExpression *e) {
+  return hashPrimitive(e);
+}
+
+ProteusValue ExpressionHasherVisitor::visit(
     const expressions::HintExpression *e) {
   return e->getExpr().accept(*this);
 }
