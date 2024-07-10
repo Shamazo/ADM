@@ -395,6 +395,102 @@ TEST_P(ExpressionsTestParallelContext, MatrixMultiplicationDummy) {
   parallelContext->compileAndLoad();
 }
 
+void define_multiply(llvm::Module &module) {
+  llvm::Type *int32Type = llvm::Type::getInt32Ty(module.getContext());
+  llvm::FunctionType *funcType =
+      llvm::FunctionType::get(int32Type, {int32Type, int32Type}, false);
+
+  llvm::Function *mulFunction = llvm::Function::Create(
+      funcType, llvm::Function::ExternalLinkage, "multiply", module);
+
+  llvm::BasicBlock *entry =
+      llvm::BasicBlock::Create(module.getContext(), "entry", mulFunction);
+  llvm::IRBuilder<> builder(entry);
+
+  llvm::Function::arg_iterator argsValues = mulFunction->arg_begin();
+  llvm::Value *a = argsValues++;
+  llvm::Value *b = argsValues;
+
+  llvm::Value *result = builder.CreateMul(a, b, "res");
+
+  builder.CreateRet(result);
+}
+
+// Call a simple LLVM function
+TEST_P(ExpressionsTestParallelContext, ExternExpressionMultiply) {
+  parallelContext->setGlobalFunction(/*leaf=*/true);
+
+  // register the function
+  {
+    auto &llvmContext = parallelContext->getLLVMContext();
+    auto module = std::make_unique<llvm::Module>("externModule", llvmContext);
+    define_multiply(*module.get());
+
+    parallelContext->linkExternModule(std::move(module));
+  }
+
+  // call it
+  auto expression = expressions::ExternExpression(
+      "multiply", {expression_t{2}, expression_t{6}}, new IntType());
+  auto number = expression.accept(*visitor);
+
+  LLVMAssertIEQ(number.value, parallelContext->createInt32(12));
+
+  parallelContext->compileAndLoad();
+}
+
+void define_divide(llvm::Module &module) {
+  llvm::Type *int32Type = llvm::Type::getInt32Ty(module.getContext());
+  llvm::FunctionType *funcType =
+      llvm::FunctionType::get(int32Type, {int32Type, int32Type}, false);
+
+  llvm::Function *mulFunction = llvm::Function::Create(
+      funcType, llvm::Function::ExternalLinkage, "divide", module);
+
+  llvm::BasicBlock *entry =
+      llvm::BasicBlock::Create(module.getContext(), "entry", mulFunction);
+  llvm::IRBuilder<> builder(entry);
+
+  llvm::Function::arg_iterator argsValues = mulFunction->arg_begin();
+  llvm::Value *a = argsValues++;
+  llvm::Value *b = argsValues;
+
+  llvm::Value *result = builder.CreateSDiv(a, b, "res");
+
+  builder.CreateRet(result);
+}
+
+// Create a deep extern expression
+TEST_P(ExpressionsTestParallelContext, ExternExpressionComplex) {
+  parallelContext->setGlobalFunction(/*leaf=*/true);
+
+  // register the function
+  {
+    auto &llvmContext = parallelContext->getLLVMContext();
+    auto module = std::make_unique<llvm::Module>("externModule", llvmContext);
+    define_divide(*module.get());
+
+    parallelContext->linkExternModule(std::move(module));
+  }
+
+  // 8 / -2 == -4
+  auto expr0 = expressions::ExternExpression(
+      "divide", {expression_t{8}, expression_t{-2}}, new IntType());
+  // -4 / -1 == 4
+  auto expr1 = expressions::ExternExpression(
+      "divide", {expr0, expression_t{-1}}, new IntType());
+  // (4 / 3) - 3 == -2
+  auto expr2 = expressions::ExternExpression("divide", {expr1, expression_t{3}},
+                                             new IntType()) -
+               expression_t{3};
+
+  auto number = expr2.accept(*visitor);
+
+  LLVMAssertIEQ(number.value, parallelContext->createInt32(-2));
+
+  parallelContext->compileAndLoad();
+}
+
 INSTANTIATE_TEST_SUITE_P(ExpressionsTestParallelContextCpuGpu,
                          ExpressionsTestParallelContext,
                          testing::Values(ParallelContextRoot::kCPU,

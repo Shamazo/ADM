@@ -35,6 +35,7 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Linker/Linker.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Scalar.h>
@@ -515,6 +516,8 @@ class Context {
   virtual void deallocateStateVar(llvm::Value *v);
 
   [[nodiscard]] virtual llvm::Value *getStateVar(const StateVar &id) const;
+
+  virtual void linkExternModule(std::unique_ptr<llvm::Module> module);
 
  protected:
   virtual void prepareStateVars();

@@ -705,3 +705,12 @@ std::string getFunctionName(void *f) {
   assert(info.dli_sname);
   return info.dli_sname;
 }
+
+void Context::linkExternModule(std::unique_ptr<llvm::Module> module) {
+  assert(&getModule()->getContext() == &module->getContext() &&
+         "Modules have to share the same LLVMContext");
+
+  bool err = llvm::Linker::linkModules(*getModule(), std::move(module));
+
+  assert(!err && "Linking failed");
+}
