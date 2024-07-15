@@ -719,6 +719,11 @@ class RandExpression : public ExpressionCRTP<RandExpression> {
 
 class ExternExpression : public ExpressionCRTP<ExternExpression> {
  public:
+  /**
+   * The `type` argument should match the return type of the external function.
+   * E.g., the type for an `ExternExpression` representing the function `int
+   * round(float)` is `IntType`.
+   */
   ExternExpression(const std::string &name,
                    const std::vector<expression_t> &args,
                    const ExpressionType *type)
