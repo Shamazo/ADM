@@ -361,6 +361,7 @@ Test 16 - codegen:
   - ./unit-context-tests --gtest_output="xml:$CWD/context-tests-report-json.xml"
   - ./unit-parallel-context-tests --gtest_output="xml:$CWD/parallel-context-tests-report-json.xml"
   - ./unit-pipeline-tests --gtest_output="xml:$CWD/pipeline-tests-report-json.xml"
+  - ./unit-expressions-tests --gtest_output="xml:$CWD/expressions-tests-report-json.xml"
  allow_failure: true
  artifacts:
   reports:
@@ -368,6 +369,7 @@ Test 16 - codegen:
      - context-tests-report-json.xml
      - parallel-context-tests-report-json.xml
      - pipeline-tests-report-json.xml
+     - expressions-tests-report-json.xml
 
 #----------------------------------------------------------------------------
 # Performance Tests
