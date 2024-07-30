@@ -268,7 +268,11 @@ void define_multiply(llvm::Module &module) {
   builder.CreateRet(result);
 }
 
-// Call a simple LLVM function
+/* Calls a simple extern llvm function.
+ *
+ * This currently only runs for a plain Context (not for a ParallelContext).
+ * This is because it doesn't work for GPU (see issue #118).
+ */
 TEST_F(ExpressionsTestContext, ExternExpressionMultiply) {
   auto *builder = testContext->getBuilder();
   testContext->prepareTestFunction("resultWrapper", testContext->i32_type, {});
@@ -319,7 +323,11 @@ void define_divide(llvm::Module &module) {
   builder.CreateRet(result);
 }
 
-// Create a deep extern expression
+/* Create a deep extern expression.
+ *
+ * This currently only runs for a plain Context (not for a ParallelContext).
+ * This is because it doesn't work for GPU (see issue #118).
+ */
 TEST_F(ExpressionsTestContext, ExternExpressionComplex) {
   auto *builder = testContext->getBuilder();
   testContext->prepareTestFunction("resultWrapper", testContext->i32_type, {});

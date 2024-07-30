@@ -462,3 +462,9 @@ std::string ParallelContext::getFunctionNameOverload(std::string name,
                                                      llvm::Type *type) {
   return getCurrentPipeline()->getFunctionNameOverload(name, type);
 }
+
+void ParallelContext::linkExternModule(std::unique_ptr<llvm::Module> module) {
+  // This currently doesn't work for GPU ParallelContext.
+  // See issue #118.
+  return Context::linkExternModule(std::move(module));
+}

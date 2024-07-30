@@ -195,6 +195,8 @@ class ParallelContext : public Context {
 
   // string emitPTX();
 
+  void linkExternModule(std::unique_ptr<llvm::Module> module) override;
+
   /**
    * @brief Compiles and loads the generated code into the current context. This
    * is non-blocking, compilation occurs asynchronously
