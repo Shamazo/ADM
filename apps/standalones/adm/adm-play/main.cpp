@@ -34,7 +34,7 @@
 #include <vector>
 
 #include "microbenchmarks.hpp"
-#include "prepared-queries.hpp"
+#include "prepared_queries/prepared-queries.hpp"
 #include "selectivity-micros.hpp"
 #include "ssb-benchmarks.hpp"
 #include "util.hpp"

@@ -27,7 +27,7 @@
 #include <olap/plan/catalog-parser.hpp>
 #include <query-shaping/nvme-shapers.hpp>
 
-#include "prepared-queries.hpp"
+#include "prepared_queries/prepared-queries.hpp"
 #include "util.hpp"
 
 std::string bench_nvme_vary_bw_compressed(int sf, int server_number,
