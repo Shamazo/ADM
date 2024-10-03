@@ -29,17 +29,43 @@
 
 #include "util.hpp"
 
+std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number) {
+  switch (server_number) {
+    case 49:
+      return {0, 1, 2, 3};
+    case 44:
+      return {0};
+    default:
+      LOG(FATAL) << "unknown server number";
+  }
+}
+
+std::vector<uint32_t> get_default_compute_numa_nodes(int server_number) {
+  switch (server_number) {
+    case 49:
+      return {4, 5, 6, 7};
+    case 46:
+      return {1};
+    default:
+      LOG(FATAL) << "unknown server number";
+  }
+}
+
 /**
  *
+
+ * @param compressed should always be false for now, until compression support
+ * is added in this function.
  * @param pushdown_dop degree of parallelism for the pushed down operators
- * @param pushdown_numa_nodes CPU NUMA Node IDs to affinitize the pushdown ops
- * to
- * @param compute_numa_nodes CPU NUMA Node IDs to affinitize the rest of the
- * compute to. Only applicable to shapers that use CPU (i.e.
- * CPUOnlyNvmeProbeFilterPushdown)
+ * @param selectivity the selectivity of the filter in range [0, 1]
  * @param do_transfer For Shaper::NVMECPU only, whether the memmove
  * NVMe->CPU_memory is to memory local to the current core (true) or memory
  * local to the NVMe drive (false). 1 bool per column
+ *  @param pushdown_numa_nodes CPU NUMA Node IDs to affinitize the pushdown ops
+ * to. Currently ignored and set manually
+ * @param compute_numa_nodes CPU NUMA Node IDs to affinitize the rest of the
+ * compute to. Only applicable to shapers that use CPU (i.e.
+ * CPUOnlyNvmeProbeFilterPushdown). Currently ignored and set manually
  */
 std::string bench_pushdown_micro_nvme_vary_sel(
     int server_number,
@@ -48,9 +74,14 @@ std::string bench_pushdown_micro_nvme_vary_sel(
     Shaper shaper_type = Shaper::NVMECPU, int num_iterations = 5,
     int scan_router_slack = 2, int scan_memmove_slack = 4,
     bool compressed = false, std::optional<size_t> pushdown_dop = std::nullopt,
-    std::vector<bool> do_transfer = {false, false},
+    double selectivity = 0.1, std::vector<bool> do_transfer = {false, false},
     std::vector<uint32_t> pushdown_numa_nodes = {0, 1, 2, 3},
     std::vector<uint32_t> compute_numa_nodes = {4, 5, 6, 7}) {
+  pushdown_numa_nodes = get_default_pushdown_numa_nodes(server_number);
+  compute_numa_nodes = get_default_compute_numa_nodes(server_number);
+  CHECK_EQ(compressed, false)
+      << "operation over compressed data not implemented yet for this function";
+
   std::stringstream result_string;
   result_string << "query,"
                 << "is_compressed,"
@@ -74,10 +105,11 @@ std::string bench_pushdown_micro_nvme_vary_sel(
   std::map<std::string, std::function<double(proteus::InputPrefixQueryShaper&)>>
       sel_micro_stats = {
           {"random_ints_100GB_10000", [](auto&) { return 26843545600.0; }}};
-  //  for (const double& sel : {0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4,
-  //  0.5,
-  //                            0.6, 0.7, 0.8, 0.9, 1.0}) {
-  for (const double& sel : {0.0001, 0.1, 1.0}) {
+  //    for (const double& sel : {0.0001, 0.001, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4,
+  //    0.5,
+  //                              0.6, 0.7, 0.8, 0.9, 1.0}) {
+  //  for (const double& sel : {0.0001, 0.1, 1.0}) {
+  for (const double& sel : {selectivity}) {
     /// important, because the relations are all the same from the point of
     /// view of the catalog we need to drop the catalog to ensure we use the
     /// right plugin instance for each configurations of md files
@@ -143,7 +175,8 @@ std::string bench_pushdown_micro_nvme_vary_sel(
 std::string bench_micro_cpu_socket_pushdown_baseline_vary_sel(
     int server_number, int num_iterations = 5, int scan_router_slack = 2,
     int scan_memmove_slack = 4, std::vector<bool> do_transfer = {true, true},
-    bool compressed = false) {
+    bool compressed = false, double selectivity = 0.1) {
+  LOG(INFO) << "selectivity " << selectivity;
   CHECK_EQ(server_number, 49) << "only setup for dias49 at the moment";
   CHECK_EQ(do_transfer.size(), 2);
   std::string post_fix = "";
@@ -160,8 +193,8 @@ std::string bench_micro_cpu_socket_pushdown_baseline_vary_sel(
 
   return bench_pushdown_micro_nvme_vary_sel(
       server_number, {scan_sum_micro, "random_ints_scan_sum" + post_fix},
-      Shaper::NVMECPU, num_iterations, scan_router_slack, scan_memmove_slack,
-      compressed, std::nullopt, do_transfer);
+      Shaper::NVMECPU, num_iterations, 32, 32, compressed, std::nullopt,
+      selectivity, do_transfer);
 }
 
 /**
@@ -175,19 +208,19 @@ std::string bench_micro_cpu_socket_pushdown_baseline_vary_sel(
 std::string bench_micro_cpu_socket_pushdown_filter_vary_sel(
     int server_number, int num_iterations = 5, int scan_router_slack = 2,
     int scan_memmove_slack = 4, bool compressed = false,
-    std::optional<int> pushdown_dop = std::nullopt) {
+    std::optional<int> pushdown_dop = std::nullopt, double selectivity = 0.1) {
   CHECK_EQ(server_number, 49) << "only setup for dias49 at the moment";
   auto ts = global_timestamp_logger->log_time_range(
       "bench_pushdown_filter_" + std::to_string(pushdown_dop.value_or(0)));
 
   return bench_pushdown_micro_nvme_vary_sel(
       server_number,
-      {[](proteus::QueryShaper& morph, double selectivity) {
-         return scan_sum_micro_pushdown(morph, selectivity, false);
+      {[](proteus::QueryShaper& morph, double sel) {
+         return scan_sum_micro_pushdown(morph, sel, false);
        },
        "random_ints_scan_sum"},
-      Shaper::NVMESOCKETPUSHDOWN, num_iterations, scan_router_slack,
-      scan_memmove_slack, compressed, pushdown_dop);
+      Shaper::NVMESOCKETPUSHDOWN, num_iterations, 32, 32, compressed,
+      pushdown_dop, selectivity);
 }
 
 /**
@@ -198,8 +231,9 @@ std::string bench_micro_cpu_socket_pushdown_filter_vary_sel(
 std::string bench_micro_cpu_socket_pushdown_filter_memmove_vary_sel(
     int server_number, int num_iterations = 5, int scan_router_slack = 2,
     int scan_memmove_slack = 4, bool compressed = false,
-    std::optional<int> pushdown_dop = std::nullopt) {
-  CHECK_EQ(server_number, 49) << "only setup for dias49 at the moment";
+    std::optional<int> pushdown_dop = std::nullopt, double selectivity = 0.1) {
+  CHECK(server_number == 49 || server_number == 46)
+      << "not set up for this server: " << server_number;
 
   auto ts = global_timestamp_logger->log_time_range(
       "bench_pushdown_filter_memmove_" +
@@ -207,12 +241,12 @@ std::string bench_micro_cpu_socket_pushdown_filter_memmove_vary_sel(
 
   return bench_pushdown_micro_nvme_vary_sel(
       server_number,
-      {[](proteus::QueryShaper& morph, double selectivity) {
-         return scan_sum_micro_pushdown(morph, selectivity, true);
+      {[](proteus::QueryShaper& morph, double sel) {
+         return scan_sum_micro_pushdown(morph, sel, true);
        },
        "random_ints_scan_sum"},
       Shaper::NVMESOCKETPUSHDOWN, num_iterations, scan_router_slack,
-      scan_memmove_slack, compressed, pushdown_dop);
+      scan_memmove_slack, compressed, pushdown_dop, selectivity);
 }
 
 #endif  // PROTEUS_SELECTIVITY_MICROS_HPP

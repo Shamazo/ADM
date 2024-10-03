@@ -164,6 +164,8 @@ DECLARE_string(timestamp_file);
 DEFINE_string(timestamp_file, "adm-play-timestamps.csv",
               "[optional] output file for TimeStampLogger logs  [default: "
               "adm-play-timestamps.csv]");
+DECLARE_double(selectivity);
+DEFINE_double(selectivity, 0.000001, "selectivity for the micro filter");
 
 TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
@@ -175,7 +177,16 @@ int main(int argc, char* argv[]) {
   std::stringstream ss;
   std::optional<std::ofstream> out = std::nullopt;
   if (!FLAGS_result_file.empty()) {
-    out = std::ofstream(FLAGS_result_file);
+    if (std::filesystem::exists(FLAGS_result_file)) {
+      LOG(INFO) << "Result file " << FLAGS_result_file
+                << " already exists. Appending to it.";
+      out = std::ofstream(FLAGS_result_file, std::ios::app);
+    } else {
+      LOG(INFO) << "Result file " << FLAGS_result_file
+                << " does not exist. Creating it.";
+      out = std::ofstream(FLAGS_result_file);
+    }
+
     CHECK(out->is_open()) << "Could not open result file " << FLAGS_result_file;
   }
 
@@ -322,9 +333,8 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_micro_cpu_socket_pushdown_baseline) {
     LOG(INFO) << "running bench_micro_cpu_socket_pushdown_baseline";
     auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, true}, false);
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, true}, false, FLAGS_selectivity);
     ss << res;
-    ss << std::endl;
     if (out.has_value()) {
       *out << res << std::endl;
     }
@@ -333,9 +343,8 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_micro_cpu_socket_stage_both) {
     LOG(INFO) << "running bench_micro_cpu_socket_stage_both";
     auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {false, false}, false);
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {false, false}, false, FLAGS_selectivity);
     ss << res;
-    ss << std::endl;
     if (out.has_value()) {
       *out << res << std::endl;
     }
@@ -344,9 +353,8 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_micro_cpu_socket_stage_one) {
     LOG(INFO) << "running bench_micro_cpu_socket_stage_one";
     auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, false}, false);
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, false}, false, FLAGS_selectivity);
     ss << res;
-    ss << std::endl;
     if (out.has_value()) {
       *out << res << std::endl;
     }
@@ -360,9 +368,8 @@ int main(int argc, char* argv[]) {
         (FLAGS_pushdown_dop == -1) ? std::nullopt
                                    : std::make_optional(FLAGS_pushdown_dop);
     auto res = bench_micro_cpu_socket_pushdown_filter_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop);
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop, FLAGS_selectivity);
     ss << res;
-    ss << std::endl;
     if (out.has_value()) {
       *out << res << std::endl;
     }
@@ -376,9 +383,8 @@ int main(int argc, char* argv[]) {
         (FLAGS_pushdown_dop == -1) ? std::nullopt
                                    : std::make_optional(FLAGS_pushdown_dop);
     auto res = bench_micro_cpu_socket_pushdown_filter_memmove_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop);
+        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop, FLAGS_selectivity);
     ss << res;
-    ss << std::endl;
     if (out.has_value()) {
       *out << res << std::endl;
     }

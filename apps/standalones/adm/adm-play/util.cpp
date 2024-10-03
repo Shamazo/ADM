@@ -333,24 +333,28 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
 std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
     int server_number) {
   CHECK_EQ(server_number, 49);
-  std::vector<std::string> twelve_drives = {
-      "/nvme1/nicholso/data/random_ints_0_12",   // node 0
-      "/nvme7/nicholso/data/random_ints_1_12",   // node 1
-      "/nvme13/nicholso/data/random_ints_2_12",  // node 2
-      "/nvme14/nicholso/data/random_ints_3_12",  // node 2
-      "/nvme6/nicholso/data/random_ints_4_12",   // node 1
-      "/nvme9/nicholso/data/random_ints_5_12",   // node 3
-      "/nvme3/nicholso/data/random_ints_6_12",   // node 0
-      "/nvme11/nicholso/data/random_ints_7_12",  // node 3
-      "/nvme5/nicholso/data/random_ints_8_12",   // node 1
-      "/nvme10/nicholso/data/random_ints_9_12",  // node 3
-      "/nvme2/nicholso/data/random_ints_10_12",  // node 0
-      "/nvme15/nicholso/data/random_ints_11_12"  // node 2
-  };
+  if (server_number == 49) {
+    std::vector<std::string> twelve_drives = {
+        "/nvme1/nicholso/data/random_ints_0_12",   // node 0
+        "/nvme7/nicholso/data/random_ints_1_12",   // node 1
+        "/nvme13/nicholso/data/random_ints_2_12",  // node 2
+        "/nvme14/nicholso/data/random_ints_3_12",  // node 2
+        "/nvme6/nicholso/data/random_ints_4_12",   // node 1
+        "/nvme9/nicholso/data/random_ints_5_12",   // node 3
+        "/nvme3/nicholso/data/random_ints_6_12",   // node 0
+        "/nvme11/nicholso/data/random_ints_7_12",  // node 3
+        "/nvme5/nicholso/data/random_ints_8_12",   // node 1
+        "/nvme10/nicholso/data/random_ints_9_12",  // node 3
+        "/nvme2/nicholso/data/random_ints_10_12",  // node 0
+        "/nvme15/nicholso/data/random_ints_11_12"  // node 2
+    };
 
-  check_vector_paths(twelve_drives);
+    check_vector_paths(twelve_drives);
 
-  return twelve_drives;
+    return twelve_drives;
+  }
+
+  LOG(FATAL) << "not set up for this server: " << server_number;
 }
 
 std::vector<std::vector<std::string>> get_ran_ints_input_dirs_socket_zero(
