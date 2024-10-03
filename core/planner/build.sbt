@@ -44,6 +44,8 @@ libraryDependencies += "org.junit.jupiter" % "junit-jupiter-params" % "5.3.1" % 
 
 // junit tests (invoke with `sbt test`)
 libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test"
+libraryDependencies += "net.aichler" % "jupiter-interface" % "0.9.0" % "test"
+
 
 fork in Test := true
 
