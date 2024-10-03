@@ -380,15 +380,7 @@ class JITer_impl {
     if (vtuneProfiler == nullptr) {
       LOG(WARNING) << "Could not create VTune listener";
     } else {
-      ObjectLayer.setNotifyLoaded(
-          [this](llvm::orc::MaterializationResponsibility &R,
-                 const object::ObjectFile &Obj,
-                 const RuntimeDyld::LoadedObjectInfo &loi) {
-            std::scoped_lock<std::mutex> lock{vtuneLock};
-            cantFail(R.withResourceKeyDo([&](llvm::orc::ResourceKey k) {
-              vtuneProfiler->notifyObjectLoaded(k, Obj, loi);
-            }));
-          });
+      ObjectLayer.registerJITEventListener(*vtuneProfiler);
     }
 
     if (PerfListener == nullptr) {
