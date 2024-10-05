@@ -26,6 +26,7 @@
 
 #include <olap/plan/prepared-statement.hpp>
 #include <query-shaping/query-shaper.hpp>
+#include <query-shaping/nvme-shapers.hpp>
 
 PreparedStatement small_scan(proteus::QueryShaper &morph,
                              const std::string &lo_column);
@@ -73,5 +74,7 @@ PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
                                      bool move_after_pushdown = false);
 PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph,
                                      bool move_after_pushdown = false);
+
+PreparedStatement prepare11_adaptive(proteus::CPUOnlyNvmeProbeFilterPushdown &morph);
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

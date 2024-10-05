@@ -49,6 +49,7 @@ set(olap_cxx
   lib/operators/nest-opt.cpp
   lib/operators/nest.cpp
   lib/operators/null-filter.cpp
+  lib/operators/operator-state.cpp
   lib/operators/outer-unnest.cpp
   lib/operators/packet-zip.cpp
   lib/operators/print.cpp

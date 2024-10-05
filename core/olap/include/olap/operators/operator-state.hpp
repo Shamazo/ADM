@@ -1,7 +1,7 @@
 /*
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2023
+                            Copyright (c) 2024
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
@@ -25,6 +25,8 @@
 #define PROTEUS_OPERATOR_STATE_HPP
 
 #include <codegen/expressions/expressionTypes.hpp>
+#include <codegen/util/proteus-value.hpp>
+#include <ostream>
 
 class Operator;
 
@@ -49,6 +51,16 @@ class attribute_not_found_in_state : public std::out_of_range {
                           source.what()) {}
 };
 
+/**
+ * @class OperatorState
+ *
+ * @brief OperatorState is an abstraction used during code generation to allow
+ * passing state, in the form of a RecordAttribute-ProteusValueMemory map.
+ *
+ * @see Operator
+ * @see RecordAttribute
+ * @see ProteusValueMemory
+ */
 class OperatorState {
  public:
   OperatorState(const Operator &producer,
@@ -82,6 +94,8 @@ class OperatorState {
       throw attribute_not_found_in_state(key, activeVariables, e);
     }
   }
+
+  friend std::ostream &operator<<(std::ostream &o, const OperatorState &rec);
 
  private:
   const Operator &producer;
