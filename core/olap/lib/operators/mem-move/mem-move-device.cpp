@@ -773,10 +773,10 @@ void MemMoveDevice::close(Pipeline *pip) {
   {
     event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
                                                 pip->getGroup()};
+    mmc->tran.close();
     if (mmc->io_uring) {
       mmc->io_uring->flush();
     }
-    mmc->tran.close();
 
     nvtxRangePop();
     mmc->worker.get();
@@ -832,12 +832,15 @@ void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
   tran.push(buff);
 
   if (io_uring != nullptr) {
-    // 2 is a magic number, might need to tune or find a heuristic
-    while (idle.size_unsafe() < 2) {
+    // if idle is empty, then slack is fully utilized
+    // This means we the catcher is either waiting on IO to be completed or
+    // processing the workunit.
+    while (idle.empty_unsafe()) {
       // poll and handle io_uring completions
       // Polling enters the kernel, reaps completions and executes the callbacks
       io_uring->poll();
-      //      DLOG_EVERY_N(INFO, 100000) << "polling.... ";
+      //      DLOG_EVERY_N(INFO, 500000) << "polling.... idle size: " <<
+      //      idle.size_unsafe() << " tran size: " << tran.size_unsafe();
     }
   }
 }
