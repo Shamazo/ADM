@@ -33,35 +33,19 @@ namespace proteus {
 class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
   [[nodiscard]] pg getPlugin() const override { return pg{"nvme-block"}; }
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::CPU; }
-  /**
-   * @param relName in the legacy catalog, e.g. inputs/ssbm100/lineorder.csv
-   * This is very very hacky dealing with types. We need to come back and fix
-   * the catalog for this or create an actual file format
-   */
-  [[nodiscard]] RelBuilder scan(
-      const std::string &relName,
-      std::initializer_list<std::string> relAttrs) override;
 
   [[nodiscard]] std::string getRelName(const std::string &base) override {
     LOG(FATAL) << "N/A to NVMe shapers";
   }
 
-  RelBuilder distribute_build(RelBuilder input) override {
-    auto rel = input
-                   .router(getDOP(), scan_router_slack, RoutingPolicy::LOCAL,
-                           getDevice(), getAffinitizer())
-                   .memmove(scan_memmove_slack, getDevice());
 
-    if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
-
-    return rel;
-  }
 
   RelBuilder distribute_probe(RelBuilder input) override {
-    auto rel = input.router(getDOP(), getSlack(), RoutingPolicy::LOCAL,
+    auto rel = input.router(getDOP(), scan_router_slack, RoutingPolicy::LOCAL,
                             getDevice(), getAffinitizer());
 
-    if (doMove()) rel = rel.memmove(getSlack(), getDevice(), do_transfer);
+    if (doMove())
+      rel = rel.memmove(scan_memmove_slack, getDevice(), do_transfer);
 
     if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
 
@@ -85,8 +69,29 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
         do_transfer(do_transfer),
         numa_nodes(std::move(std::move(numa_nodes))) {}
 
+  RelBuilder distribute_build(RelBuilder input) override {
+    auto rel = input
+                   .router(getDOP(), scan_router_slack, RoutingPolicy::LOCAL,
+                           getDevice(), getAffinitizer())
+                   .memmove(scan_memmove_slack, getDevice());
+
+    if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
+
+    return rel;
+  }
+
+  /**
+   * @param relName in the legacy catalog, e.g. inputs/ssbm100/lineorder.csv
+   * This is very very hacky dealing with types. We need to come back and fix
+   * the catalog for this or create an actual file format
+   */
+  [[nodiscard]] RelBuilder scan(
+      const std::string &relName,
+      std::initializer_list<std::string> relAttrs) override;
+
   std::unique_ptr<Affinitizer> getAffinitizer() override {
     if (numa_nodes.has_value()) {
+      LOG(INFO) << "using SpecificCpuNumaNodeAffinitizer";
       return std::make_unique<SpecificCpuNumaNodeAffinitizer>(
           numa_nodes.value());
     } else {
@@ -101,6 +106,8 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
         num_compute_cores += topology::getInstance()
                                  .getCpuNumaNodeById(compute_node_id)
                                  .local_cores.size();
+        LOG(INFO) << "compute_node_id: " << compute_node_id
+                  << "  num cores: " << num_compute_cores;
       }
       return DegreeOfParallelism{num_compute_cores};
     } else {
