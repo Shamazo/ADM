@@ -501,10 +501,7 @@ void Router::close(Pipeline *pip) {
   // time_block t("Tterm_exchange: ");
 
   int rem = --remaining_producers;
-  assert(rem >= 0);
-
-  // for (int i = 0 ; i < fanout ; ++i) ready_pool_cv[i].notify_all();
-
+  CHECK_GE(rem, 0);
   if (rem == 0) {
     for (int i = 0; i < fanout; ++i) ready_fifo[i].close();
 

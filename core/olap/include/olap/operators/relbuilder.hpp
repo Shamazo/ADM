@@ -413,9 +413,11 @@ class RelBuilder {
    * Union the items from the current flow and the others
    *
    * @param     others  flows to unify with current one
+   * @param     fanout  degree of parallelism for the pipeline after the union
    */
   [[nodiscard]] RelBuilder unionAll(
-      const std::vector<RelBuilder>& others) const;
+      const std::vector<RelBuilder>& others,
+      DegreeOfParallelism fanout = DegreeOfParallelism{1}) const;
 
   [[nodiscard]] RelBuilder to_gpu() const;
 
@@ -651,7 +653,8 @@ class RelBuilder {
 
   [[nodiscard]] RelBuilder unionAll(
       const std::vector<RelBuilder>& children,
-      const std::vector<RecordAttribute*>& wantedFields) const;
+      const std::vector<RecordAttribute*>& wantedFields,
+      DegreeOfParallelism fanout) const;
 
   [[nodiscard]] RelBuilder membrdcst(
       const std::vector<RecordAttribute*>& wantedFields,

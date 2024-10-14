@@ -29,13 +29,16 @@
 class UnionAll : public Router {
  public:
   UnionAll(std::vector<Operator *> &children,
-           const std::vector<RecordAttribute *> &wantedFields)
-      : Router(children[0], DegreeOfParallelism{1}, wantedFields, 8,
-               std::nullopt, RoutingPolicy::RANDOM,
-               getDefaultAffinitizer(DeviceType::CPU)),
+           const std::vector<RecordAttribute *> &wantedFields,
+           DegreeOfParallelism fanout = DegreeOfParallelism{1})
+      : Router(children[0], fanout, wantedFields, 8, std::nullopt,
+               RoutingPolicy::RANDOM, getDefaultAffinitizer(DeviceType::CPU)),
         children(children) {
+    CHECK_GT(children.size(), 0)
+        << "UnionAll operator must have at least one child";
     setChild(nullptr);
-    producers = children.size();
+    producers = children.size() * children[0]->getDOP().dop;
+    remaining_producers = producers;
   }
 
   ~UnionAll() override { LOG(INFO) << "Collapsing UnionAll operator"; }
@@ -52,27 +55,16 @@ class UnionAll : public Router {
     return dop;
   }
 
-  DegreeOfParallelism getDOP() const override {
-    auto dop = children[0]->getDOP();
-#ifdef NDEBUG
-    for (const auto &op : children) {
-      assert(dop == op->getDOP());
-    }
-#endif
-    return dop;
-  }
-
   DeviceType getDeviceType() const override {
-    assert(children.size() > 0);
     return children[0]->getDeviceType();
   }
 
   [[nodiscard]] bool isPacked() const override {
-    assert(children.size() > 0);
     auto x = children[0]->isPacked();
 #ifndef NDEBUG
     for (const auto &c : children) {
-      assert(x == c->isPacked());
+      CHECK_EQ(x, c->isPacked())
+          << "UnionAll operator children must have the same packing";
     }
 #endif
     return x;

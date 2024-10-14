@@ -50,14 +50,14 @@ void freeBuffer(int target, Router *xch, void *buff);
 
 class Router : public experimental::UnaryOperator {
  public:
-  Router(Operator *const child, DegreeOfParallelism numOfParents,
+  Router(Operator *const child, DegreeOfParallelism fanout,
          std::vector<RecordAttribute *> wantedFields, size_t slack,
          std::optional<expression_t> hash, RoutingPolicy policy_type,
          std::unique_ptr<Affinitizer> aff)
       : UnaryOperator(child),
         wantedFields(std::move(wantedFields)),
         slack(slack),
-        fanout(numOfParents.dop),
+        fanout(fanout.dop),
         producers(child->getDOP().dop),
         remaining_producers(producers),
         hashExpr(std::move(hash)),
