@@ -34,6 +34,7 @@ set(olap_cxx
   lib/operators/mem-move/mem-move-device.cpp
   lib/operators/mem-move/mem-move-local-to.cpp
   lib/operators/mem-move/mem-move-scaleout.cpp
+  lib/operators/router/generalized-router.cpp
   lib/operators/router/router.cpp
   lib/operators/router/router-scaleout.cpp
   lib/operators/agg-t.cpp

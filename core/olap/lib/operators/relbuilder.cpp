@@ -29,6 +29,7 @@
 #include <lib/operators/bloom-filter/bloom-filter-build.hpp>
 #include <lib/operators/bloom-filter/bloom-filter-probe.hpp>
 #include <lib/operators/bloom-filter/bloom-filter-repack.hpp>
+#include <lib/operators/router/generalized-router.hpp>
 #include <lib/plugins/vector/vector-plugin.hpp>
 #include <lib/util/flush-operator-tree.hpp>
 #include <utility>
@@ -112,7 +113,7 @@ void RelBuilder::setOIDType(CatalogParser &catalog, std::string relName,
   catalog.getInputInfo(std::move(relName))->oidType = type;
 }
 
-RelBuilder RelBuilder::apply(Operator *op) const {
+Operator *RelBuilder::registerOutput(Operator *op) const {
   // Registered op's output relation, if it's not already registered
   auto args = op->getRowType().getArgs();
   if (!args.empty()) {
@@ -121,7 +122,11 @@ RelBuilder RelBuilder::apply(Operator *op) const {
       catalog.getOrCreateInputInfo(a->getRelationName(), ctx);
     }
   }
-  return {*this, op};
+  return op;
+}
+
+RelBuilder RelBuilder::apply(Operator *op) const {
+  return {*this, registerOutput(op)};
 }
 
 RelBuilder RelBuilder::scan(Plugin &pg) const {
@@ -156,6 +161,11 @@ RelBuilder RelBuilder::membrdcst(
   auto op =
       new MemBroadcastDevice(root, wantedFields, fanout, to_cpu, always_share);
   return apply(op);
+}
+
+RelBuilder RelBuilder::membrdcst(DegreeOfParallelism fanout, DeviceType target,
+                                 bool always_share) const {
+  return membrdcst(fanout, target == DeviceType::CPU, always_share);
 }
 
 RelBuilder RelBuilder::membrdcst(DegreeOfParallelism fanout, bool to_cpu,
@@ -781,8 +791,6 @@ auto getPluginFactory(const std::string &pgType) {
   auto name = hyphenatedPluginToCamel(pgType);
   std::string conv = "create" + name + "Plugin";
 
-  LOG(INFO) << "PluginName: " << name;
-
   static auto handle = dlopen(nullptr, 0);
 
   auto create = (plugin_creator_t)dlsym(handle, conv.c_str());
@@ -948,22 +956,41 @@ RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
       p));
 }
 
-RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children) const {
+SplitRelBuilder RelBuilder::gsplit(size_t slack, RoutingPolicy p) const {
+  return SplitRelBuilder{apply(new proteus::GeneralizedRouter(
+      root, slack,
+      [&] {
+        std::vector<RecordAttribute *> attrs;
+        for (const auto &attr : getOutputArg().getProjections()) {
+          if (p == RoutingPolicy::HASH_BASED &&
+              attr.getAttrName() == "__broadcastTarget") {
+            continue;
+          }
+          attrs.emplace_back(new RecordAttribute{attr});
+        }
+        return attrs;
+      }(),
+      p))};
+}
+
+RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,
+                                DegreeOfParallelism fanout) const {
   std::vector<RecordAttribute *> projections;
   for (const auto &attr : getOutputArg().getProjections()) {
     projections.emplace_back(new RecordAttribute{attr});
   }
 
-  return unionAll(children, projections);
+  return unionAll(children, projections, fanout);
 }
 
 RelBuilder RelBuilder::unionAll(
     const std::vector<RelBuilder> &children,
-    const std::vector<RecordAttribute *> &wantedFields) const {
+    const std::vector<RecordAttribute *> &wantedFields,
+    DegreeOfParallelism fanout) const {
   std::vector<Operator *> c2{root};
   c2.reserve(children.size() + 1);
   for (const auto &c : children) c2.emplace_back(c.root);
-  auto op = new UnionAll(c2, wantedFields);
+  auto op = new UnionAll(c2, wantedFields, fanout);
   for (const auto &c : children) c.apply(op);
   return apply(op);
 }
@@ -1055,4 +1082,22 @@ RelBuilder RelBuilder::pack() const {
 
 std::ostream &operator<<(std::ostream &out, const RelBuilder &builder) {
   return out << *(builder.operator->());
+}
+
+SplitRelBuilder::SplitRelBuilder(RelBuilder builder) : src(std::move(builder)) {
+  CHECK_NE(dynamic_cast<proteus::GeneralizedRouter *>(src.root), nullptr)
+      << "SplitRelBuilder can only be constructed if the root operator of the "
+         "provided RelBuilder is a GeneralizedRouter";
+}
+
+RelBuilder SplitRelBuilder::path(DeviceType target,
+                                 std::unique_ptr<Affinitizer> aff) const {
+  return path(target, RelBuilder::getDefaultDOP(target), std::move(aff));
+}
+
+RelBuilder SplitRelBuilder::path(DeviceType target, DegreeOfParallelism dop,
+                                 std::unique_ptr<Affinitizer> aff) const {
+  return {src.ctx,
+          dynamic_cast<proteus::GeneralizedRouter *>(src.root)->appendConsumer(
+              target, dop, std::move(aff))};
 }

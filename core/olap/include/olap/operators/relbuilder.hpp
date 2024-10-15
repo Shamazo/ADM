@@ -49,6 +49,8 @@ class [[nodiscard]] pg {
   [[nodiscard]] auto getType() const { return pgType; }
 };
 
+class SplitRelBuilder;
+
 /**
  * @class RelBuilder
  * The RelBuilder class is used to construct PreparedStatements
@@ -59,13 +61,14 @@ class [[nodiscard]] pg {
  * hand
  */
 class RelBuilder {
- private:
+ protected:
   OlapParallelContext* ctx;
   Operator* root;
 
   RelBuilder(OlapParallelContext* ctx, Operator* root);
   RelBuilder(const RelBuilder& builder, Operator* root);
 
+  Operator* registerOutput(Operator* op) const;
   RelBuilder apply(Operator* op) const;
 
   [[nodiscard]] expressions::InputArgument getOutputArg() const;
@@ -88,6 +91,7 @@ class RelBuilder {
   explicit RelBuilder(OlapParallelContext* ctx);
 
   friend class RelBuilderFactory;
+  friend class SplitRelBuilder;
 
   static void registerPlugin(const std::string& relName, Plugin* pg);
 
@@ -290,6 +294,10 @@ class RelBuilder {
   [[nodiscard]] RelBuilder membrdcst(DegreeOfParallelism fanout, bool to_cpu,
                                      bool always_share = false) const;
 
+  [[nodiscard]] RelBuilder membrdcst(DegreeOfParallelism fanout,
+                                     DeviceType target,
+                                     bool always_share = false) const;
+
   [[nodiscard]] RelBuilder membrdcst(DeviceType target,
                                      bool always_share = false) const;
 
@@ -408,6 +416,8 @@ class RelBuilder {
   [[nodiscard]] RelBuilder split(
       size_t alternatives, size_t slack, RoutingPolicy p,
       std::unique_ptr<Affinitizer> aff = nullptr) const;
+
+  [[nodiscard]] SplitRelBuilder gsplit(size_t slack, RoutingPolicy p) const;
 
   /**
    * Union the items from the current flow and the others
@@ -687,6 +697,40 @@ class RelBuilder {
   }
 
   friend class PlanExecutor;
+};
+
+class SplitRelBuilder {
+ protected:
+  RelBuilder src;
+  explicit SplitRelBuilder(RelBuilder builder);
+
+  friend class RelBuilder;
+
+ public:
+  /**
+   * Add a path after a gsplit. An arbitrary number of paths can be added.
+   * @param target target device for the path
+   * @param dop degree of parallelism for the path. i.e how many instances of
+   * the pipeline will be launched for this path
+   * @param aff affinitizer that will be used for the pipeline instances in the
+   * path
+   * @see RelBuilder::UnionAll
+   * @see RelBuilder::gsplit
+   */
+  [[nodiscard]] RelBuilder path(DeviceType target, DegreeOfParallelism dop,
+                                std::unique_ptr<Affinitizer> aff) const;
+  /**
+   * Add a path after a gsplit. An arbitrary number of paths can be added.
+   * This version of path will use the default degree of parallelism for the
+   * target DeviceType
+   * @param target target device for the path (Not currently used)
+   * @param aff affinitizer that will be used for the pipeline instances in the
+   * path
+   * @see RelBuilder::UnionAll
+   * @see RelBuilder::gsplit
+   */
+  [[nodiscard]] RelBuilder path(DeviceType target,
+                                std::unique_ptr<Affinitizer> aff) const;
 };
 
 std::ostream& operator<<(std::ostream& out, const RelBuilder& builder);
