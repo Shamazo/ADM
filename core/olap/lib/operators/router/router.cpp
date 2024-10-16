@@ -25,13 +25,13 @@
 
 #include <codegen/jit/pipeline.hpp>
 #include <cstring>
-#include <olap/routing/routing-policy.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/util/demangle.hpp>
 #include <platform/util/timing.hpp>
 
 #include "lib/expressions/expressions-generator.hpp"
+#include "lib/operators/router/routing-policy.hpp"
 
 using namespace llvm;
 

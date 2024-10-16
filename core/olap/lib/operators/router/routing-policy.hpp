@@ -26,13 +26,12 @@
 
 #include <codegen/expressions/expressions.hpp>
 #include <olap/plugins/plugins.hpp>
+#include <olap/routing/affinitizers.hpp>
 #include <olap/routing/routing-policy-types.hpp>
 #include <olap/util/parallel-context.hpp>
 #include <platform/topology/device-types.hpp>
 #include <platform/topology/topology.hpp>
 #include <utility>
-
-#include "affinitizers.hpp"
 
 struct routing_target {
   llvm::Value *target;

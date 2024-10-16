@@ -26,11 +26,11 @@
 #include <codegen/jit/pipeline.hpp>
 #include <lib/expressions/expressions-generator.hpp>
 #include <lib/util/catalog.hpp>
-#include <olap/routing/routing-policy.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/util/demangle.hpp>
 #include <platform/util/timing.hpp>
 
+#include "lib/operators/router/routing-policy.hpp"
 #include "router.hpp"
 
 namespace proteus {

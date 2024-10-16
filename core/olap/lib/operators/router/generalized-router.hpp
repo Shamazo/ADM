@@ -24,11 +24,13 @@
 #ifndef PROTEUS_GENERALIZED_ROUTER_HPP
 #define PROTEUS_GENERALIZED_ROUTER_HPP
 
-#include <lib/operators/operators.hpp>
-#include <olap/routing/routing-policy.hpp>
+#include <olap/routing/affinitizers.hpp>
 #include <platform/memory/managed-pointer.hpp>
 #include <platform/threadpool/threadvector.hpp>
 #include <platform/util/datastructures/threadsafe-set.hpp>
+
+#include "lib/operators/operators.hpp"
+#include "lib/operators/router/routing-policy.hpp"
 
 namespace proteus {
 

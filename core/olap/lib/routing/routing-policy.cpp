@@ -21,15 +21,15 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "olap/routing/routing-policy.hpp"
+#include "lib/operators/router/routing-policy.hpp"
 
+#include <olap/routing/affinitizers.hpp>
 #include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/topology/topology.hpp>
 
 #include "lib/expressions/expressions-generator.hpp"
 #include "lib/operators/operators.hpp"
-#include "olap/routing/affinitizers.hpp"
 
 extern "C" size_t random_local_cu(void *ptr, AffinityPolicy *aff) {
   return aff->getIndexOfRandLocalCU(ptr);

@@ -26,7 +26,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <olap/routing/routing-policy.hpp>
 #include <olap/util/parallel-context.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/threadpool/threadvector.hpp>
@@ -40,6 +39,7 @@
 #include <utility>
 
 #include "lib/operators/operators.hpp"
+#include "lib/operators/router/routing-policy.hpp"
 
 class Router;
 
