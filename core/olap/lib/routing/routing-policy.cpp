@@ -31,7 +31,7 @@
 #include "lib/expressions/expressions-generator.hpp"
 #include "lib/operators/operators.hpp"
 
-extern "C" size_t random_local_cu(void *ptr, AffinityPolicy *aff) {
+extern "C" size_t random_local_cu_index(void *ptr, AffinityPolicy *aff) {
   return aff->getIndexOfRandLocalCU(ptr);
 }
 
@@ -95,7 +95,7 @@ namespace routing {
   auto this_ptr = Builder->CreateIntToPtr(context->createInt64((uintptr_t)aff),
                                           charPtrType);
 
-  auto target = context->gen_call(random_local_cu, {ptr8, this_ptr});
+  auto target = context->gen_call(random_local_cu_index, {ptr8, this_ptr});
 
   return {target, true};
 }

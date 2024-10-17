@@ -417,7 +417,8 @@ class RelBuilder {
       size_t alternatives, size_t slack, RoutingPolicy p,
       std::unique_ptr<Affinitizer> aff = nullptr) const;
 
-  [[nodiscard]] SplitRelBuilder gsplit(size_t slack, RoutingPolicy p) const;
+  [[nodiscard]] SplitRelBuilder gsplit(size_t slack,
+                                       GeneralizedRoutingPolicy p) const;
 
   /**
    * Union the items from the current flow and the others

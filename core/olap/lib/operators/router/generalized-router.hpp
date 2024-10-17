@@ -37,11 +37,9 @@ namespace proteus {
 class GeneralizedRouter;
 
 [[nodiscard]] void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
-                                             PipelineGen *pipGen,
                                              int64_t groupId);
 [[nodiscard]] void *try_acquireBufferGeneralized(int target,
                                                  GeneralizedRouter *xch,
-                                                 PipelineGen *pipGen,
                                                  int64_t groupId);
 void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff);
 
@@ -49,16 +47,21 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
  protected:
   GeneralizedRouter &producer;
 
-  DegreeOfParallelism fanout;
+  const DegreeOfParallelism fanout;
   PipelineGen *catch_pip;
 
   std::unique_ptr<Affinitizer> aff;
+  const DeviceType target_device;
 
  public:
   GeneralizedRouterConsumer(GeneralizedRouter &producer,
                             DegreeOfParallelism fanout,
-                            std::unique_ptr<Affinitizer> aff)
-      : producer(producer), fanout(std::move(fanout)), aff(std::move(aff)) {}
+                            std::unique_ptr<Affinitizer> aff,
+                            DeviceType target_device)
+      : producer(producer),
+        fanout(std::move(fanout)),
+        aff(std::move(aff)),
+        target_device(std::move(target_device)) {}
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
@@ -79,8 +82,9 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
 
  protected:
   void produce_(OlapParallelContext *context) override;
-  virtual void spawnWorker(const void *session, threadvector &firers);
-  virtual void fire(int target, int local_target, PipelineGen *pipGen,
+  virtual void spawnWorker(const void *session, size_t queue_offset,
+                           threadvector &firers);
+  virtual void fire(int target_queue, int local_target, PipelineGen *pipGen,
                     const void *session);
   virtual void foreachTaskDo(int target, Pipeline *pip, PipelineGen *pipGen,
                              std::function<void(void *)> f);
@@ -132,25 +136,20 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   //      free_pool{proteus::memory::ExplicitSocketPinnedMemoryAllocator<
   //          AsyncQueueMPMC<void *>>{1}};
   //  //  threadsafe_set<void *> *free_pool = nullptr;
+  std::deque<void *> buffer_data;
 
-  const RoutingPolicy policy_type;
+  const GeneralizedRoutingPolicy policy_type;
   std::unique_ptr<routing::RoutingPolicy> routing;
 
  public:
   GeneralizedRouter(Operator *child, size_t slack,
                     std::vector<RecordAttribute *> attrs,
-                    RoutingPolicy policy_type)
+                    GeneralizedRoutingPolicy policy_type)
       : experimental::UnaryOperator(child),
         slack(slack),
         wantedFields(std::move(attrs)),
         policy_type(policy_type),
-        producers(child->getDOP()),
-        routing(
-            getPolicy(policy_type,
-                      DegreeOfParallelism{
-                          topology::getInstance().getGpuCount() +
-                          topology::getInstance().getCoreCount()} /* FIXME */,
-                      wantedFields)) {}
+        producers(child->getDOP()) {}
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
@@ -161,21 +160,34 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   [[nodiscard]] DegreeOfParallelism getDOP() const override;
 
-  GeneralizedRouterConsumer *appendConsumer(DeviceType target,
+  GeneralizedRouterConsumer *appendConsumer(DeviceType target_device,
                                             DegreeOfParallelism dop,
                                             std::unique_ptr<Affinitizer> aff);
 
  protected:
+  /**
+   * Aquire a buffer from a free_pool
+   * @param target The free pool to aquire a buffer from
+   * @param polling If false, the function will block until a buffer is
+   * available. If true, will return nullptr if the target free pool is empty
+   * @param groupId unsure why needed
+   * @return nullptr or a buffer
+   */
   [[nodiscard]] virtual proteus::managed_ptr acquireBufferGeneralized(
-      int target, bool polling, PipelineGen *pipGen, int64_t groupId);
+      int target, bool polling, int64_t groupId);
+  /**
+   * Release a buffer to the target ready queue
+   * @param target target queue
+   * @param buff buffer previously acquired from the target free pool
+   */
   virtual void releaseBufferGeneralized(int target, proteus::managed_ptr buff);
   virtual void freeBufferGeneralized(int target, proteus::managed_ptr buff);
   virtual bool get_readyGeneralized(int target, proteus::managed_ptr &buff);
 
   friend void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
-                                        PipelineGen *pipGen, int64_t groupId);
+                                        int64_t groupId);
   friend void *try_acquireBufferGeneralized(int target, GeneralizedRouter *xch,
-                                            PipelineGen *pipGen,
+
                                             int64_t groupId);
   friend void releaseBufferGeneralized(int target, GeneralizedRouter *xch,
                                        void *buff);
@@ -186,14 +198,21 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
                           OlapParallelContext *context);
 
   virtual void open(Pipeline *pip);
+  /**
+   * helper function to open queues and allocate queue buffers
+   * Assumes init_mutex is held when called.
+   */
+  virtual void open_queues();
+  virtual void allocate_buffers_for_queue(size_t queue);
   virtual void close(Pipeline *pip);
 
   virtual llvm::Value *createTaskDescription(OlapParallelContext *context,
                                              const OperatorState &childState);
 
   [[nodiscard]] virtual size_t getNumberOfQueues() const;
+
   static std::unique_ptr<routing::RoutingPolicy> getPolicy(
-      RoutingPolicy p, DegreeOfParallelism dop,
+      GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
       const std::vector<RecordAttribute *> &wantedFields);
 
   friend class GeneralizedRouterConsumer;

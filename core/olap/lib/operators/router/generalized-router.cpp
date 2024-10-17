@@ -38,17 +38,15 @@ namespace proteus {
 int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
 
 [[nodiscard]] void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
-                                             PipelineGen *pipGen,
                                              int64_t groupId) {
-  return xch->acquireBufferGeneralized(target, false, pipGen, groupId)
-      .release();
+  return xch->acquireBufferGeneralized(target, false, groupId).release();
 }
 
 [[nodiscard]] void *try_acquireBufferGeneralized(int target,
                                                  GeneralizedRouter *xch,
-                                                 PipelineGen *pipGen,
+
                                                  int64_t groupId) {
-  return xch->acquireBufferGeneralized(target, true, pipGen, groupId).release();
+  return xch->acquireBufferGeneralized(target, true, groupId).release();
 }
 
 void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
@@ -64,8 +62,7 @@ void GeneralizedRouterConsumer::produce_(OlapParallelContext *context) {
 }
 
 void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
-                                        const OperatorState &childState)
-{
+                                        const OperatorState &childState) {
   auto &llvmContext = context->getLLVMContext();
 
   Plugin *pg = Catalog::getInstance().getPlugin(
@@ -166,7 +163,7 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
 }
 
 std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
-    RoutingPolicy p, DegreeOfParallelism dop,
+    GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
     const std::vector<RecordAttribute *> &wantedFields) {
   switch (p) {
       //    case RoutingPolicy::HASH_BASED: {
@@ -188,13 +185,15 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
       //      //          fanout, wantedFields, new AffinityPolicy(fanout,
       //      //          aff.get()));
       //      //    }
-    case RoutingPolicy::LOCAL:  // FIXME: add the flexible version
-    case RoutingPolicy::FORCE_LOCAL: {
+    case GeneralizedRoutingPolicy::SHARED_LOCAL:  // FIXME: add the flexible
+                                                  // version
+    case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
       return std::make_unique<routing::Local>(
           dop, wantedFields,
           new AffinityPolicy(dop, new CpuNumaNodeAffinitizer()));
     }
-    case RoutingPolicy::RANDOM: {
+    case GeneralizedRoutingPolicy::SHARED_RANDOM: {
+      // TODO getPolicy isn't used for SHARED_RANDOM
       return std::make_unique<routing::Random>(dop);
     }
     default: {
@@ -306,6 +305,18 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
 
 void GeneralizedRouter::consume(OlapParallelContext *context,
                                 const OperatorState &childState) {
+  /*
+   * At this point we are compiling, so no more GeneralizedRouterConsumers
+   * should be added. This means we know how many pipelines we are splitting
+   * into. So we construct the routing policy here to enable policies that wish
+   * to use that the number of split pipelines.
+   */
+  DCHECK_EQ(routing, nullptr);
+  routing = getPolicy(
+      policy_type,
+      DegreeOfParallelism{topology::getInstance().getCpuNumaNodes().size()},
+      wantedFields);
+
   llvm::LLVMContext &llvmContext = context->getLLVMContext();
   llvm::IRBuilder<> *Builder = context->getBuilder();
 
@@ -327,14 +338,11 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
       ->gen_do([&]() {
         // FIXME: rest of policies
         switch (policy_type) {
-          case RoutingPolicy::RANDOM: {
+          case GeneralizedRoutingPolicy::SHARED_RANDOM: {
+            DCHECK_EQ(getNumberOfQueues(), 1);
             target = context->createInt32(0);
-            param_ptr = context->gen_call(
-                proteus::acquireBufferGeneralized,
-                {target, exchange,
-                 context->CastPtrToLlvmPtr(charPtrType,
-                                           context->getCurrentPipeline()),
-                 groupId});
+            param_ptr = context->gen_call(proteus::acquireBufferGeneralized,
+                                          {target, exchange, groupId});
             break;
           }
           default: {
@@ -382,7 +390,11 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
                       Builder->CreateTruncOrBitCast(
                           context->gen_call(rand, {}),
                           llvm::Type::getInt32Ty(llvmContext)),
-                      context->createInt32(2));
+                      context->createInt32(
+                          topology::getInstance()
+                              .getCpuNumaNodeCount()));  // TODO assumes CPU
+                                                         // NUMA affinitization
+                                                         // only for now
                   may_retry = false;
 
                   b2 = Builder->GetInsertBlock();
@@ -400,10 +412,7 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
                 (may_retry)
                     ? (proteus::try_acquireBufferGeneralized /* FIXME */)
                     : (proteus::acquireBufferGeneralized),
-                {target, exchange,
-                 context->CastPtrToLlvmPtr(charPtrType,
-                                           context->getCurrentPipeline()),
-                 groupId});
+                {target, exchange, groupId});
 
             break;
           }
@@ -437,16 +446,26 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
 
 size_t GeneralizedRouter::getNumberOfQueues() const {
   switch (policy_type) {
-    case RoutingPolicy::LOCAL:  // FIMXE
-    case RoutingPolicy::FORCE_LOCAL: {
+    case GeneralizedRoutingPolicy::SHARED_LOCAL:  // FIMXE
+    case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
       auto &topo = topology::getInstance();
       return topo.getCpuNumaNodeCount() + topo.getGpuCount();
     }
-    case RoutingPolicy::RANDOM: {
+    case GeneralizedRoutingPolicy::SHARED_RANDOM: {
       return 1;
     }
-    case RoutingPolicy::HASH_BASED: {
-      return getDOP();
+    case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
+      // Note: code path is not tested at the moment
+      size_t consumer_dop = consumers.front()->getDOP();
+      for (const auto &cons : consumers) {
+        CHECK_EQ(cons->getDOP(), consumer_dop)
+            << "All consumers must have the "
+               "same DOP for SHARED_HASH_BASED";
+      }
+      return consumer_dop;
+    }
+    default: {
+      LOG(FATAL) << "Unimplemented";
     }
   }
 }
@@ -457,35 +476,104 @@ DegreeOfParallelism GeneralizedRouter::getDOP() const {
   return DegreeOfParallelism{total};
 }
 
+void GeneralizedRouter::allocate_buffers_for_queue(size_t queue) {
+  void *mem = MemoryManager::mallocPinned(buf_size * slack);
+  buffer_data.emplace_back(mem);
+  for (int j = 0; j < slack; ++j) {
+    freeBufferGeneralized(queue,
+                          proteus::managed_ptr{((char *)mem) + j * buf_size});
+  }
+}
+
+void GeneralizedRouter::open_queues() {
+  const auto queueCnt = getNumberOfQueues();
+  if (free_pool.size() != queueCnt) {
+    free_pool.clear();
+    ready_fifo.clear();
+    for (size_t i = 0; i < queueCnt; ++i) {
+      // note, queues currently don't use numa affinity for memory allocation
+      free_pool.emplace_back(1);
+      ready_fifo.emplace_back(1);
+
+      switch (policy_type) {
+          // queues [0, num_cpu_numa_nodes) are CPU NUMA nodes
+          // queues [num_cpu_numa_nodes, num_cpu_numa_nodes + num_gpus) are GPUs
+        case GeneralizedRoutingPolicy::SHARED_LOCAL:  // FIMXE
+        case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
+          if (i < topology::getInstance().getCpuNumaNodeCount()) {
+            auto &numa = topology::getInstance().getCpuNumaNodes()[i];
+            auto exec_scope = numa.set_on_scope();
+            std::this_thread::yield();
+            allocate_buffers_for_queue(i);
+          } else {
+            auto &gpu =
+                topology::getInstance()
+                    .getGpus()[i -
+                               topology::getInstance().getCpuNumaNodeCount()];
+            auto exec_scope = gpu.set_on_scope();
+            std::this_thread::yield();
+            allocate_buffers_for_queue(i);
+          }
+          break;
+        }
+        case GeneralizedRoutingPolicy::SHARED_RANDOM: {
+          CHECK_EQ(i, 0) << "SHARED_RANDOM should only have a single queue";
+          CHECK_NE(buf_size, 0);
+          allocate_buffers_for_queue(i);
+          break;
+        }
+        case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
+          CHECK_NE(buf_size, 0);
+          allocate_buffers_for_queue(i);
+          break;
+        }
+        }
+        default: {
+          LOG(FATAL) << "Unimplemented";
+        }
+      }
+    }
+  } else {
+    for (auto &f2 : free_pool) f2.reset();
+    for (auto &f2 : ready_fifo) f2.reset();
+  }
+  return;
+}
+
 void GeneralizedRouter::open(Pipeline *pip) {
   std::lock_guard<std::mutex> guard(init_mutex);
 
   if (firers.empty()) {
-    auto queueCnt = getNumberOfQueues();
-
-    if (free_pool.size() != queueCnt) {
-      free_pool.clear();  // = new threadsafe_set<void *>[fanout];
-      ready_fifo.clear();
-      //    ready_fifo.reserve(fanout);
-      //    ready_fifo = new AsyncQueueMPMC<void *>[fanout];
-      //    assert(free_pool);
-
-      auto limit = 1;  // dynamic_cast<Split *>(this) ? 1 : 2;
-      for (int i = 0; i < queueCnt; ++i) {
-        free_pool.emplace_back(1 /* FIXME: i % limit +
-                               (dynamic_cast<Split *>(this) ? 1 : 0) */);
-        ready_fifo.emplace_back(1 /* FIXME: i % limit +
-                               (dynamic_cast<Split *>(this) ? 1 : 0) */);
-        //      ready_fifo[i].reset();
-      }
-    } else {
-      for (auto &f2 : free_pool) f2.reset();
-      for (auto &f2 : ready_fifo) f2.reset();
-    }
+    open_queues();
 
     //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_START);
     remaining_producers = producers;
-    for (auto &cons : consumers) cons->spawnWorker(pip->getSession(), firers);
+    auto &topo = topology::getInstance();
+    auto queue_offset = [policy = policy_type,
+                         num_numa_nodes =
+                             topo.getCpuNumaNodeCount() + topo.getGpuCount()](
+                            size_t consumer_index) -> size_t {
+      switch (policy) {
+        case GeneralizedRoutingPolicy::SHARED_LOCAL:
+        case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL:
+        case GeneralizedRoutingPolicy::SHARED_RANDOM:
+        case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
+          return 0;
+        }
+        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+          return consumer_index * num_numa_nodes * consumer_index;
+        }
+        default: {
+          LOG(FATAL) << "Unimplemented";
+        }
+      }
+    };
+    size_t consumer_index = 0;
+    for (auto &cons : consumers) {
+      cons->spawnWorker(pip->getSession(), queue_offset(consumer_index),
+                        firers);
+      consumer_index += 1;
+    }
     //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_END);
   }
 }
@@ -494,36 +582,49 @@ void GeneralizedRouter::close(Pipeline *pip) {
   time_block t("Tterm_exchange: ");
 
   int rem = --remaining_producers;
-  assert(rem >= 0);
-
-  // for (int i = 0 ; i < fanout ; ++i) ready_pool_cv[i].notify_all();
+  CHECK_GE(rem, 0);
 
   if (rem == 0) {
-    size_t p = 0;
     for (auto &r : ready_fifo) {
       r.close();
     }
 
     //    eventlogger.log(this, log_op::EXCHANGE_JOIN_START);
     nvtxRangePushA("Exchange_waiting_to_close");
-    for (auto &t : firers) t.get();
+    for (auto &thread : firers) thread.get();
     nvtxRangePop();
     //    eventlogger.log(this, log_op::EXCHANGE_JOIN_END);
     firers.clear();
-
+    for (int queue = 0; queue < getNumberOfQueues(); queue++) {
+      for (int j = 0; j < slack; ++j) {
+        /* Release and ignore, it will be handled by the following freePinned */
+        ((void)(acquireBufferGeneralized(queue, false, pip->getGroup())
+                    .release()));
+      }
+    }
+    for (auto &r : buffer_data) {
+      MemoryManager::freePinned(r);
+    }
+    buffer_data.clear();
     for (auto &r : free_pool) r.close();
-    //    //    delete[] free_pool;
-    //    free_pool.clear();
-    //    //    delete[] ready_fifo;
-    //    ready_fifo.clear();
   }
 }
+
 GeneralizedRouterConsumer *GeneralizedRouter::appendConsumer(
-    DeviceType target, DegreeOfParallelism dop,
+    DeviceType target_device, DegreeOfParallelism dop,
     std::unique_ptr<Affinitizer> aff) {
-  consumers.emplace_back(
-      // FIXME: propagate target if needed
-      std::make_unique<GeneralizedRouterConsumer>(*this, dop, std::move(aff)));
+  if (dop < aff->size()) {
+    if (policy_type == GeneralizedRoutingPolicy::SHARED_LOCAL ||
+        policy_type == GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL) {
+      LOG(WARNING) << "Degree of parallelism of this consumer is less than the "
+                      "number of available CUs in the affinitizer. This may "
+                      "lead to data being  routed to a queue which no workers "
+                      "are consuming from.";
+    }
+  }
+
+  consumers.emplace_back(std::make_unique<GeneralizedRouterConsumer>(
+      *this, dop, std::move(aff), target_device));
   return consumers.back().get();
 }
 
@@ -550,52 +651,39 @@ proteus::traits::HomReplication GeneralizedRouterConsumer::getHomReplication()
   return producer.getHomReplication();
 }
 
-void GeneralizedRouterConsumer::foreachTaskDo(int target, Pipeline *pip,
+void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
                                               PipelineGen *pipGen,
                                               std::function<void(void *)> f) {
-  assert(target < producer.ready_fifo.size());
-  producer.ready_fifo.at(target).foreachItemDo(
-      [&]() {
-        return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
-            this, pipGen, pip->getGroup()};
-      },
-      [&](void *ptr) {
-        f(ptr);
+  DCHECK_LE(target_queue, producer.ready_fifo.size());
+  producer.ready_fifo.at(target_queue)
+      .foreachItemDo(
+          [&]() {
+            return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
+                this, pipGen, pip->getGroup()};
+          },
+          [&](void *ptr) {
+            f(ptr);
 
-        {
-          producer.freeBufferGeneralized(target, proteus::managed_ptr{ptr});
-          std::this_thread::yield();
-        }
-      });
+            {
+              producer.freeBufferGeneralized(target_queue,
+                                             proteus::managed_ptr{ptr});
+              std::this_thread::yield();
+            }
+          });
 }
 
-void GeneralizedRouterConsumer::fire(int target, int local_target,
+void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
                                      PipelineGen *pipGen, const void *session) {
   pthread_setname_np(pthread_self(),
-                     (pipGen->getName() + std::to_string((uintptr_t)this) +
-                      "::" + std::to_string(target))
+                     (pipGen->getName() + ":" + std::to_string(target_queue) +
+                      ":" + std::to_string(target_queue))
                          .c_str());
-  const auto &cu = aff->getAvailableCU(local_target);
-  // set_exec_location_on_scope d(cu);
+  auto &cu = aff->getAvailableCU(local_target);
+
   auto exec_affinity = cu.set_on_scope();
   auto pip = pipGen->getPipeline(local_target);
-  std::this_thread::yield();  // if we remove that, following opens may
-  // allocate memory to wrong socket!
-  void *mem = nullptr;
-  auto s = producer.slack;
-  auto f = producer.getNumberOfQueues();
-
-  if (target < f) {
-    assert(producer.buf_size);
-    mem = MemoryManager::mallocPinned(producer.buf_size * s);
-    //    LOG_IF(INFO, dynamic_cast<routing::Local *>(getPolicy().get()))
-    //    << topology::getInstance().getCpuNumaNodeAddressed(mem)->id;
-    for (int j = 0; j < s; ++j) {
-      producer.freeBufferGeneralized(
-          target, proteus::managed_ptr{((char *)mem) + j * producer.buf_size});
-    }
-  }
-
+  // if we remove that, following opens may allocate memory to wrong socket!
+  std::this_thread::yield();
   {
     event_range<range_log_op::EXCHANGE_INIT_CONS> e{this, pipGen,
                                                     pip->getGroup()};
@@ -603,49 +691,93 @@ void GeneralizedRouterConsumer::fire(int target, int local_target,
   }
 
   {
-    auto target2 = (producer.policy_type == RoutingPolicy::RANDOM)
-                       ? 0
-                       : (local_target % 2);
-
-    foreachTaskDo(target2, pip.get(), pipGen, [&](void *ptr) {
+    foreachTaskDo(target_queue, pip.get(), pipGen, [&](void *ptr) {
+      fire_count += 1;
       pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
     });
   }
 
   pip->close();
-
-  if (target < f) {
-    for (int j = 0; j < s; ++j) {
-      /* Release and ignore, it will be handled by the following freePinned */
-      ((void)(producer
-                  .acquireBufferGeneralized(target, false, pipGen,
-                                            pip->getGroup())
-                  .release()));
-    }
-    MemoryManager::freePinned(mem);
-  }
 }
 
 void GeneralizedRouterConsumer::spawnWorker(const void *session,
+                                            size_t queue_offset,
                                             threadvector &firers) {
-  auto start = firers.size();
+  /// local_targets holds the offsets for the target queues (i.e numa
+  /// nodes/gpus) ignoring which consumer this is which is then accounted for by
+  /// the queue_offset. When the queues are shared between consumers
+  /// queue_offset will be 0. When the queues are distinct queue_offset will be
+  /// a multiple of the total number of CPU numa nodes + gpus in the system.
+  /// This is important for the case where a consumer may only run on a subset
+  /// of nodes/gpus
+  const std::vector<int> local_targets =
+      [dop = getDOP(), routing_policy = producer.policy_type,
+       device_type = target_device,
+       affinitizer = aff.get()]() -> std::vector<int> {
+    if (routing_policy == GeneralizedRoutingPolicy::SHARED_RANDOM) {
+      return {0};
+    }
+    std::vector<int> temp_local_targets;
+    if (routing_policy == GeneralizedRoutingPolicy::SHARED_HASH_BASED) {
+      // note: not a tested code path
+      for (int i = 0; i < dop; ++i) {
+        temp_local_targets.emplace_back(i);
+      }
+      return temp_local_targets;
+    }
+
+    switch (device_type) {
+      case DeviceType::CPU: {
+        for (int i = 0; i < affinitizer->size(); i++) {
+          const auto *node = dynamic_cast<const topology::cpunumanode *>(
+              &affinitizer->getAvailableCU(i));
+          CHECK_NE(node, nullptr)
+              << "Affinitizer for a consumer targeting DeviceType::CPU must "
+                 "affinitize to a topology::cpunumanode";
+          temp_local_targets.emplace_back(node->index_in_topo);
+        }
+        return temp_local_targets;
+      }
+      case DeviceType::GPU: {
+        const auto cpu_node_count =
+            topology::getInstance().getCpuNumaNodeCount();
+        for (int i = 0; i < affinitizer->size(); i++) {
+          const auto *node = dynamic_cast<const topology::gpunode *>(
+              &affinitizer->getAvailableCU(i));
+          CHECK_NE(node, nullptr)
+              << "Affinitizer for a consumer targeting DeviceType::GPU must "
+                 "affinitize to a topology::cpunode";
+          temp_local_targets.emplace_back(node->index_in_topo + cpu_node_count);
+          CHECK_LE(temp_local_targets.back(),
+                   topology::getInstance().getGpuCount() + cpu_node_count);
+        }
+        return temp_local_targets;
+      }
+      default: {
+        LOG(FATAL) << "Unimplemented";
+      }
+    }
+  }();
+
   for (size_t i = 0; i < fanout; ++i) {
-    firers.emplace_back(&GeneralizedRouterConsumer::fire, this, start + i, i,
-                        catch_pip, session);
+    firers.emplace_back(&GeneralizedRouterConsumer::fire, this,
+                        queue_offset + local_targets[i % local_targets.size()],
+                        i, catch_pip, session);
   }
 }
 
 proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
-    int target, bool polling, PipelineGen *pipGen, int64_t groupId) {
+    int target, bool polling, int64_t groupId) {
+  DCHECK_LT(target, free_pool.size());
   if (free_pool.at(target).empty_unsafe() && polling) {
     LOG(INFO) << free_pool.at(target).size_unsafe();
     nvtxRangePop();
     return nullptr;
   }
   void *buff = nullptr;
-  assert(target < ready_fifo.size());
+  DCHECK_LE(target, ready_fifo.size());
   auto x = free_pool.at(target).pop(buff);
-  assert(x);
+  DCHECK(x);
 
   return proteus::managed_ptr{buff};
 }
@@ -658,7 +790,7 @@ void GeneralizedRouter::releaseBufferGeneralized(int target,
 
 void GeneralizedRouter::freeBufferGeneralized(int target,
                                               proteus::managed_ptr buff) {
-  assert(target < free_pool.size());
+  DCHECK_LE(target, free_pool.size());
   free_pool.at(target).emplace(buff.release());
 }
 

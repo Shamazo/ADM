@@ -956,13 +956,14 @@ RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
       p));
 }
 
-SplitRelBuilder RelBuilder::gsplit(size_t slack, RoutingPolicy p) const {
+SplitRelBuilder RelBuilder::gsplit(size_t slack,
+                                   GeneralizedRoutingPolicy p) const {
   return SplitRelBuilder{apply(new proteus::GeneralizedRouter(
       root, slack,
       [&] {
         std::vector<RecordAttribute *> attrs;
         for (const auto &attr : getOutputArg().getProjections()) {
-          if (p == RoutingPolicy::HASH_BASED &&
+          if (p == GeneralizedRoutingPolicy::SHARED_HASH_BASED &&
               attr.getAttrName() == "__broadcastTarget") {
             continue;
           }
