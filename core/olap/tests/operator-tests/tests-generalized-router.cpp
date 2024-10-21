@@ -49,7 +49,11 @@ class GRouterTest : public testing::Test {
     return RelBuilderFactory{name};
   }
 
-  static std::pair<size_t, int32_t> parse_count_and_sum(
+  /**
+   * Parse the result of a query that returns a single tuple with two attributes
+   * @return (count, sum)
+   */
+  static std::pair<size_t, int32_t> parse_single_count_and_sum(
       const QueryResult& res) {
     std::stringstream res_str;
     res_str << res;
@@ -81,7 +85,59 @@ class GRouterTest : public testing::Test {
     EXPECT_EQ(tuple_count, 1) << "Expected only one tuple in the result";
     return {count, sum};
   }
+
+  /**
+   * Parse the result of a query that returns a single tuple with n * two
+   * attributes
+   * @return pair of vectors (counts, sums)
+   */
+  static std::pair<std::vector<size_t>, std::vector<int32_t>>
+  parse_n_count_and_sum(const QueryResult& res, int n) {
+    const int expected_attr_count = n * 2;
+    std::stringstream res_str;
+    res_str << res;
+    std::string out_tuple;
+    int tuple_count = 0;
+    std::vector<size_t> counts;
+    // this could wrap around in query processing, but that should not matter
+    // for the test
+    std::vector<int32_t> sums;
+
+    while (std::getline(res_str, out_tuple)) {
+      std::istringstream iss(out_tuple);
+      std::string attr_str;
+      int attr_idx = 0;
+      while (std::getline(iss, attr_str, ',')) {
+        if (attr_idx % 2 == 0) {
+          counts.emplace_back(std::stoull(attr_str));
+        }
+        if (attr_idx % 2 == 1) {
+          sums.emplace_back(std::stoi(attr_str));
+        }
+        attr_idx += 1;
+        EXPECT_LE(expected_attr_count, expected_attr_count)
+            << "Expected " << std::to_string(expected_attr_count)
+            << " attributes in the result";
+      }
+      tuple_count += 1;
+      EXPECT_EQ(tuple_count, 1) << "Expected only one tuple in the result";
+    }
+    EXPECT_EQ(tuple_count, 1) << "Expected only one tuple in the result";
+    return {counts, sums};
+  }
 };
+
+std::vector<double> normalizeCounts(const std::vector<size_t>& counts) {
+  size_t total = std::accumulate(counts.begin(), counts.end(), 0ul);
+
+  std::vector<double> normalizedCounts;
+  normalizedCounts.reserve(counts.size());
+  for (size_t count : counts) {
+    normalizedCounts.push_back(static_cast<double>(count) / total);
+  }
+
+  return normalizedCounts;
+}
 
 int GRouterTest::pip_number = 0;
 
@@ -101,7 +157,8 @@ TEST_F(GRouterTest, default_dop_shared_random) {
           .print(pg{"pm-csv"})
           .prepare();
   auto baseline_res = baseline_statement.execute();
-  auto [baseline_count, baseline_sum] = parse_count_and_sum(baseline_res);
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
 
   constexpr int gsplit_slack = 16;
   auto rbf_split = getRelBuilderFactory();
@@ -141,7 +198,7 @@ TEST_F(GRouterTest, default_dop_shared_random) {
           .prepare();
 
   auto [union_count, union_sum] =
-      parse_count_and_sum(union_statement.execute());
+      parse_single_count_and_sum(union_statement.execute());
   EXPECT_EQ(baseline_count, union_count);
   EXPECT_EQ(baseline_sum, union_sum);
 }
@@ -162,7 +219,8 @@ TEST_F(GRouterTest, default_dop_shared_local) {
           .print(pg{"pm-csv"})
           .prepare();
   auto baseline_res = baseline_statement.execute();
-  auto [baseline_count, baseline_sum] = parse_count_and_sum(baseline_res);
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
 
   constexpr int gsplit_slack = 16;
   auto rbf_split = getRelBuilderFactory();
@@ -202,7 +260,7 @@ TEST_F(GRouterTest, default_dop_shared_local) {
           .prepare();
 
   auto [union_count, union_sum] =
-      parse_count_and_sum(union_statement.execute());
+      parse_single_count_and_sum(union_statement.execute());
   EXPECT_EQ(baseline_count, union_count);
   EXPECT_EQ(baseline_sum, union_sum);
 }
@@ -231,7 +289,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(std::make_tuple(2, 1), std::make_tuple(3, 1),
                     std::make_tuple(2, 2), std::make_tuple(3, 2),
                     std::make_tuple(2, 4), std::make_tuple(3, 4),
-                    std::make_tuple(2, 16)),
+                    std::make_tuple(2, 8), std::make_tuple(4, 8)),
     PrintToStringParamName());
 
 TEST_P(GRouterTestVaryNumConsumers,
@@ -254,7 +312,15 @@ TEST_P(GRouterTestVaryNumConsumers,
           .print(pg{"pm-csv"})
           .prepare();
   auto baseline_res = baseline_statement.execute();
-  auto [baseline_count, baseline_sum] = parse_count_and_sum(baseline_res);
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
+
+  // In the split case, the result is a num_splits*2 tuple
+  std::vector<Monoid> reduction_ops;
+  for (int i = 0; i < num_splits; i++) {
+    reduction_ops.push_back(SUM);
+    reduction_ops.push_back(SUM);
+  }
 
   constexpr int gsplit_slack = 16;
   auto rbf_split = getRelBuilderFactory();
@@ -271,11 +337,23 @@ TEST_P(GRouterTestVaryNumConsumers,
                          .unpack()
                          .reduce(
                              [&](const auto& arg) -> std::vector<expression_t> {
-                               return {
-                                   expression_t{int64_t{1}}.as("tmp", "cnt"),
-                                   arg["lo_suppkey"].as("tmp", "sum")};
+                               std::vector<expression_t> ret;
+                               for (int j = 0; j < num_splits; j++) {
+                                 if (j == i) {
+                                   ret.push_back(expression_t{int64_t{1}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(arg["lo_suppkey"].as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 } else {
+                                   ret.push_back(expression_t{int64_t{0}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(expression_t{int32_t{0}}.as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 }
+                               }
+                               return ret;
                              },
-                             {SUM, SUM}));
+                             reduction_ops));
   }
 
   auto first_split = splits.front();
@@ -283,15 +361,32 @@ TEST_P(GRouterTestVaryNumConsumers,
       first_split.unionAll({splits.begin() + 1, splits.end()})
           .reduce(
               [&](const auto& arg) -> std::vector<expression_t> {
-                return {arg["cnt"], arg["sum"]};
+                std::vector<expression_t> ret;
+                for (int j = 0; j < num_splits; j++) {
+                  ret.push_back(arg["cnt" + std::to_string(j)]);
+                  ret.push_back(arg["sum" + std::to_string(j)]);
+                }
+                return ret;
               },
-              {SUM, SUM})
+              reduction_ops)
           .print(pg{"pm-csv"})
           .prepare();
-  auto [union_count, union_sum] =
-      parse_count_and_sum(union_statement.execute());
-  EXPECT_EQ(baseline_count, union_count);
-  EXPECT_EQ(baseline_sum, union_sum);
+  auto [counts, sums] =
+      parse_n_count_and_sum(union_statement.execute(), num_splits);
+  const size_t total_count = std::accumulate(counts.begin(), counts.end(), 0ul);
+  const size_t total_sum = std::accumulate(sums.begin(), sums.end(), 0);
+  EXPECT_EQ(baseline_count, total_count);
+  EXPECT_EQ(baseline_sum, total_sum);
+
+  std::vector<double> normalizedCounts = normalizeCounts(counts);
+  for (auto& split_percentage : normalizedCounts) {
+    LOG(INFO) << "Split percentage: " << split_percentage;
+    // Note: looser bound on shared random because it is less deterministic
+    // As there is a shared queue of work, effects like numa locality to the
+    // queue or the order the consumer open can affect the distribution
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.10)
+        << "expected a roughly equal distribution of work to splits";
+  }
 }
 
 TEST_P(GRouterTestVaryNumConsumers,
@@ -318,7 +413,15 @@ TEST_P(GRouterTestVaryNumConsumers,
           .print(pg{"pm-csv"})
           .prepare();
   auto baseline_res = baseline_statement.execute();
-  auto [baseline_count, baseline_sum] = parse_count_and_sum(baseline_res);
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
+
+  // In the split case, the result is a num_splits*2 tuple
+  std::vector<Monoid> reduction_ops;
+  for (int i = 0; i < num_splits; i++) {
+    reduction_ops.push_back(SUM);
+    reduction_ops.push_back(SUM);
+  }
 
   constexpr int gsplit_slack = 16;
   auto rbf_split = getRelBuilderFactory();
@@ -335,11 +438,23 @@ TEST_P(GRouterTestVaryNumConsumers,
                          .unpack()
                          .reduce(
                              [&](const auto& arg) -> std::vector<expression_t> {
-                               return {
-                                   expression_t{int64_t{1}}.as("tmp", "cnt"),
-                                   arg["lo_suppkey"].as("tmp", "sum")};
+                               std::vector<expression_t> ret;
+                               for (int j = 0; j < num_splits; j++) {
+                                 if (j == i) {
+                                   ret.push_back(expression_t{int64_t{1}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(arg["lo_suppkey"].as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 } else {
+                                   ret.push_back(expression_t{int64_t{0}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(expression_t{int32_t{0}}.as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 }
+                               }
+                               return ret;
                              },
-                             {SUM, SUM}));
+                             reduction_ops));
   }
 
   auto first_split = splits.front();
@@ -347,13 +462,126 @@ TEST_P(GRouterTestVaryNumConsumers,
       first_split.unionAll({splits.begin() + 1, splits.end()})
           .reduce(
               [&](const auto& arg) -> std::vector<expression_t> {
-                return {arg["cnt"], arg["sum"]};
+                std::vector<expression_t> ret;
+                for (int j = 0; j < num_splits; j++) {
+                  ret.push_back(arg["cnt" + std::to_string(j)]);
+                  ret.push_back(arg["sum" + std::to_string(j)]);
+                }
+                return ret;
+              },
+              reduction_ops)
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto [counts, sums] =
+      parse_n_count_and_sum(union_statement.execute(), num_splits);
+  const size_t total_count = std::accumulate(counts.begin(), counts.end(), 0ul);
+  const size_t total_sum = std::accumulate(sums.begin(), sums.end(), 0);
+  EXPECT_EQ(baseline_count, total_count);
+  EXPECT_EQ(baseline_sum, total_sum);
+
+  std::vector<double> normalizedCounts = normalizeCounts(counts);
+  for (auto& split_percentage : normalizedCounts) {
+    LOG(INFO) << "Split percentage: " << split_percentage;
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.10)
+        << "expected a roughly equal distribution of work to splits";
+  }
+}
+
+TEST_P(GRouterTestVaryNumConsumers,
+       n_consumers_varying_dop_random_consumer_data_local_policy) {
+  const size_t num_splits = std::get<0>(GetParam());
+  const DegreeOfParallelism split_path_dop =
+      DegreeOfParallelism{std::get<1>(GetParam())};
+  if (split_path_dop < topology::getInstance().getCpuNumaNodeCount()) {
+    GTEST_SKIP()
+        << "Skipping test with DOP smaller than the number of NUMA nodes";
+  }
+  auto rbf_baseline = getRelBuilderFactory();
+  auto baseline_statement =
+      rbf_baseline.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .unpack()
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                return {expression_t{int64_t{1}}.as("tmp", "cnt"),
+                        arg["lo_suppkey"].as("tmp", "sum")};
               },
               {SUM, SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto [union_count, union_sum] =
-      parse_count_and_sum(union_statement.execute());
-  EXPECT_EQ(baseline_count, union_count);
-  EXPECT_EQ(baseline_sum, union_sum);
+  auto baseline_res = baseline_statement.execute();
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
+
+  // In the split case, the result is a num_splits*2 tuple
+  std::vector<Monoid> reduction_ops;
+  for (int i = 0; i < num_splits; i++) {
+    reduction_ops.push_back(SUM);
+    reduction_ops.push_back(SUM);
+  }
+
+  constexpr int gsplit_slack = 16;
+  auto rbf_split = getRelBuilderFactory();
+  auto split_builder =
+      rbf_split.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .gsplit(gsplit_slack,
+                  GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL);
+  std::vector<RelBuilder> splits;
+  for (size_t i = 0; i < num_splits; i++) {
+    splits.push_back(split_builder
+                         .path(DeviceType::CPU, split_path_dop,
+                               std::make_unique<CpuNumaNodeAffinitizer>())
+                         .unpack()
+                         .reduce(
+                             [&](const auto& arg) -> std::vector<expression_t> {
+                               std::vector<expression_t> ret;
+                               for (int j = 0; j < num_splits; j++) {
+                                 if (j == i) {
+                                   ret.push_back(expression_t{int64_t{1}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(arg["lo_suppkey"].as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 } else {
+                                   ret.push_back(expression_t{int64_t{0}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(expression_t{int32_t{0}}.as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 }
+                               }
+                               return ret;
+                             },
+                             reduction_ops));
+  }
+
+  auto first_split = splits.front();
+  auto union_statement =
+      first_split.unionAll({splits.begin() + 1, splits.end()})
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                std::vector<expression_t> ret;
+                for (int j = 0; j < num_splits; j++) {
+                  ret.push_back(arg["cnt" + std::to_string(j)]);
+                  ret.push_back(arg["sum" + std::to_string(j)]);
+                }
+                return ret;
+              },
+              reduction_ops)
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto [counts, sums] =
+      parse_n_count_and_sum(union_statement.execute(), num_splits);
+  const size_t total_count = std::accumulate(counts.begin(), counts.end(), 0ul);
+  const size_t total_sum = std::accumulate(sums.begin(), sums.end(), 0);
+  EXPECT_EQ(baseline_count, total_count);
+  EXPECT_EQ(baseline_sum, total_sum);
+
+  std::vector<double> normalizedCounts = normalizeCounts(counts);
+  for (auto& split_percentage : normalizedCounts) {
+    LOG(INFO) << "Split percentage: " << split_percentage;
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.05)
+        << "expected a roughly equal distribution of work to splits";
+  }
 }

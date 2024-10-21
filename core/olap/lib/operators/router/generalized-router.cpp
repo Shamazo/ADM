@@ -164,7 +164,7 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
 
 std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
     GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
-    const std::vector<RecordAttribute *> &wantedFields) {
+    const std::vector<RecordAttribute *> &_wantedFields) {
   switch (p) {
       //    case RoutingPolicy::HASH_BASED: {
       //      assert(hashExpr.has_value());
@@ -189,12 +189,22 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
                                                   // version
     case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
       return std::make_unique<routing::Local>(
-          dop, wantedFields,
+          dop, _wantedFields,
           new AffinityPolicy(dop, new CpuNumaNodeAffinitizer()));
     }
     case GeneralizedRoutingPolicy::SHARED_RANDOM: {
       // TODO getPolicy isn't used for SHARED_RANDOM
       return std::make_unique<routing::Random>(dop);
+    }
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+      std::vector<AffinityPolicy *> affs;
+      std::vector<DeviceType> device_types;
+      for (auto &consumer : consumers) {
+        affs.emplace_back(consumer->aff_policy.get());
+        device_types.emplace_back(consumer->target_device);
+      }
+      return std::make_unique<routing::RandomSplitDataLocal>(
+          _wantedFields, affs, device_types);
     }
     default: {
       assert(false && "Unimplemented");  // FIXME: rest of the policies
@@ -232,7 +242,6 @@ void GeneralizedRouter::produce_(OlapParallelContext *context) {
 
 llvm::Value *GeneralizedRouter::createTaskDescription(
     OlapParallelContext *context, const OperatorState &childState) {
-  auto &llvmContext = context->getLLVMContext();
   auto *Builder = context->getBuilder();
 
   llvm::Value *params = llvm::UndefValue::get(params_type);
@@ -464,6 +473,11 @@ size_t GeneralizedRouter::getNumberOfQueues() const {
       }
       return consumer_dop;
     }
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+      auto &topo = topology::getInstance();
+      return consumers.size() *
+             (topo.getCpuNumaNodeCount() + topo.getGpuCount());
+    }
     default: {
       LOG(FATAL) << "Unimplemented";
     }
@@ -527,6 +541,30 @@ void GeneralizedRouter::open_queues() {
           allocate_buffers_for_queue(i);
           break;
         }
+          // The case where we allocate a separate queue for each consumer on
+          // each NUMA node (CPU or GPU)
+        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+          auto &topo = topology::getInstance();
+          const uint32_t num_numa_nodes =
+              topo.getCpuNumaNodeCount() + topo.getGpuCount();
+          const size_t numa_node_index = i % num_numa_nodes;
+          if (numa_node_index < topology::getInstance().getCpuNumaNodeCount()) {
+            auto &numa =
+                topology::getInstance().getCpuNumaNodes()[numa_node_index];
+            auto exec_scope = numa.set_on_scope();
+            std::this_thread::yield();
+            allocate_buffers_for_queue(i);
+          } else {
+            auto &gpu =
+                topology::getInstance()
+                    .getGpus()[numa_node_index -
+                               topology::getInstance().getCpuNumaNodeCount()];
+            auto exec_scope = gpu.set_on_scope();
+            std::this_thread::yield();
+            allocate_buffers_for_queue(i);
+          }
+
+          break;
         }
         default: {
           LOG(FATAL) << "Unimplemented";
@@ -561,7 +599,7 @@ void GeneralizedRouter::open(Pipeline *pip) {
           return 0;
         }
         case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
-          return consumer_index * num_numa_nodes * consumer_index;
+          return consumer_index * num_numa_nodes;
         }
         default: {
           LOG(FATAL) << "Unimplemented";
@@ -692,7 +730,6 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
 
   {
     foreachTaskDo(target_queue, pip.get(), pipGen, [&](void *ptr) {
-      fire_count += 1;
       pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
     });
   }

@@ -81,6 +81,36 @@ class Local : public RoutingPolicy {
                           ProteusValueMemory retrycnt) override;
 };
 
+/**
+ * A routing policy for the generalized router where the generalized router may
+ * have multiple distinct consumer pipelines. This policy assumes there are
+ * #consuming_pipelines * (#cpu_numa_nodes + #GPUS) targets. targets [0,
+ * (#cpu_numa_nodes + #GPUS)] are for the first consumer, targets
+ * [(#cpu_numa_nodes + #GPUS), 2 * (#cpu_numa_nodes + #GPUS)] are for the second
+ * consumer, and so on. Nodes are ordered by their index in the topology. With
+ * CPUs followed by GPUs. For example, if there are 4 CPU NUMA nodes and 2 GPUs,
+ * and two consumers, the targets/queues are as follows:
+ * [CONS1_CPU1, CONS1_CPU2, CONS1_CPU3, CONS1_CPU4, CONS1_GPU1, CONS1_GPU2,
+ * CONS2_CPU1, CONS2_CPU2, CONS2_CPU3, CONS2_CPU4, CONS2_GPU1, CONS2_GPU2]
+ *
+ * Each consumer supplies their own affinity policy, that returns an index of
+ * the target node/GPU in the topology, and target device.
+ */
+class RandomSplitDataLocal : public RoutingPolicy {
+  const RecordAttribute wantedField;
+  std::vector<AffinityPolicy *>
+      aff;  // use pointer to satisfy lifetime requirements
+  std::vector<size_t> consumer_offsets;
+
+ public:
+  RandomSplitDataLocal(const std::vector<RecordAttribute *> &wantedFields,
+                       std::vector<AffinityPolicy *> aff,
+                       const std::vector<DeviceType> &target_device_types);
+  routing_target evaluate(OlapParallelContext *context,
+                          const OperatorState &childState,
+                          ProteusValueMemory retrycnt) override;
+};
+
 class LocalServer : public HashBased {
  public:
   LocalServer(size_t fanout);

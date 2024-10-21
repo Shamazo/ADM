@@ -138,6 +138,8 @@ target_link_libraries(${PROJECT_NAME}
   jsmn::jsmn
   rt # for shared memory
   stduuid::stduuid
+  PRIVATE
+  magic_enum::magic_enum
   )
 
 include(proteus-lib)

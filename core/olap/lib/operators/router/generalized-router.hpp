@@ -51,6 +51,7 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
   PipelineGen *catch_pip;
 
   std::unique_ptr<Affinitizer> aff;
+  std::unique_ptr<AffinityPolicy> aff_policy;
   const DeviceType target_device;
 
  public:
@@ -59,9 +60,11 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
                             std::unique_ptr<Affinitizer> aff,
                             DeviceType target_device)
       : producer(producer),
-        fanout(std::move(fanout)),
+        fanout(fanout),
         aff(std::move(aff)),
-        target_device(std::move(target_device)) {}
+        aff_policy(std::make_unique<AffinityPolicy>(this->aff->size(),
+                                                    this->aff.get())),
+        target_device(target_device) {}
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
@@ -211,7 +214,7 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   [[nodiscard]] virtual size_t getNumberOfQueues() const;
 
-  static std::unique_ptr<routing::RoutingPolicy> getPolicy(
+  std::unique_ptr<routing::RoutingPolicy> getPolicy(
       GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
       const std::vector<RecordAttribute *> &wantedFields);
 
