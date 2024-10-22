@@ -93,19 +93,19 @@ class Local : public RoutingPolicy {
  * [CONS1_CPU1, CONS1_CPU2, CONS1_CPU3, CONS1_CPU4, CONS1_GPU1, CONS1_GPU2,
  * CONS2_CPU1, CONS2_CPU2, CONS2_CPU3, CONS2_CPU4, CONS2_GPU1, CONS2_GPU2]
  *
- * Each consumer supplies their own affinity policy, that returns an index of
+ * Each consumer supplies their own Affinitizer, that returns an index of
  * the target node/GPU in the topology, and target device.
  */
 class RandomSplitDataLocal : public RoutingPolicy {
   const RecordAttribute wantedField;
-  std::vector<AffinityPolicy *>
-      aff;  // use pointer to satisfy lifetime requirements
+  std::vector<Affinitizer *>
+      consumer_affs;  // use pointer to satisfy lifetime requirements
   std::vector<size_t> consumer_offsets;
 
  public:
   RandomSplitDataLocal(const std::vector<RecordAttribute *> &wantedFields,
-                       std::vector<AffinityPolicy *> aff,
-                       const std::vector<DeviceType> &target_device_types);
+                       std::vector<Affinitizer *> consumer_affs,
+                       const std::vector<DeviceType> &consumer_device_types);
   routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;

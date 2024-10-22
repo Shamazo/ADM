@@ -62,7 +62,7 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
       : producer(producer),
         fanout(fanout),
         aff(std::move(aff)),
-        aff_policy(std::make_unique<AffinityPolicy>(this->aff->size(),
+        aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
                                                     this->aff.get())),
         target_device(target_device) {}
 

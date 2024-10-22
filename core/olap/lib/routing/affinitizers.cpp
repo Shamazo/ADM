@@ -27,7 +27,7 @@
 
 AffinityPolicy::AffinityPolicy(size_t fanout, const Affinitizer *aff)
     : aff(aff) {
-  indexes.resize(aff->size());
+  indexes.resize(aff->countAllCUs());
   for (size_t i = 0; i < fanout; ++i) {
     indexes[aff->getAvailableCUIndex(i)].emplace_back(i);
   }

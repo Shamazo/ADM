@@ -46,9 +46,25 @@ class Affinitizer {
   [[nodiscard]] virtual const topology::cu &getAvailableCU(size_t i) const = 0;
 
   /**
-   * Number of locality (NUMA) nodes
+   * The number of distinct compute units (CUs) that can be returned by
+   * getAvailableCU / getLocalCUIndex
+   *
+   * @details countAffCUs and countAllCUs are not necessarily the same. In the
+   * case where the affinitizer affinitizes to a subset of CUs, countAffCUs()
+   * will return the number of CUs in the subset, while countAllCUs() will
+   * return the total number of CUs in the system. For example, the
+   * SpecificCpuNumaNodeAffinitizer.
+   * @see Affinitizer::CountCUs
    */
-  [[nodiscard]] virtual size_t size() const = 0;
+  [[nodiscard]] virtual size_t countAffCUs() const = 0;
+
+  /**
+   * The total number of compute units (CUs), of the type this Affinitizer
+   * returns, in the system
+   *
+   * @see Affinitizer::countAffCUs
+   */
+  [[nodiscard]] virtual size_t countAllCUs() const = 0;
 
   /**
    * @param ptr a pointer to memory
@@ -112,7 +128,11 @@ class CpuNumaNodeAffinitizer : public Affinitizer {
         .index_in_topo;
   }
 
-  [[nodiscard]] size_t size() const override {
+  [[nodiscard]] size_t countAffCUs() const override {
+    return topology::getInstance().getCpuNumaNodeCount();
+  }
+
+  [[nodiscard]] size_t countAllCUs() const override {
     return topology::getInstance().getCpuNumaNodeCount();
   }
 
@@ -155,7 +175,11 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
         .index_in_topo;
   }
 
-  [[nodiscard]] size_t size() const override {
+  [[nodiscard]] size_t countAffCUs() const override {
+    return m_node_ids.size();
+  }
+
+  [[nodiscard]] size_t countAllCUs() const override {
     return topology::getInstance().getCpuNumaNodeCount();
   }
 
@@ -255,7 +279,11 @@ class GPUAffinitizer : public Affinitizer {
     return getAvailableCU(i).index_in_topo;
   }
 
-  [[nodiscard]] size_t size() const override {
+  [[nodiscard]] size_t countAffCUs() const override {
+    return topology::getInstance().getGpuCount();
+  }
+
+  [[nodiscard]] size_t countAllCUs() const override {
     return topology::getInstance().getGpuCount();
   }
 
@@ -265,7 +293,9 @@ class GPUAffinitizer : public Affinitizer {
     if (g) return g->index_in_topo;
     auto *c = topo.getCpuNumaNodeAddressed(p);
     if (!c) {
-      return topology::getInstance().getGpus()[rand() % size()].index_in_topo;
+      return topology::getInstance()
+          .getGpus()[rand() % countAffCUs()]
+          .index_in_topo;
     }
     assert(c);
     const auto &gpus = c->local_gpus;

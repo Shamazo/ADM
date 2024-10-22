@@ -197,10 +197,10 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
       return std::make_unique<routing::Random>(dop);
     }
     case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
-      std::vector<AffinityPolicy *> affs;
+      std::vector<Affinitizer *> affs;
       std::vector<DeviceType> device_types;
       for (auto &consumer : consumers) {
-        affs.emplace_back(consumer->aff_policy.get());
+        affs.emplace_back(consumer->aff.get());
         device_types.emplace_back(consumer->target_device);
       }
       return std::make_unique<routing::RandomSplitDataLocal>(
@@ -599,7 +599,7 @@ void GeneralizedRouter::close(Pipeline *pip) {
 GeneralizedRouterConsumer *GeneralizedRouter::appendConsumer(
     DeviceType target_device, DegreeOfParallelism dop,
     std::unique_ptr<Affinitizer> aff) {
-  if (dop < aff->size()) {
+  if (dop < aff->countAffCUs()) {
     if (policy_type == GeneralizedRoutingPolicy::SHARED_LOCAL ||
         policy_type == GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL) {
       LOG(WARNING) << "Degree of parallelism of this consumer is less than the "
@@ -740,7 +740,7 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
     // we account for the difference with queue_offset
     switch (device_type) {
       case DeviceType::CPU: {
-        for (int i = 0; i < affinitizer->size(); i++) {
+        for (int i = 0; i < affinitizer->countAffCUs(); i++) {
           const auto *node = dynamic_cast<const topology::cpunumanode *>(
               &affinitizer->getAvailableCU(i));
           CHECK_NE(node, nullptr)
@@ -753,7 +753,7 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
       case DeviceType::GPU: {
         const auto cpu_node_count =
             topology::getInstance().getCpuNumaNodeCount();
-        for (int i = 0; i < affinitizer->size(); i++) {
+        for (int i = 0; i < affinitizer->countAffCUs(); i++) {
           const auto *node = dynamic_cast<const topology::gpunode *>(
               &affinitizer->getAvailableCU(i));
           CHECK_NE(node, nullptr)
@@ -824,13 +824,13 @@ proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
 
 void GeneralizedRouter::releaseBufferGeneralized(int target,
                                                  proteus::managed_ptr buff) {
-  assert(target < ready_fifo.size());
+  DCHECK_LE(target, ready_fifo.size()) << "invalid target fifo queue";
   ready_fifo.at(target).push(buff.release());
 }
 
 void GeneralizedRouter::freeBufferGeneralized(int target,
                                               proteus::managed_ptr buff) {
-  DCHECK_LE(target, free_pool.size());
+  DCHECK_LE(target, free_pool.size()) << "invalid target free pool";
   free_pool.at(target).emplace(buff.release());
 }
 

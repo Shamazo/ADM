@@ -33,8 +33,14 @@
 #include "lib/operators/operators.hpp"
 using magic_enum::ostream_operators::operator<<;
 
+/// For using an AffinityPolicy from codegen
 extern "C" size_t random_local_cu_index(void *ptr, AffinityPolicy *aff) {
   return aff->getIndexOfRandLocalCU(ptr);
+}
+
+/// For using an Affinitizer from codegen
+extern "C" size_t random_local_cu_index_in_topo(void *ptr, Affinitizer *aff) {
+  return aff->getLocalCUIndex(ptr);
 }
 
 namespace routing {
@@ -111,11 +117,11 @@ Local::Local(size_t fanout, const std::vector<RecordAttribute *> &wantedFields,
 
 RandomSplitDataLocal::RandomSplitDataLocal(
     const std::vector<RecordAttribute *> &wantedFields,
-    std::vector<AffinityPolicy *> _aff,
+    std::vector<Affinitizer *> _affs,
     const std::vector<DeviceType> &target_device_types)
-    : wantedField(*wantedFields[0]), aff(std::move(_aff)) {
-  CHECK_EQ(aff.size(), target_device_types.size())
-      << "aff and target_device_types must have the same size";
+    : wantedField(*wantedFields[0]), consumer_affs(std::move(_affs)) {
+  CHECK_EQ(consumer_affs.size(), target_device_types.size())
+      << "consumer_affs and target_device_types must have the same size";
   const auto &topo = topology::getInstance();
   if (topo.getGpuCount() == 0) {
     for (const auto &d : target_device_types) {
@@ -123,7 +129,7 @@ RandomSplitDataLocal::RandomSplitDataLocal(
     }
   }
   const auto count_cus = topo.getCpuNumaNodeCount() + topo.getGpuCount();
-  for (int i = 0; i < aff.size(); i++) {
+  for (int i = 0; i < consumer_affs.size(); i++) {
     consumer_offsets.push_back(count_cus * i +
                                (target_device_types[i] == DeviceType::GPU
                                     ? topo.getCpuNumaNodeCount()
@@ -170,16 +176,17 @@ RandomSplitDataLocal::RandomSplitDataLocal(
     save_current_blocks_and_restore_at_exit_scope e{context};
     Builder->SetInsertPoint(context->getCurrentEntryBlock());
     llvm::Type *elementType = Builder->getInt64Ty();
-    llvm::Value *arraySize = llvm::ConstantInt::get(elementType, aff.size());
+    llvm::Value *arraySize =
+        llvm::ConstantInt::get(elementType, consumer_affs.size());
     llvm::AllocaInst *alloca =
         Builder->CreateAlloca(elementType, arraySize, "consumer_aff_ptr_arr");
 
-    for (int i = 0; i < aff.size(); i++) {
+    for (int i = 0; i < consumer_affs.size(); i++) {
       llvm::Value *index = llvm::ConstantInt::get(elementType, i);
       llvm::Value *elementPtr = Builder->CreateGEP(elementType, alloca, index);
       Builder->CreateStore(
           llvm::ConstantInt::get(elementType,
-                                 reinterpret_cast<uintptr_t>(aff[i])),
+                                 reinterpret_cast<uintptr_t>(consumer_affs[i])),
           elementPtr);
     }
     return alloca;
@@ -219,9 +226,8 @@ RandomSplitDataLocal::RandomSplitDataLocal(
       "consumer_aff_int_ptr");
   auto consumer_aff_ptr =
       Builder->CreateIntToPtr(aff_int_ptr, charPtrType, "consumer_aff_ptr");
-
-  auto target_numa =
-      context->gen_call(random_local_cu_index, {ptr8, consumer_aff_ptr});
+  auto target_numa = context->gen_call(random_local_cu_index_in_topo,
+                                       {ptr8, consumer_aff_ptr});
   auto queue_offset_for_consumer = Builder->CreateLoad(
       Builder->getInt64Ty(),
       Builder->CreateGEP(Builder->getInt64Ty(), llvm_consumer_offsets,
