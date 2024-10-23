@@ -34,9 +34,9 @@
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
 #include <platform/util/linux-exec.hpp>
-#include <platform/util/logging.hpp>
 #include <platform/util/profiling.hpp>
 #include <platform/util/topology_parser.hpp>
+#include <platform/util/tracing.hpp>
 #include <regex>
 #include <stdexcept>
 #include <vector>
@@ -214,6 +214,7 @@ static size_t fixSize(size_t bytes) {
 void *topology::cpunumanode::alloc(size_t bytes) const {
   static profiling::ProfileRegionType pr_type =
       profiling::ProfileRegionType("topology::cpunumanode::alloc");
+  event_range<range_log_op::TOPO_CPU_ALLOC> r({}, std::nullopt, id);
   profiling::ProfileRegion pr(pr_type);
   bytes = fixSize(bytes);
   void *mem = mmap(nullptr, bytes, PROT_READ | PROT_WRITE,
@@ -619,7 +620,7 @@ void topology::init_() {
                                   &attrValueSize, &poolLimit));
 
     {
-      event_range<range_log_op::CUPTI_GET_START_TIMESTAMP> ev{this};
+      event_range<range_log_op::CUPTI_GET_START_TIMESTAMP> ev{{}};
       gpu_run(cuptiGetTimestamp(&profilingStartTimestamp));
     }
 

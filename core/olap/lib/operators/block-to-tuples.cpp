@@ -27,7 +27,7 @@
 #include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
-#include <platform/util/logging.hpp>
+#include <platform/util/tracing.hpp>
 
 #include "lib/util/catalog.hpp"
 
@@ -254,8 +254,8 @@ void BlockToTuples::consume(OlapParallelContext *context,
 }
 
 void BlockToTuples::open(Pipeline *pip) {
-  //  eventlogger.log(this, log_op::BLOCK2TUPLES_OPEN_START);
-
+  event_range<range_log_op::UNPACK_OPEN> er{id, pip->getGeneratorUUID(),
+                                            pip->getGroup()};
   void **buffs;
 
   if (gpu) {
@@ -273,10 +273,11 @@ void BlockToTuples::open(Pipeline *pip) {
   for (size_t i = 0; i < old_buffs.size(); ++i) {
     pip->setStateVar<void *>(old_buffs[i], buffs + i);
   }
-  //  eventlogger.log(this, log_op::BLOCK2TUPLES_OPEN_END);
 }
 
 void BlockToTuples::close(Pipeline *pip) {
+  event_range<range_log_op::UNPACK_CLOSE> er{id, pip->getGeneratorUUID(),
+                                             pip->getGroup()};
   void **h_buffs;
   void **buffs = pip->getStateVar<void **>(old_buffs.at(0));
 

@@ -27,8 +27,8 @@
 #include <platform/memory/memory-manager.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
-#include <platform/util/logging.hpp>
 #include <platform/util/timing.hpp>
+#include <platform/util/tracing.hpp>
 
 MemMoveScaleOut::MemMoveScaleOut(
     Operator *const child, const std::vector<RecordAttribute *> &wantedFields,

@@ -23,6 +23,8 @@
 
 #include "unionall.hpp"
 
+#include <codegen/jit/pipeline.hpp>
+
 void UnionAll::produce_(OlapParallelContext *context) {
   generate_catch(context);
 
@@ -33,8 +35,16 @@ void UnionAll::produce_(OlapParallelContext *context) {
     context->popPipeline();
     context->pushPipeline();
 
-    context->registerOpen(this, [this](Pipeline *pip) { this->open(pip); });
-    context->registerClose(this, [this](Pipeline *pip) { this->close(pip); });
+    context->registerOpen(this, [this](Pipeline *pip) {
+      event_range<range_log_op::UNION_ALL_OPEN> er(
+          this->getUUID(), pip->getGeneratorUUID(), pip->getGroup());
+      this->open(pip);
+    });
+    context->registerClose(this, [this](Pipeline *pip) {
+      event_range<range_log_op::UNION_ALL_CLOSE> er(
+          this->getUUID(), pip->getGeneratorUUID(), pip->getGroup());
+      this->close(pip);
+    });
 
     child->produce(context);
   }

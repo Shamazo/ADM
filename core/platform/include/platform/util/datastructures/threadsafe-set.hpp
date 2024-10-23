@@ -25,7 +25,7 @@
 #define PROTEUS_THREADSAFE_SET_HPP
 
 #include "platform/memory/allocator.hpp"
-#include "platform/util/logging.hpp"
+#include "platform/util/tracing.hpp"
 /**
  *
  * @tparam N slots in the ring buffer. Prefer powers of two.

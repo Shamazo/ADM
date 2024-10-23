@@ -443,6 +443,7 @@ RelBuilder RelBuilder::unnest(expression_t e) const {
 }
 
 PreparedStatement RelBuilder::prepare() {
+  event_range<range_log_op::BUILDER_PREPARE> er{root->getUUID()};
   LOG(INFO) << '\n' << *this;
   root->produce(ctx);
   ctx->prepareFunction(ctx->getGlobalFunction());

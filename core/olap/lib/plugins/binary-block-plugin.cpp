@@ -26,6 +26,7 @@
 #include <lib/expressions/expressions-flusher.hpp>
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
+#include <platform/util/tracing.hpp>
 #include <utility>
 
 #include "lib/expressions/expressions-hasher.hpp"
@@ -62,6 +63,7 @@ BinaryBlockPlugin::BinaryBlockPlugin(
 }
 
 void BinaryBlockPlugin::loadData(OlapParallelContext *context, data_loc loc) {
+  event_range<range_log_op::BINARY_BLOCK_LOAD_DATA> er{getUUID()};
   LLVMContext &llvmContext = context->getLLVMContext();
   if (wantedFields.empty()) {
     string error_msg{"[BinaryBlockPlugin: ] Invalid number of fields"};
@@ -471,6 +473,7 @@ const void **getDataForField(size_t i, BinaryBlockPlugin *pg) {
 }
 
 const void **BinaryBlockPlugin::getDataForField(size_t i) {
+  event_range<range_log_op::BINARY_BLOCK_GET_FIELD_DATA> er{getUUID()};
   auto fieldPtr =
       (const void **)MemoryManager::mallocPinned(Nparts * sizeof(void *));
 

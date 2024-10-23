@@ -30,6 +30,9 @@
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
+#ifndef __CUDA_ARCH__
+#include <stduuid/uuid.hpp>
+#endif
 
 void set_trace_allocations(bool val = true, bool silent_set_fail = false);
 
@@ -153,6 +156,10 @@ class MemoryManager {
                    float cpu_mem_pool_percentage = 0.1,
                    size_t log_buffers = 250);
   static void destroy();
+
+#ifndef __CUDA_ARCH__
+  const static uuids::uuid id;
+#endif
 
   friend class proteus::platform;
 

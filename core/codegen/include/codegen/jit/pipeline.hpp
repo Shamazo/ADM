@@ -32,6 +32,7 @@
 #include <codegen/context/context.hpp>
 #include <future>
 #include <platform/common/gpu/gpu-common.hpp>
+#include <stduuid/uuid.hpp>
 #include <utility>
 
 class Pipeline;
@@ -91,6 +92,7 @@ class PipelineGen {
   unsigned int maxGridSize;
 
   StateVar session_parameters_ptr;
+  const uuids::uuid id;  /// Unique identifier for this PipelineGen
 
  public:
   llvm::Function *F;
@@ -102,6 +104,7 @@ class PipelineGen {
   virtual ~PipelineGen() { compiledFunctionFuture.wait(); }
 
  public:
+  uuids::uuid getUUID() const { return id; }
   virtual size_t appendParameter(llvm::Type *ptype, bool noalias = false,
                                  bool readonly = false);
   virtual StateVar appendStateVar(llvm::Type *ptype);
@@ -221,6 +224,10 @@ class Pipeline {
   void *init_state;
   void *deinit_state;
 
+  const uuids::uuid id;          /// Unique identifier for the pipeline
+  const uuids::uuid pip_gen_id;  /// Unique identifier of the PipelineGen used
+                                 /// to create this pipeline
+
   std::shared_ptr<Pipeline> execute_after_close;
 
   struct guard {
@@ -286,6 +293,9 @@ class Pipeline {
 
  public:
   void *state;
+
+  [[nodiscard]] uuids::uuid getUUID() const { return id; }
+  [[nodiscard]] uuids::uuid getGeneratorUUID() const { return pip_gen_id; }
 
   virtual ~Pipeline();
 

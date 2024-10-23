@@ -497,6 +497,12 @@ void GeneralizedRouter::allocate_buffers_for_queue(size_t queue) {
     freeBufferGeneralized(queue,
                           proteus::managed_ptr{((char *)mem) + j * buf_size});
   }
+  const int fifo_size = ready_fifo.at(queue).size_unsafe();
+  counterlogger.log(getUUID(), counter_type::ROUTER_READY_QUEUE_SIZE, fifo_size,
+                    queue);
+  const int free_size = free_pool.at(queue).size_unsafe();
+  counterlogger.log(getUUID(), counter_type::ROUTER_FREE_POOL_SIZE, free_size,
+                    queue);
 }
 
 void GeneralizedRouter::open_queues() {
@@ -579,12 +585,12 @@ void GeneralizedRouter::open_queues() {
 }
 
 void GeneralizedRouter::open(Pipeline *pip) {
+  event_range<range_log_op::GROUTER_OPEN> er{id, pip->getGeneratorUUID(),
+                                             pip->getGroup()};
   std::lock_guard<std::mutex> guard(init_mutex);
 
   if (firers.empty()) {
     open_queues();
-
-    //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_START);
     remaining_producers = producers;
     auto &topo = topology::getInstance();
     auto queue_offset = [policy = policy_type,
@@ -612,7 +618,6 @@ void GeneralizedRouter::open(Pipeline *pip) {
                         firers);
       consumer_index += 1;
     }
-    //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_END);
   }
 }
 
@@ -623,6 +628,8 @@ void GeneralizedRouter::close(Pipeline *pip) {
   CHECK_GE(rem, 0);
 
   if (rem == 0) {
+    event_range<range_log_op::GROUTER_CLOSE> er{id, pip->getUUID(),
+                                                pip->getGroup()};
     for (auto &r : ready_fifo) {
       r.close();
     }
@@ -696,8 +703,18 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
   producer.ready_fifo.at(target_queue)
       .foreachItemDo(
           [&]() {
+            const int fifo_size =
+                producer.ready_fifo.at(target_queue).size_unsafe();
+            counterlogger.log(producer.getUUID(),
+                              counter_type::ROUTER_READY_QUEUE_SIZE, fifo_size,
+                              target_queue);
+            const int free_size =
+                producer.free_pool.at(target_queue).size_unsafe();
+            counterlogger.log(producer.getUUID(),
+                              counter_type::ROUTER_FREE_POOL_SIZE, free_size,
+                              target_queue);
             return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
-                this, pipGen, pip->getGroup()};
+                id, pipGen->getUUID(), pip->getGroup()};
           },
           [&](void *ptr) {
             f(ptr);
@@ -723,8 +740,8 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
   // if we remove that, following opens may allocate memory to wrong socket!
   std::this_thread::yield();
   {
-    event_range<range_log_op::EXCHANGE_INIT_CONS> e{this, pipGen,
-                                                    pip->getGroup()};
+    event_range<range_log_op::GROUTER_INIT_CONS> e{id, pipGen->getUUID(),
+                                                   pip->getGroup()};
     pip->open(session);
   }
 

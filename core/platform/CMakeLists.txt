@@ -24,15 +24,16 @@ set(platform_cxx
   lib/util/interval-runner.cpp
   lib/util/percentile.cpp
   lib/util/profiling.cpp
+  lib/util/tracing.cpp
   lib/util/stacktrace.cpp
   lib/util/time-registry.cpp
   lib/util/linux-exec.cpp
-  )
+)
 
 # C++ files requiring CUDA headers
 set(platform_cxx_cu
   #operators/gpu/gpu-partitioned-hash-join-chained-helpers.cpp
-  )
+)
 
 # Pure CUDA files
 set(platform_cu
@@ -45,7 +46,7 @@ set(platform_cu
   #	runtime error as LLVM cannot yet generate relocatable ptx code.
   lib/memory/buffer-manager.cu
   lib/util/sort/gpu/sort-util.cu
-  )
+)
 
 foreach (target ${platform_cu})
   set_source_files_properties(${target} PROPERTIES LANGUAGE CXX)
@@ -66,7 +67,7 @@ if (PROTEUS_USE_CUDA)
   if (CUDA_FOUND)
     set(platform_cu_objs
       "${CUDA_WORKDIR}/buffer-manager.bc.o"
-      )
+    )
   endif ()
 
   string(REPLACE " " ";" BMFLAGS ${CUDA_CXXFLAGS})
@@ -91,21 +92,21 @@ if (PROTEUS_USE_CUDA)
     IMPLICIT_DEPENDS CXX ${CMAKE_CURRENT_SOURCE_DIR}/lib/memory/buffer-manager.cu
     WORKING_DIRECTORY ${CUDA_WORKDIR}
     COMMENT "Building CUDA LLVM bitcode ${CUDA_WORKDIR}/buffer-manager.bc.o"
-    )
+  )
 endif ()
 #-----------------------------------------------------------------------------
 
 install(DIRECTORY DESTINATION ${CMAKE_INSTALL_BINDIR}/generated_code
   #COMPONENT ${PROJECT_NAME}_${PROTEUS_CPACK_COMP_SUFFIX_BINARIES}
   COMPONENT ${PROJECT_NAME}_${PROTEUS_CPACK_COMP_BINARIES}
-  )
+)
 
 add_library(platform SHARED
   ${platform_cxx_cu}
   ${platform_cu}
   ${platform_cu_objs}
   ${platform_cxx}
-  )
+)
 
 # If we have compiler requirements for this library, list them
 # here
@@ -119,9 +120,10 @@ target_link_libraries(platform
   RDMA::RDMA
   ${CUDA_LIBS}
   cli-flags::cli-flags
+  stduuid::stduuid
   PRIVATE
   magic_enum::magic_enum
-  )
+)
 
 if (VTUNE AND PROTEUS_VTUNE_ENABLE)
   target_link_libraries(platform PUBLIC vtune::vtune)

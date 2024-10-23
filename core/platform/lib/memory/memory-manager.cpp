@@ -24,7 +24,7 @@
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
-#include <platform/util/logging.hpp>
+#include <platform/util/tracing.hpp>
 
 #ifndef NDEBUG
 #include <execinfo.h>
@@ -55,6 +55,8 @@ constexpr size_t freed_cache_cap = 16;
 void buffer_manager_init(float gpu_mem_pool_percentage,
                          float cpu_mem_pool_percentage, size_t log_buffers);
 void buffer_manager_destroy();
+
+const uuids::uuid MemoryManager::id = uuids::uuid_system_generator{}();
 
 void MemoryManager::init(float gpu_mem_pool_percentage,
                          float cpu_mem_pool_percentage, size_t log_buffers) {
@@ -119,14 +121,13 @@ constexpr inline size_t fixSize(size_t bytes) {
 }
 
 void *MemoryManager::mallocGpu(size_t bytes) {
-  eventlogger.log(nullptr, log_op::MEMORY_MANAGER_ALLOC_GPU_START);
+  event_range<range_log_op::MEMORY_MANAGER_MALLOC_GPU> er{id};
   nvtxRangePushA("mallocGpu");
   bytes = fixSize(bytes);
   const auto &dev = topology::getInstance().getActiveGpu();
   void *ptr = gpu_managers[dev.id]->malloc(bytes);
   assert(ptr);
   nvtxRangePop();
-  eventlogger.log(nullptr, log_op::MEMORY_MANAGER_ALLOC_GPU_END);
   return ptr;
 }
 

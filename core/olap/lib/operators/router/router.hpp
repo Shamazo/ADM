@@ -33,7 +33,7 @@
 #include <platform/topology/device-manager.hpp>
 #include <platform/util/async_containers.hpp>
 #include <platform/util/datastructures/threadsafe-set.hpp>
-#include <platform/util/logging.hpp>
+#include <platform/util/tracing.hpp>
 #include <queue>
 #include <stack>
 #include <utility>

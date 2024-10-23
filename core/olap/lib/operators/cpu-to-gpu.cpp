@@ -24,7 +24,7 @@
 #include "cpu-to-gpu.hpp"
 
 #include <platform/topology/topology.hpp>
-#include <platform/util/logging.hpp>
+#include <platform/util/tracing.hpp>
 
 #include "lib/util/catalog.hpp"
 #include "lib/util/jit/olap-pipeline.hpp"
@@ -42,17 +42,17 @@ void CpuToGpu::produce_(OlapParallelContext *context) {
   context->pushPipeline(gpu_pip);
 
   context->registerOpen(this, [this](Pipeline *pip) {
-    eventlogger.log(this, log_op::CPU2GPU_OPEN_START);
+    event_range<range_log_op::CPU2GPU_OPEN> er{id, gpu_pip->getUUID(),
+                                               pip->getGroup()};
     auto strm = createNonBlockingStream();
     pip->setStateVar<void *>(this->childVar_id, gpu_pip->getKernel());
     pip->setStateVar<decltype(strm)>(this->strmVar_id, strm);
-    eventlogger.log(this, log_op::CPU2GPU_OPEN_END);
   });
 
   context->registerClose(this, [this](Pipeline *pip) {
-    eventlogger.log(this, log_op::CPU2GPU_CLOSE_START);
+    event_range<range_log_op::CPU2GPU_CLOSE> er{id, gpu_pip->getUUID(),
+                                                pip->getGroup()};
     syncAndDestroyStream(pip->getStateVar<cudaStream_t>(this->strmVar_id));
-    eventlogger.log(this, log_op::CPU2GPU_CLOSE_END);
   });
 
   LLVMContext &llvmContext = context->getLLVMContext();

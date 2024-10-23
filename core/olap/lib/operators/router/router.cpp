@@ -480,7 +480,8 @@ void Router::spawnWorker(size_t i, const void *session) {
 
 void Router::open(Pipeline *pip) {
   std::lock_guard<std::mutex> guard(init_mutex);
-
+  event_range<range_log_op::ROUTER_OPEN> er{id, pip->getGeneratorUUID(),
+                                            pip->getGroup()};
   if (firers.empty()) {
     free_pool = new threadsafe_set<void *>[fanout];
     ready_fifo = new AsyncQueueMPSC<void *>[fanout];
@@ -490,26 +491,28 @@ void Router::open(Pipeline *pip) {
       ready_fifo[i].reset();
     }
 
-    //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_START);
     remaining_producers = producers;
     for (int i = 0; i < fanout; ++i) spawnWorker(i, pip->getSession());
-    //    eventlogger.log(this, log_op::EXCHANGE_INIT_CONS_END);
   }
 }
 
 void Router::close(Pipeline *pip) {
   // time_block t("Tterm_exchange: ");
+  event_range<range_log_op::ROUTER_CLOSE> er{id, pip->getGeneratorUUID(),
+                                             pip->getGroup()};
 
   int rem = --remaining_producers;
   CHECK_GE(rem, 0);
   if (rem == 0) {
     for (int i = 0; i < fanout; ++i) ready_fifo[i].close();
 
-    //    eventlogger.log(this, log_op::EXCHANGE_JOIN_START);
-    nvtxRangePushA("Exchange_waiting_to_close");
-    for (auto &t : firers) t.get();
-    nvtxRangePop();
-    //    eventlogger.log(this, log_op::EXCHANGE_JOIN_END);
+    {
+      nvtxRangePushA("Exchange_waiting_to_close");
+      event_range<range_log_op::ROUTER_CLOSE_JOIN_CONS> er2{
+          id, pip->getGeneratorUUID(), pip->getGroup()};
+      for (auto &t : firers) t.get();
+      nvtxRangePop();
+    }
     firers.clear();
 
     delete[] free_pool;

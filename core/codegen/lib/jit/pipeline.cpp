@@ -28,6 +28,7 @@
 #include <platform/common/gpu/gpu-common.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/util/timing.hpp>
+#include <platform/util/tracing.hpp>
 #include <thread>
 
 using namespace llvm;
@@ -98,6 +99,8 @@ void PipelineGen::registerClose(const void *owner,
 }
 
 void PipelineGen::callPipRegisteredOpen(size_t indx, Pipeline *pip) {
+  event_range<range_log_op::OPERATOR_PIPELINE_OPENER> er_pip2{id, id,
+                                                              pip->getGroup()};
   (openers[indx].second)(pip);
 }
 
@@ -290,7 +293,8 @@ PipelineGen::PipelineGen(Context *context, std::string pipName,
       context(context),
       copyStateFrom(copyStateFrom),
       execute_after_close(nullptr),
-      TheBuilder(nullptr) {
+      TheBuilder(nullptr),
+      id(uuids::uuid_system_generator{}()) {
   maxBlockSize = 1;
   maxGridSize = 1;
 
@@ -580,7 +584,9 @@ Pipeline::Pipeline(
       state_size(state_size),
       init_state(init_state),
       deinit_state(deinit_state),
-      execute_after_close(std::move(execute_after_close)) {
+      execute_after_close(std::move(execute_after_close)),
+      id(uuids::uuid_system_generator{}()),
+      pip_gen_id(gen->getUUID()) {
   assert(!openers.empty() && "Openers should be non-empty");
   assert(!closers.empty() && "Closers should be non-empty");
   assert(openers.size() == 1 && "Openers should contain a single element");
@@ -602,6 +608,7 @@ size_t Pipeline::getSizeOf(llvm::Type *t) const {
 int32_t Pipeline::getGroup() const { return group_id; }
 
 void Pipeline::open(const void *s) {
+  event_range<range_log_op::OPERATOR_PIPELINE_OPEN> er_pip{id, id, getGroup()};
   this->session = s;
   // TODO: for sure it can be done in at least N log N by sorting...
   // for (size_t i = openers.size() ; i > 0 ; --i) {
@@ -615,11 +622,18 @@ void Pipeline::open(const void *s) {
   //     }
   //     if (is_last) (openers[i - 1].second)(this);
   // }
-  assert(!openers.empty());
-  (openers[0].second)(this);
-
-  assert(init_state);
-  ((void (*)(Pipeline *, void *))init_state)(this, state);
+  {
+    event_range<range_log_op::OPERATOR_PIPELINE_OPENER> er_pip2{id, id,
+                                                                getGroup()};
+    assert(!openers.empty());
+    (openers[0].second)(this);
+  }
+  {
+    assert(init_state);
+    event_range<range_log_op::OPERATOR_PIPELINE_OPEN_INIT_STATE> er_pip2{
+        id, id, getGroup()};
+    ((void (*)(Pipeline *, void *))init_state)(this, state);
+  }
 
   // for (size_t i = 1 ; i < openers.size() ; ++i) {
   //     bool is_first = true;

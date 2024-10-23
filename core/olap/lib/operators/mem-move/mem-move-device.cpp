@@ -27,8 +27,8 @@
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
-#include <platform/util/logging.hpp>
 #include <platform/util/timing.hpp>
+#include <platform/util/tracing.hpp>
 
 #include "lib/util/catalog.hpp"
 
@@ -322,11 +322,12 @@ void MemMoveDevice::destroyMoveConf(MemMoveDevice::MemMoveConf *mmc) const {
 
 void MemMoveDevice::open(Pipeline *pip) {
   auto *wu = (workunit *)MemoryManager::mallocPinned(sizeof(workunit) * slack);
+  event_range<range_log_op::MEMMOVE_OPEN> er{id, catch_pip->getUUID(),
+                                             pip->getGroup()};
 
   // nvtxRangePushA("memmove::open");
   cudaStream_t strm = createNonBlockingStream();
 
-  eventlogger.log(this, log_op::MEMMOVE_OPEN_START);
   size_t data_size = (pip->getSizeOf(data_type) + 16 - 1) & ~((size_t)0xF);
 
   MemMoveConf *mmc = createMoveConf();
@@ -351,7 +352,6 @@ void MemMoveDevice::open(Pipeline *pip) {
   mmc->worker = ThreadPool::getInstance().enqueue(
       &MemMoveDevice::catcher, this, mmc, pip->getGroup(), exec_location{},
       pip->getSession());
-  eventlogger.log(this, log_op::MEMMOVE_OPEN_END);
 
   pip->setStateVar<int>(device_id_var, getTargetDevice());
 
@@ -365,17 +365,19 @@ int MemMoveDevice::getTargetDevice() const {
 }
 
 void MemMoveDevice::close(Pipeline *pip) {
-  eventlogger.log(this, log_op::MEMMOVE_CLOSE_START);
   auto *mmc = pip->getStateVar<MemMoveConf *>(memmvconf_var);
 
-  mmc->tran.close();
+  {
+    event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
+                                                pip->getGroup()};
+    mmc->tran.close();
 
-  nvtxRangePop();
-  mmc->worker.get();
+    nvtxRangePop();
+    mmc->worker.get();
+  }
 
-  eventlogger.log(this, log_op::MEMMOVE_CLOSE_END);
-
-  eventlogger.log(this, log_op::MEMMOVE_CLOSE_CLEAN_UP_START);
+  event_range<range_log_op::MEMMOVE_CLOSE_CLEAN_UP> er{id, catch_pip->getUUID(),
+                                                       pip->getGroup()};
   syncAndDestroyStream(mmc->strm);
 
   nvtxRangePushA("MemMoveDev_running2");
@@ -397,7 +399,6 @@ void MemMoveDevice::close(Pipeline *pip) {
   mmc->idle.close();
 
   destroyMoveConf(mmc);
-  eventlogger.log(this, log_op::MEMMOVE_CLOSE_CLEAN_UP_END);
 }
 
 void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
@@ -452,16 +453,20 @@ void MemMoveDevice::catcher(MemMoveConf *mmc, int group_id,
         ((proteus::managed_ptr *)(p->data))[i * 2] =
             mmc->pull(std::move(((proteus::managed_ptr *)(p->data))[i * 2]));
       }
-
-      nvtxRangePushA("memmove::catch_cons");
-      pip->consume(p->data);
-      nvtxRangePop();
+      {
+        event_range<range_log_op::MEMMOVE_CONSUME> er{id, catch_pip->getUUID(),
+                                                      pip->getGroup()};
+        nvtxRangePushA("memmove::catch_cons");
+        pip->consume(p->data);
+        nvtxRangePop();
+      }
 
       mmc->release(p);
     } while (true);
   }
 
-  event_range<range_log_op::MEMMOVE_OPEN> er{this, catch_pip, pip->getGroup()};
+  event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
+                                              pip->getGroup()};
   nvtxRangePushA("memmove::catch_close");
   pip->close();
   nvtxRangePop();

@@ -31,10 +31,7 @@
 #include <olap/util/parallel-context.hpp>
 #include <platform/common/common.hpp>
 #include <platform/common/unsupported-operation.hpp>
-
-/* Leads to incomplete type */
-// class ProteusValueMemory;
-// class ProteusValue;
+#include <stduuid/uuid.hpp>
 
 // Used by all plugins
 static const string activeLoop = "activeTuple";
@@ -58,6 +55,10 @@ enum PluginType { PGCSV, PGJSON, PGBINARY };
 class Plugin {
  public:
   virtual ~Plugin() { LOG(INFO) << "[PLUGIN: ] Collapsing plug-in"; }
+  Plugin() : id(uuids::uuid_system_generator{}()) {}
+  uuids::uuid getUUID() { return id; }
+
+  [[nodiscard]] const uuids::uuid &getUUID() const { return id; }
   virtual string &getName() = 0;
   virtual void init() = 0;
   virtual void finish() = 0;
@@ -239,5 +240,8 @@ class Plugin {
   }
 
   virtual bool isLazy() { return false; }
+
+ private:
+  uuids::uuid id;
 };
 #endif /* PLUGINS_LLVM_HPP_ */

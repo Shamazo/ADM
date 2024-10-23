@@ -29,6 +29,7 @@
 #include <platform/topology/topology.hpp>
 #include <platform/util/profiling.hpp>
 #include <platform/util/timing.hpp>
+#include <platform/util/tracing.hpp>
 #include <utility>
 
 #include "lib/util/caching.hpp"
@@ -112,9 +113,12 @@ QueryResult PreparedStatement::execute(
 
     {
       time_block texecute = f("Texecute       : ");
+      event_range<range_log_op::QUERY_EXECUTE> er{{}};
 
       for (auto &p : pipelines) {
         nvtxRangePushA("pip");
+        event_range<range_log_op::OPERATOR_PIPELINE_EXECUTE> er_pip{
+            planRoot->getUUID()};
         {
           time_block t2([&](const auto &tmil) { tlog.emplace_back(tmil); });
           time_block t = f("T: ");
