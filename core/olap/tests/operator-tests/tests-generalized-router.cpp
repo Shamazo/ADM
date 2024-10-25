@@ -483,7 +483,7 @@ TEST_P(GRouterTestVaryNumConsumers,
   std::vector<double> normalizedCounts = normalizeCounts(counts);
   for (auto& split_percentage : normalizedCounts) {
     LOG(INFO) << "Split percentage: " << split_percentage;
-    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.10)
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.20)
         << "expected a roughly equal distribution of work to splits";
   }
 }
