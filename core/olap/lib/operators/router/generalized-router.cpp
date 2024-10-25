@@ -326,6 +326,15 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
       DegreeOfParallelism{topology::getInstance().getCpuNumaNodes().size()},
       wantedFields);
 
+  // Warmup threads to avoid thread creation overhead
+  for (const auto &cons : consumers) {
+    for (int i = 0; i < cons->fanout; i++) {
+      firers.emplace_back([]() {});
+    }
+  }
+  for (auto &t : firers) t.get();
+  firers.clear();
+
   llvm::LLVMContext &llvmContext = context->getLLVMContext();
   llvm::IRBuilder<> *Builder = context->getBuilder();
 
