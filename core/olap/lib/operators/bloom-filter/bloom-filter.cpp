@@ -29,7 +29,7 @@
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
-
+static std::mutex bloom_filter_registry_lock;
 static std::map<std::pair<uint64_t, decltype(topology::cpunumanode::id)>,
                 void *>
     bloom_filter_registry;
@@ -37,6 +37,7 @@ static std::map<std::pair<uint64_t, decltype(topology::cpunumanode::id)>,
 extern "C" void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId) {
   const auto &cpu = affinity::get();
   auto k = std::make_pair(bloomId, cpu.id);
+  std::lock_guard<std::mutex> lock(bloom_filter_registry_lock);
   if (bloom_filter_registry.count(k)) {
     MemoryManager::freePinned(bloom_filter_registry[k]);
     //    LOG(INFO) << "setBloomFilter Freeing bloom filter with id: " <<
@@ -58,6 +59,7 @@ extern "C" void *getBloomFilter(Pipeline *pip, uint64_t bloomId) {
 }
 
 void cleanBloomFilterRegistry() {
+  std::lock_guard<std::mutex> lock(bloom_filter_registry_lock);
   for (const auto &r : bloom_filter_registry) {
     LOG(INFO) << "Freeing bloom filter with id: " << r.first.first
               << " on node: " << r.first.second;
