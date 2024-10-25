@@ -100,10 +100,14 @@ class alignas(2 * 1024 * 1024)
   std::condition_variable cv;
 
  public:
-  static constexpr size_t N = 8 * 1024;
+  static constexpr size_t N = 2 * 1024;
   std::atomic<size_t> cnt;
+  /**
+   * @note Careful if intending to have more than 2k items in the queue. You may
+   * need to adjust N and the data size.
+   */
   AsyncQueueMPMC(int socket_id)
-      : data(64 * 1024 /*, proteus::memory::ExplicitSocketPinnedMemoryAllocator<T>{socket_id}*/),
+      : data(2 * 1024 /*, proteus::memory::ExplicitSocketPinnedMemoryAllocator<T>{socket_id}*/),
         cnt(0) {
     for (size_t i = 0; i < N; ++i) {
       data[i].second = -1;

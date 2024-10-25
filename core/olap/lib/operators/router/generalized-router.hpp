@@ -88,7 +88,7 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
   virtual void spawnWorker(const void *session, size_t queue_offset,
                            threadvector &firers);
   virtual void fire(int target_queue, int local_target, PipelineGen *pipGen,
-                    const void *session);
+                    const void *session, bool should_allocate_queue_buffs);
   virtual void foreachTaskDo(int target, Pipeline *pip, PipelineGen *pipGen,
                              std::function<void(void *)> f);
 
@@ -139,7 +139,6 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   //      free_pool{proteus::memory::ExplicitSocketPinnedMemoryAllocator<
   //          AsyncQueueMPMC<void *>>{1}};
   //  //  threadsafe_set<void *> *free_pool = nullptr;
-  std::deque<void *> buffer_data;
 
   const GeneralizedRoutingPolicy policy_type;
   std::unique_ptr<routing::RoutingPolicy> routing;
@@ -202,11 +201,11 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   virtual void open(Pipeline *pip);
   /**
-   * helper function to open queues and allocate queue buffers
+   * helper function to create queues
    * Assumes init_mutex is held when called.
    */
-  virtual void open_queues();
-  virtual void allocate_buffers_for_queue(size_t queue);
+  virtual void create_queues();
+  virtual void *allocate_buffers_for_queue(size_t queue);
   virtual void close(Pipeline *pip);
 
   virtual llvm::Value *createTaskDescription(OlapParallelContext *context,

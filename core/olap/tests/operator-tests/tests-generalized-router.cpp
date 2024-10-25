@@ -289,7 +289,8 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(std::make_tuple(2, 1), std::make_tuple(3, 1),
                     std::make_tuple(2, 2), std::make_tuple(3, 2),
                     std::make_tuple(2, 4), std::make_tuple(3, 4),
-                    std::make_tuple(2, 8), std::make_tuple(4, 8)),
+                    std::make_tuple(2, 8), std::make_tuple(4, 8),
+                    std::make_tuple(2, 16)),
     PrintToStringParamName());
 
 TEST_P(GRouterTestVaryNumConsumers,
