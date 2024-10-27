@@ -53,6 +53,17 @@ void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
   xch->releaseBufferGeneralized(target, proteus::managed_ptr{buff});
 }
 
+GeneralizedRouterConsumer::GeneralizedRouterConsumer(
+    GeneralizedRouter &producer, DegreeOfParallelism fanout,
+    std::unique_ptr<Affinitizer> aff, DeviceType target_device)
+    : experimental::UnaryOperator(&producer),
+      producer(producer),
+      fanout(fanout),
+      aff(std::move(aff)),
+      aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
+                                                  this->aff.get())),
+      target_device(target_device) {}
+
 void GeneralizedRouterConsumer::produce_(OlapParallelContext *context) {
   consume(context, {*this, {}});
 

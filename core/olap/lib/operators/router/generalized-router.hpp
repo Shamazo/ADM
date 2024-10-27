@@ -43,7 +43,7 @@ class GeneralizedRouter;
                                                  int64_t groupId);
 void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff);
 
-class GeneralizedRouterConsumer final : public experimental::Operator {
+class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
  protected:
   GeneralizedRouter &producer;
 
@@ -58,13 +58,7 @@ class GeneralizedRouterConsumer final : public experimental::Operator {
   GeneralizedRouterConsumer(GeneralizedRouter &producer,
                             DegreeOfParallelism fanout,
                             std::unique_ptr<Affinitizer> aff,
-                            DeviceType target_device)
-      : producer(producer),
-        fanout(fanout),
-        aff(std::move(aff)),
-        aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
-                                                    this->aff.get())),
-        target_device(target_device) {}
+                            DeviceType target_device);
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
