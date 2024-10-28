@@ -157,8 +157,6 @@ class logger {
 };
 
 class counter_logger {
-  std::deque<counter_log_info> *data;
-
  public:
   counter_logger() {}
   inline void log(uuids::uuid id, counter_type op, int value, int index = 0) {}
