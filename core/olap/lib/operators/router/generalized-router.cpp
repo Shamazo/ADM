@@ -79,6 +79,11 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
   Plugin *pg = Catalog::getInstance().getPlugin(
       producer.wantedFields[0]->getRelationName());
 
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  const bool is_nvme_plugin = nvme_plugin != nullptr;
+  const bool non_scan_move = producer.wantedFields[0]->getRelationName().find(
+                                 "tmp") != std::string::npos;
+
   const ExpressionType *ptoid = pg->getOIDType();
 
   llvm::Type *oidType = ptoid->getLLVMType(llvmContext);
@@ -98,14 +103,25 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
   param_typelist.push_back(llvm::Type::getInt64Ty(llvmContext));  // srcServer
   if (producer.need_cnt) param_typelist.push_back(oidType);       // cnt
 
+  // This currently assumes that if we are routing blocks (need_cnt) and using
+  // the nvme plugin, then we need to add tupleCnt as a param. This may not
+  // always be true, e.g. pack intermediate results on GPU and route the blocks
+  // to the CPU. TBD if this breaks things
+  if (is_nvme_plugin)
+    param_typelist.push_back(oidType);  // the real tupleCnt. For NvmePlugin cnt
+                                        // is the number of blocks
+
   producer.params_type = llvm::StructType::get(llvmContext, param_typelist);
   producer.buf_size = context->getSizeOf(producer.params_type);
 
+  // blockCnt for NvmePlugin
   RecordAttribute tupleCnt(producer.wantedFields[0]->getRelationName(),
                            "activeCnt",
                            pg->getOIDType());  // FIXME: OID type for blocks ?
   RecordAttribute tupleIdentifier(producer.wantedFields[0]->getRelationName(),
                                   activeLoop, pg->getOIDType());
+  RecordAttribute realTupleCnt(producer.wantedFields[0]->getRelationName(),
+                               "tupleCnt", pg->getOIDType());
   RecordAttribute srcServer{producer.wantedFields[0]->getRelationName(),
                             "srcServer",
                             new Int64Type()};  // FIXME: OID type for blocks ?
@@ -155,6 +171,13 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
     auto *cnt =
         Builder->CreateExtractValue(params, producer.wantedFields.size() + 2);
     variableBindings[tupleCnt] = context->toMem(cnt, context->createFalse());
+
+    if (is_nvme_plugin && !non_scan_move) {
+      llvm::Value *tuple_cnt =
+          Builder->CreateExtractValue(params, producer.wantedFields.size() + 3);
+      variableBindings[realTupleCnt] =
+          context->toMem(tuple_cnt, context->createFalse());
+    }
   }
 
   Builder->SetInsertPoint(mainBB);
@@ -260,6 +283,9 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
   Plugin *pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  const bool is_nvme_plugin = nvme_plugin != nullptr;
+
   auto rec = childState.getProducer().getRowType();
   ExpressionGeneratorVisitor vis{context, childState};
   for (size_t i = 0; i < wantedFields.size(); ++i) {
@@ -318,6 +344,29 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
             mem_cntWrapper.mem->getType()->getPointerElementType(),
             mem_cntWrapper.mem),
         wantedFields.size() + 2);
+
+    if (is_nvme_plugin) {
+      RecordAttribute realTupleCnt(wantedFields[0]->getRelationName(),
+                                   "tupleCnt", pg->getOIDType());
+      bool have_tuple_count = true;
+      try {
+        childState[{realTupleCnt}];
+      } catch (const attribute_not_found_in_state &) {
+        have_tuple_count = false;
+      }
+      if (have_tuple_count) {
+        ProteusValueMemory mem_realTupleCntWrapper = childState[realTupleCnt];
+        //        context->log(Builder->CreateLoad(
+        //            mem_realTupleCntWrapper.mem->getType()->getPointerElementType(),
+        //            mem_realTupleCntWrapper.mem));
+        params = Builder->CreateInsertValue(
+            params,
+            Builder->CreateLoad(
+                mem_realTupleCntWrapper.mem->getType()->getPointerElementType(),
+                mem_realTupleCntWrapper.mem),
+            wantedFields.size() + 3);
+      }
+    }
   }
 
   return params;
