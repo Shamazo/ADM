@@ -1,3 +1,4 @@
+include(proteus-experiment)
 # Set the name of the app from the folder name
 get_filename_component(APP_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
@@ -14,4 +15,4 @@ target_link_libraries(${PROJECT_NAME}
   cli-flags::cli-flags
   )
 
-include(proteus-experiment)
+configure_proteus_experiment(${PROJECT_NAME})

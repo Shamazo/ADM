@@ -1,3 +1,4 @@
+include(proteus-experiment)
 project(olap-deprecated VERSION 0.1 LANGUAGES CXX)
 
 foreach (target
@@ -13,6 +14,5 @@ foreach (target
   target_link_libraries(deprecated-${target}
     proteus::olap
     )
+  configure_proteus_experiment(target)
 endforeach (target)
-
-include(proteus-experiment)

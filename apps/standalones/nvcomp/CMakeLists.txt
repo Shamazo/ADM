@@ -1,3 +1,4 @@
+include(proteus-experiment)
 find_package(nvcomp)
 if (nvcomp_FOUND)
   message(STATUS "nvcomp found, configuring ${CMAKE_CURRENT_SOURCE_DIR}")
@@ -18,7 +19,7 @@ target_link_libraries(${PROJECT_NAME}
   proteus::platform
   )
 
-include(proteus-experiment)
+configure_proteus_experiment(${PROJECT_NAME})
 
 else()
   message(STATUS "nvcomp not found, skipping ${CMAKE_CURRENT_SOURCE_DIR}")

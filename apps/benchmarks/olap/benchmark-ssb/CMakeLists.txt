@@ -1,3 +1,4 @@
+include(proteus-experiment)
 get_filename_component(APP_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
 project(proteus-${APP_NAME} VERSION 0.1 LANGUAGES CXX)
@@ -16,4 +17,4 @@ target_link_libraries(${PROJECT_NAME}
   benchmark::benchmark
   )
 
-include(proteus-experiment)
+configure_proteus_experiment(${PROJECT_NAME})
