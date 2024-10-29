@@ -55,7 +55,8 @@ class ExpressionFlusherVisitor : public ExprVisitor {
         // Only used as a token return value that is passed along by each
         // visitor
         placeholder{nullptr, context->createFalse()} {
-    pg = new jsonPipelined::JSONPlugin(context, outputFile, nullptr);
+    pg = std::make_shared<jsonPipelined::JSONPlugin>(context, outputFile,
+                                                     nullptr);
   }
   ExpressionFlusherVisitor(Context *const context,
                            const OperatorState &currState,
@@ -207,7 +208,7 @@ class ExpressionFlusherVisitor : public ExprVisitor {
 
   ProteusValue placeholder;
   string activeRelation;
-  Plugin *pg;
+  std::shared_ptr<Plugin> pg;
 };
 
 #endif /* EXPRESSIONS_FLUSHER_VISITOR_HPP_ */

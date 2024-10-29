@@ -70,8 +70,8 @@ TEST(CSV, ScanCsvPM) {
   whichFields.push_back(age);
 
   /* 1 every 5 fields indexed in PM */
-  pm::CSVPlugin *pg =
-      new pm::CSVPlugin(&ctx, filename, rec1, whichFields, 10, 2);
+  auto pg =
+      std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 2);
   catalog.registerPlugin(filename, pg);
   Scan scan = Scan(*pg);
 
@@ -138,8 +138,8 @@ TEST(CSV, ScanCsvWideBuildPM) {
   whichFields.push_back(attr26);
 
   /* 1 every 5 fields indexed in PM */
-  pm::CSVPlugin *pg =
-      new pm::CSVPlugin(&ctx, filename, rec1, whichFields, 10, 6);
+  auto pg =
+      std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 6);
   catalog.registerPlugin(filename, pg);
   Scan scan = Scan(*pg);
 
@@ -206,8 +206,8 @@ void scanCsvWideUsePM_(size_t *newline, short **offsets) {
   whichFields.push_back(attr26);
 
   /* 1 every 5 fields indexed in PM */
-  pm::CSVPlugin *pg = new pm::CSVPlugin(&ctx, filename, rec1, whichFields, ';',
-                                        10, 6, newline, offsets);
+  auto pg = std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields,
+                                            ';', 10, 6, newline, offsets);
   catalog.registerPlugin(filename, pg);
   Scan scan = Scan(*pg);
 
@@ -274,8 +274,8 @@ TEST(CSV, scanCsvWideUsePM) {
   whichFields.push_back(attr26);
 
   /* 1 every 5 fields indexed in PM */
-  pm::CSVPlugin *pg =
-      new pm::CSVPlugin(&ctx, filename, rec1, whichFields, 10, 6);
+  auto pg =
+      std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 6);
   catalog.registerPlugin(filename, pg);
   Scan scan = Scan(*pg);
 

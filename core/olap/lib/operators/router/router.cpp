@@ -58,10 +58,10 @@ void Router::generate_catch(OlapParallelContext *context) {
   // Function    * F             = insBB->getParent();
 
   // Builder->SetInsertPoint(context->getCurrentEntryBlock());
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
-  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
   const bool is_nvme_plugin = nvme_plugin != nullptr;
   const bool non_scan_move =
       wantedFields[0]->getRelationName().find("tmp") != std::string::npos;
@@ -386,10 +386,10 @@ void Router::consume(OlapParallelContext *const context,
 
   Value *params = UndefValue::get(params_type);
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
-  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
   const bool is_nvme_plugin = nvme_plugin != nullptr;
 
   auto rec = childState.getProducer().getRowType();

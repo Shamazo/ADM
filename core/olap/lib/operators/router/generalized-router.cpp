@@ -78,10 +78,10 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
                                         const OperatorState &childState) {
   auto &llvmContext = context->getLLVMContext();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(
       producer.wantedFields[0]->getRelationName());
 
-  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
   const bool is_nvme_plugin = nvme_plugin != nullptr;
   const bool non_scan_move = producer.wantedFields[0]->getRelationName().find(
                                  "tmp") != std::string::npos;
@@ -282,10 +282,10 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
 
   llvm::Value *params = llvm::UndefValue::get(params_type);
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
-  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
   const bool is_nvme_plugin = nvme_plugin != nullptr;
 
   auto rec = childState.getProducer().getRowType();

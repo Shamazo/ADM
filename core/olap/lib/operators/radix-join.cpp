@@ -408,7 +408,7 @@ void RadixJoin::runRadix() const {
                             .getWantedExpressions()
                             .back()
                             .getRegisteredRelName();
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   ExpressionType *oid_type = pg->getOIDType();
   IntegerType *llvm_oid_type =
       (IntegerType *)oid_type->getLLVMType(llvmContext);

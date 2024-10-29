@@ -35,7 +35,7 @@ Project::Project(std::vector<expression_t> outputExprs, string relName,
       outputExprs(outputExprs) {}
 
 void Project::produce_(OlapParallelContext *context) {
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   auto t = pg->getOIDType()->getLLVMType(context->getLLVMContext());
   oid_id = context->appendStateVar(
       llvm::PointerType::getUnqual(t),

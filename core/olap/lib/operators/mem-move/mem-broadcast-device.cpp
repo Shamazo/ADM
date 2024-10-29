@@ -118,7 +118,7 @@ void MemBroadcastDevice::produce_(OlapParallelContext *context) {
   auto int32_type = Type::getInt32Ty(context->getLLVMContext());
   auto charPtrType = Type::getInt8PtrTy(context->getLLVMContext());
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   auto oidType = pg->getOIDType()->getLLVMType(llvmContext);
 
@@ -236,7 +236,7 @@ void MemBroadcastDevice::consume(OlapParallelContext *context,
       llvmContext, std::vector<llvm::Type *>{charPtrType, charPtrType});
 
   // Find block size
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   RecordAttribute tupleCnt{wantedFields[0]->getRelationName(), "activeCnt",
                            pg->getOIDType()};  // FIXME: OID type for blocks ?

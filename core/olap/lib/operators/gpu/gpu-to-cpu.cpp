@@ -38,7 +38,7 @@ void GpuToCpu::produce_(OlapParallelContext *context) {
   Type *int32_type = Type::getInt32Ty(llvmContext);
   Type *charPtrType = Type::getInt8PtrTy(llvmContext);
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   std::vector<Type *> child_params;
   for (const auto t : wantedFields) {
@@ -103,7 +103,7 @@ void GpuToCpu::consume(OlapParallelContext *const context,
     kernel_params = Builder->CreateInsertValue(kernel_params, mem_val, i);
   }
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   RecordAttribute tupleCnt =
       RecordAttribute(wantedFields[0]->getRelationName(), "activeCnt",
@@ -494,7 +494,7 @@ void GpuToCpu::generate_catch(OlapParallelContext *context) {
 
   map<RecordAttribute, ProteusValueMemory> variableBindings;
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
   for (size_t i = 0; i < wantedFields.size(); ++i) {

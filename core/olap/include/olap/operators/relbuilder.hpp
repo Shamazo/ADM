@@ -82,8 +82,8 @@ class RelBuilder {
 
   [[nodiscard]] std::string getModuleName() const;
 
-  [[nodiscard]] Plugin* createPlugin(const RecordType& rec,
-                                     const std::vector<RecordAttribute*>& projs,
+  [[nodiscard]] std::shared_ptr<Plugin> createPlugin(
+      const RecordType& rec, const std::vector<RecordAttribute*>& projs,
                                      const std::string& pgType) const;
 
  private:
@@ -93,7 +93,8 @@ class RelBuilder {
   friend class RelBuilderFactory;
   friend class SplitRelBuilder;
 
-  static void registerPlugin(const std::string& relName, Plugin* pg);
+  static void registerPlugin(const std::string& relName,
+                             std::shared_ptr<Plugin> pg);
 
  protected:
   [[nodiscard]] static DegreeOfParallelism getDefaultDOP(DeviceType targetType);
@@ -229,9 +230,8 @@ class RelBuilder {
 
   [[deprecated]] RelBuilder print(
       std::function<std::vector<expression_t>(const expressions::InputArgument&,
-                                              std::string)>
-          expr,
-      std::string outrel, Plugin* pg = nullptr) const {
+                                              std::string)> expr,
+      std::string outrel, std::shared_ptr<Plugin> pg = nullptr) const {
     const auto vec = expr(getOutputArg(), outrel);
 #ifndef NDEBUG
     for (const auto& e : vec) {
@@ -240,7 +240,7 @@ class RelBuilder {
     }
 #endif
     assert(pg == nullptr || outrel == pg->getName());
-    return print(vec, pg);
+    return print(vec, std::move(pg));
   }
 
   template <typename Tplugin>
@@ -257,16 +257,14 @@ class RelBuilder {
 
   [[deprecated]] RelBuilder print(
       std::function<std::vector<expression_t>(const expressions::InputArgument&,
-                                              std::string)>
-          expr,
-      Plugin* pg) const {
-    return print(std::move(expr), pg->getName(), pg);
+                                              std::string)> expr,
+      std::shared_ptr<Plugin> pg) const {
+    return print(std::move(expr), pg->getName(), std::move(pg));
   }
 
   [[deprecated]] RelBuilder print(
       std::function<std::vector<expression_t>(const expressions::InputArgument&,
-                                              std::string)>
-          expr) const {
+                                              std::string)> expr) const {
     return print(std::move(expr), getModuleName());
   }
 
@@ -654,7 +652,8 @@ class RelBuilder {
   [[nodiscard]] RelBuilder sort(const std::vector<expression_t>& orderByFields,
                                 const std::vector<direction>& dirs) const;
 
-  RelBuilder print(const std::vector<expression_t>& e, Plugin* pg,
+  RelBuilder print(const std::vector<expression_t>& e,
+                   std::shared_ptr<Plugin> pg,
                    bool may_overwrite = false) const;
 
   RelBuilder print(std::function<std::vector<expression_t>(

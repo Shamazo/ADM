@@ -1284,7 +1284,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
   } else if (strcmp(opName, "scan") == 0) {
     assert(val.HasMember(keyPg));
     assert(val[keyPg].IsObject());
-    Plugin *pg = this->parsePlugin(val[keyPg]);
+    std::shared_ptr<Plugin> pg = this->parsePlugin(val[keyPg]);
 
     return factory.getBuilder().scan(*pg);
   } else if (strcmp(opName, "values") == 0) {
@@ -1682,8 +1682,8 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
  * {"name": "foo", "type": "csv", ... }
  * FIXME / TODO If we introduce more plugins, this code must be extended
  */
-Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
-  Plugin *newPg = nullptr;
+std::shared_ptr<Plugin> PlanExecutor::parsePlugin(const rapidjson::Value &val) {
+  std::shared_ptr<Plugin> newPg = nullptr;
 
   const char *keyInputName = "name";
   const char *keyPgType = "type";
@@ -1810,16 +1810,15 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
       hasHeader = val["hasHeader"].GetBool();
     }
 
-    newPg =
-        new pm::CSVPlugin(this->ctx, *pathDynamicCopy, *recType, projections,
-                          delim, linehint, policy, stringBrackets, hasHeader);
+    newPg = std::make_shared<pm::CSVPlugin>(
+        this->ctx, *pathDynamicCopy, *recType, projections, delim, linehint, policy, stringBrackets, hasHeader);
   } else if (pgType == "json") {
     assert(val.HasMember(keyLineHint));
     assert(val[keyLineHint].IsInt());
     int linehint = val[keyLineHint].GetInt();
 
-    newPg = new jsonPipelined::JSONPlugin(this->ctx, *pathDynamicCopy,
-                                          datasetInfo->exprType, linehint);
+    newPg = std::make_shared<jsonPipelined::JSONPlugin>(
+        this->ctx, *pathDynamicCopy, datasetInfo->exprType, linehint);
   } else if (pgType == "binrow") {
     assert(val.HasMember(keyProjections));
     assert(val[keyProjections].IsArray());
@@ -1829,8 +1828,8 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
       projections.push_back(parseRecordAttr(attr, {recType}));
     }
 
-    newPg =
-        new BinaryRowPlugin(this->ctx, *pathDynamicCopy, *recType, projections);
+    newPg = std::make_shared<BinaryRowPlugin>(this->ctx, *pathDynamicCopy,
+                                              *recType, projections);
   } else if (pgType == "bincol") {
     assert(val.HasMember(keyProjections));
     assert(val[keyProjections].IsArray());
@@ -1845,8 +1844,8 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
       assert(val["sizeInFile"].IsBool());
       sizeInFile = val["sizeInFile"].GetBool();
     }
-    newPg = new BinaryColPlugin(this->ctx, *pathDynamicCopy, *recType,
-                                projections, sizeInFile);
+    newPg = std::make_shared<BinaryColPlugin>(
+        this->ctx, *pathDynamicCopy, *recType, projections, sizeInFile);
   } else if (pgType == "block") {
     assert(val.HasMember(keyProjections));
     assert(val[keyProjections].IsArray());
@@ -1858,9 +1857,8 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
 
     assert(dynamic_cast<OlapParallelContext *>(this->ctx));
 
-    newPg =
-        new BinaryBlockPlugin(dynamic_cast<OlapParallelContext *>(this->ctx),
-                              *pathDynamicCopy, *recType, projections);
+    newPg = std::make_shared<BinaryBlockPlugin>(
+        dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy, *recType, projections);
   } else {
     assert(dynamic_cast<OlapParallelContext *>(this->ctx));
 
@@ -1894,15 +1892,14 @@ Plugin *PlanExecutor::parsePlugin(const rapidjson::Value &val) {
         projections.push_back(parseRecordAttr(attr, {recType}));
       }
 
-      newPg = create(dynamic_cast<OlapParallelContext *>(this->ctx),
-                     *pathDynamicCopy, *recType,
-                     projections /*, const rapidjson::Value &val */);
+      newPg = std::shared_ptr<Plugin>{create(
+          dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy, *recType, projections /*, const rapidjson::Value &val */)};
       // FIXME: a better interface would be to also pass the current json value,
       //  so that plugins can read their own attributes.
     }
   }
 
-  activePlugins.push_back(newPg);
+  activePlugins.push_back(newPg.get());
   Catalog &catalog = Catalog::getInstance();
   catalog.registerPlugin(*pathDynamicCopy, newPg);
   datasetInfo->oidType = newPg->getOIDType();
@@ -2023,11 +2020,11 @@ InputInfo *CatalogParser::getOrCreateInputInfo(string inputName,
     //    Plugin *newPg =
     //        new pm::CSVPlugin(context, inputName, *rec, projs, ',', 10, 1,
     //        false);
-    Plugin *newPg = new BinaryBlockPlugin(context, inputName, *rec, projs);
-    catalog.registerPlugin(inputName, newPg);
+    auto newPg =
+        std::make_shared<BinaryBlockPlugin>(context, inputName, *rec, projs);
     ret->oidType = newPg->getOIDType();
-
     setInputInfo(inputName, ret);
+    catalog.registerPlugin(inputName, std::move(newPg));
   }
 
   return ret;

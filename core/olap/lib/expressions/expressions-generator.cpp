@@ -148,7 +148,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
 
     // A previous visitor has indicated which relation is relevant
     if (activeRelation != "") {
-      Plugin *pg = catalog.getPlugin(activeRelation);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(activeRelation);
       RecordAttribute relevantAttr =
           RecordAttribute(activeRelation, activeLoop, pg->getOIDType());
       it = activeVars.find(relevantAttr);
@@ -246,7 +246,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
   activeRelation = e->getOriginalRelationName();
   string projName = e->getProjectionName();
 
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   if (plugin != nullptr) {
     /* Cache Logic */
@@ -325,7 +325,7 @@ ProteusValue ExpressionGeneratorVisitor::visit(
       // Path involves a primitive datatype
       //(e.g., the result of unnesting a list of primitives)
       // cout << "PROJ: " << activeRelation << endl;
-      Plugin *pg = catalog.getPlugin(activeRelation);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(activeRelation);
       RecordAttribute tupleIdentifier(activeRelation, activeLoop,
                                       pg->getOIDType());
 

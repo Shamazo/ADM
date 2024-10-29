@@ -91,7 +91,7 @@ void BloomFilterRepack::produce_(OlapParallelContext *context) {
       },
       [=](llvm::Value *, llvm::Value *s) { context->deallocateStateVar(s); });
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
   auto oidType = pg->getOIDType()->getLLVMType(context->getLLVMContext());
   oidVar_id = context->appendStateVar(
@@ -362,7 +362,7 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
     auto almostFull =
         Builder->CreateICmpUGT(nextCnt, context->createInt32(capacity - vsize));
     context->gen_if({almostFull, context->createFalse()})([&] {
-      Plugin *pg = Catalog::getInstance().getPlugin(
+      std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(
           wantedFields[0].getRegisteredRelName());
 
       auto new_oid = Builder->CreateLoad(
@@ -420,7 +420,7 @@ void BloomFilterRepack::consume(OlapParallelContext *context,
       filter->getType()->getNonOpaquePointerElementType(), filter,
       {context->createInt64(0), context->createInt64(0)});
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
 
   RecordAttribute tupleCnt{wantedFields[0].getRegisteredRelName(), "activeCnt",
@@ -523,7 +523,7 @@ void BloomFilterRepack::consume_flush(OlapParallelContext *context) {
         context->createFalse());
   }
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
 
   auto new_oid = Builder->CreateLoad(

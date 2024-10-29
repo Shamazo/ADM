@@ -32,7 +32,7 @@ using namespace llvm;
 void HashRearrange::produce_(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
   Type *cnt_type =
@@ -135,7 +135,7 @@ void HashRearrange::consume(OlapParallelContext *context,
   BasicBlock *insBB = Builder->GetInsertBlock();
   Function *F = insBB->getParent();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
   auto *oid_type = (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 
@@ -425,7 +425,7 @@ void HashRearrange::consume_flush(OlapParallelContext *context) {
 
   // LLVMContext & llvmContext   = context->getLLVMContext();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 

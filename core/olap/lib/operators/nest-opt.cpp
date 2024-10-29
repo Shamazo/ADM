@@ -476,7 +476,8 @@ void Nest::generateProbe(Context *const context) const {
       }
     }
 
-    Plugin *htPlugin = new BinaryInternalPlugin(context, htName);
+    std::shared_ptr<Plugin> htPlugin =
+        std::make_shared<BinaryInternalPlugin>(context, htName);
     RecordAttribute attr_aggr =
         RecordAttribute(htName, aggregateName, outputExpr.getExpressionType());
     catalog.registerPlugin(htName, htPlugin);

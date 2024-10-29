@@ -293,7 +293,7 @@ void Reduce::generate_flush(OlapParallelContext *context) {
   }
 
   if (found) {
-    Plugin *pg = Catalog::getInstance().getPlugin(rel_name);
+    std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(rel_name);
 
     {
       RecordAttribute tupleOID(

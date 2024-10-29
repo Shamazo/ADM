@@ -41,14 +41,14 @@ class Path {
   }
 
   const expressions::RecordProjection *get() const { return desugarizedPath; }
-  Plugin *getRelevantPlugin() const { return pg; }
+  std::shared_ptr<Plugin> getRelevantPlugin() const { return pg; }
   string getNestedName() const { return nestedName; }
   string toString() const;
 
  private:
   const expressions::RecordProjection *const desugarizedPath;
   string nestedName;
-  Plugin *pg;
+  std::shared_ptr<Plugin> pg;
 };
 
 #endif /* PATH_HPP_ */

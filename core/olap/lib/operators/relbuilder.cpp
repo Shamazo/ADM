@@ -416,7 +416,8 @@ RelBuilder RelBuilder::sort(const std::vector<expression_t> &orderByFields,
   }
 }
 
-RelBuilder RelBuilder::print(const std::vector<expression_t> &e, Plugin *pg,
+RelBuilder RelBuilder::print(const std::vector<expression_t> &e,
+                             std::shared_ptr<Plugin> pg,
                              bool may_overwrite) const {
   assert(!e.empty() && "Empty print");
   assert(e[0].isRegistered());
@@ -794,7 +795,8 @@ RelBuilder RelBuilder::join(RelBuilder build, expression_t build_k,
   }
 }
 
-void RelBuilder::registerPlugin(const std::string &relName, Plugin *pg) {
+void RelBuilder::registerPlugin(const std::string &relName,
+                                std::shared_ptr<Plugin> pg) {
   Catalog::getInstance().registerPlugin(relName, pg);
 }
 
@@ -821,9 +823,9 @@ auto getPluginFactory(const std::string &pgType) {
   return create;
 }
 
-Plugin *RelBuilder::createPlugin(const RecordType &rec,
-                                 const std::vector<RecordAttribute *> &projs,
-                                 const std::string &pgType) const {
+std::shared_ptr<Plugin> RelBuilder::createPlugin(
+    const RecordType &rec, const std::vector<RecordAttribute *> &projs,
+    const std::string &pgType) const {
   auto create = getPluginFactory(pgType);
 
   assert(!rec.getArgs().empty());
@@ -842,17 +844,17 @@ Plugin *RelBuilder::createPlugin(const RecordType &rec,
   }
 
   ii->oidType = new RecordType(rec);
+  auto pg_sptr = std::shared_ptr<Plugin>(pg);
+  Catalog::getInstance().registerPlugin(fileName, pg_sptr);
 
-  Catalog::getInstance().registerPlugin(fileName, pg);
-
-  return pg;
+  return pg_sptr;
 }
 
 RelBuilder RelBuilder::scan(
     const std::vector<
         std::pair<RecordAttribute *, std::shared_ptr<proteus_any_vector>>>
         &data) const {
-  auto pg = new VectorPlugin(ctx, data);
+  auto pg = std::make_shared<VectorPlugin>(ctx, data);
 
   auto fileName = data[0].first->getRelationName();
   auto &catalog = CatalogParser::getInstance();
@@ -875,7 +877,7 @@ RelBuilder RelBuilder::scan(
     const std::vector<
         std::pair<RecordAttribute *, std::vector<std::filesystem::path>>>
         &fields) const {
-  auto pg = new NvmePlugin(ctx, fields);
+  auto pg = std::make_shared<NvmePlugin>(ctx, fields);
 
   auto fileName = fields[0].first->getRelationName();
   auto &catalog = CatalogParser::getInstance();
@@ -965,7 +967,7 @@ RelBuilder RelBuilder::print(
   auto v = exprs(arg);
   for (auto &e : v) e.as(outrel, e.getRegisteredAttrName());
 
-  return print(v, pg, true);
+  return print(v, std::move(pg), true);
 }
 
 RelBuilder RelBuilder::print(

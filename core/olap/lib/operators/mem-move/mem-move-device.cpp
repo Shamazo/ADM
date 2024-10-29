@@ -470,7 +470,7 @@ void MemMoveDevice::consume(OlapParallelContext *context,
       llvmContext, std::vector<llvm::Type *>{charPtrType, charPtrType});
 
   // Find block size
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   RecordAttribute tupleCnt{wantedFields[0]->getRelationName(), "activeCnt",
                            pg->getOIDType()};  // FIXME: OID type for blocks ?
@@ -700,10 +700,10 @@ void MemMoveDevice::open(Pipeline *pip) {
 #endif
   mmc->slack = slack;
   mmc->data_buffs = MemoryManager::mallocPinned(data_size * slack);
-  auto *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
-  if (dynamic_cast<NvmePlugin *>(pg)) {
-    mmc->nvme_plugin = dynamic_cast<NvmePlugin *>(pg);
+  if (dynamic_cast<NvmePlugin *>(pg.get())) {
+    mmc->nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
     // if this a mem-move NVMe->CPU or nvme->GPU with staging in CPU, we need an
     // io_uring
     if (to_cpu | std::all_of(mmc->do_transfer.begin(), mmc->do_transfer.end(),

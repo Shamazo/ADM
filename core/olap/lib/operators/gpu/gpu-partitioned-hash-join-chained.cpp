@@ -1343,7 +1343,7 @@ void GpuPartitionedHashJoinChained::generate_probe(
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string probeRel = probe_keyexpr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(probeRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(probeRel);
       assert(pg);
       RecordAttribute *probe_oid =
           new RecordAttribute(probeRel, activeLoop, pg->getOIDType());
@@ -1389,7 +1389,7 @@ void GpuPartitionedHashJoinChained::generate_probe(
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string buildRel = build_keyexpr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(buildRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(buildRel);
       assert(pg);
       RecordAttribute *build_oid =
           new RecordAttribute(buildRel, activeLoop, pg->getOIDType());
@@ -1441,7 +1441,7 @@ void GpuPartitionedHashJoinChained::generate_probe(
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string probeRel = mexpr.expr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(probeRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(probeRel);
       assert(pg);
       RecordAttribute *probe_oid =
           new RecordAttribute(probeRel, activeLoop, pg->getOIDType());
@@ -1511,7 +1511,7 @@ void GpuPartitionedHashJoinChained::generate_probe(
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string buildRel = mexpr.expr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(buildRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(buildRel);
       assert(pg);
       RecordAttribute *build_oid =
           new RecordAttribute(buildRel, activeLoop, pg->getOIDType());

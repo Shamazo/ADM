@@ -230,7 +230,8 @@ ProteusValue ExpressionHasherVisitor::visit(
           // Hash value now
           ProteusValueMemory mem_activeTuple = itBindings->second;
 
-          Plugin *plugin = catalog.getPlugin(currAttr.getRelationName());
+          std::shared_ptr<Plugin> plugin =
+              catalog.getPlugin(currAttr.getRelationName());
           if (plugin == nullptr) {
             string error_msg =
                 string("[Expression Hasher: ] No plugin provided");
@@ -275,7 +276,7 @@ ProteusValue ExpressionHasherVisitor::visit(
 
   Catalog &catalog = Catalog::getInstance();
 
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   // Resetting activeRelation here would break nested-record-projections
   // activeRelation = "";
@@ -300,7 +301,7 @@ ProteusValue ExpressionHasherVisitor::visit(
    * otherwise (potential) InputArg visitor will crash */
   exprGenerator.setActiveRelation(activeRelation);
   ProteusValue record = e->getExpr().accept(exprGenerator);
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   {
     // if (plugin->getPluginType() != PGBINARY) {
@@ -383,7 +384,7 @@ ProteusValue ExpressionHasherVisitor::visit(
     } else {
       // Path involves a primitive datatype
       //(e.g., the result of unnesting a list of primitives)
-      Plugin *pg = catalog.getPlugin(activeRelation);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(activeRelation);
       RecordAttribute tupleIdentifier =
           RecordAttribute(activeRelation, activeLoop, pg->getOIDType());
       map<RecordAttribute, ProteusValueMemory>::const_iterator it =

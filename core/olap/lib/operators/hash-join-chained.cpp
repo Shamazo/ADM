@@ -481,7 +481,7 @@ void HashJoinChained::generate_probe(OlapParallelContext *context,
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string probeRel = mexpr.expr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(probeRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(probeRel);
       assert(pg);
 
       RecordAttribute probe_oid(probeRel, activeLoop, pg->getOIDType());
@@ -528,7 +528,7 @@ void HashJoinChained::generate_probe(OlapParallelContext *context,
     {  // NOTE: Is there a better way ?
       Catalog &catalog = Catalog::getInstance();
       string buildRel = mexpr.expr.getRegisteredRelName();
-      Plugin *pg = catalog.getPlugin(buildRel);
+      std::shared_ptr<Plugin> pg = catalog.getPlugin(buildRel);
       assert(pg);
       RecordAttribute build_oid{buildRel, activeLoop, pg->getOIDType()};
 

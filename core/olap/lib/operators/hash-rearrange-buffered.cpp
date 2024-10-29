@@ -43,7 +43,7 @@ using namespace llvm;
 void HashRearrangeBuffered::produce_(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
   Type *cnt_type =
@@ -149,7 +149,7 @@ void HashRearrangeBuffered::consume(Context *const context,
 
   map<RecordAttribute, ProteusValueMemory> bindings{childState.getBindings()};
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRegisteredRelName());
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
@@ -508,7 +508,7 @@ void HashRearrangeBuffered::consume_flush1() {
   // Get the ENTRY BLOCK
   context->setCurrentEntryBlock(Builder->GetInsertBlock());
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRegisteredRelName());
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
@@ -829,7 +829,7 @@ void HashRearrangeBuffered::consume_flush() {
 
   // LLVMContext & llvmContext   = context->getLLVMContext();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 

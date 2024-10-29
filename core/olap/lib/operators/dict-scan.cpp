@@ -148,7 +148,8 @@ void DictScan::produce_(OlapParallelContext *context) {
 
   auto t = context->CastPtrToLlvmPtr(charPtrType, this);
 
-  Plugin *pg = Catalog::getInstance().getPlugin(regAs.getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(regAs.getRelationName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 
   AllocaInst *curr = context->CreateEntryBlockAlloca(F, "curr", iter_type);

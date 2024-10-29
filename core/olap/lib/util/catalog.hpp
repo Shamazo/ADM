@@ -141,15 +141,15 @@ class Catalog {
     return it->second;
   }
 
-  void registerPlugin(const string &fileName, Plugin *pg) {
+  void registerPlugin(const string &fileName, std::shared_ptr<Plugin> pg) {
     auto it = this->plugins.find(fileName);
     if (it != this->plugins.end()) {
       LOG(WARNING) << "Catalog already contains the plugin of " << fileName;
     }
-    this->plugins[fileName] = pg;
+    this->plugins[fileName] = std::move(pg);
   }
 
-  Plugin *getPlugin(const string &fileName) {
+  std::shared_ptr<Plugin> getPlugin(const string &fileName) {
     auto it = this->plugins.find(fileName);
     if (it == this->plugins.end()) {
       auto error_msg = "Catalog does not contain the plugin of " + fileName;
@@ -206,7 +206,7 @@ class Catalog {
   }
 
  private:
-  map<string, Plugin *> plugins;
+  map<string, std::shared_ptr<Plugin>> plugins;
   map<string, int> htIdentifiers;
 
   std::vector<std::multimap<int, void *> *> intHashtables;

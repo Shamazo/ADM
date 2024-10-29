@@ -243,7 +243,8 @@ llvm::Value *OutputPlugin::getRuntimePayloadTypeSize() {
       llvm::Value *val_attr_size = nullptr;
       if (mode == EAGER) {
         RecordAttribute currAttr = itSearch->first;
-        Plugin *inputPg = catalog.getPlugin(currAttr.getOriginalRelationName());
+        std::shared_ptr<Plugin> inputPg =
+            catalog.getPlugin(currAttr.getOriginalRelationName());
         assert(dynamic_cast<OlapParallelContext *>(context));
         val_attr_size =
             inputPg->getValueSize(itSearch->second, currAttr.getOriginalType(),

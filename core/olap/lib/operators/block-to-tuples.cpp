@@ -145,7 +145,7 @@ void BlockToTuples::consume(OlapParallelContext *context,
     }
   }();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
 
   RecordAttribute tupleCnt{relName, "activeCnt",
                            pg->getOIDType()};  // FIXME: OID type for blocks ?

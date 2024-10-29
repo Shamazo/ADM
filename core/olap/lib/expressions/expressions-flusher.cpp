@@ -155,7 +155,8 @@ ProteusValue ExpressionFlusherVisitor::visit(
           // Flush value now
           ProteusValueMemory mem_activeTuple = itBindings->second;
 
-          Plugin *plugin = catalog.getPlugin(currAttr.getRelationName());
+          std::shared_ptr<Plugin> plugin =
+              catalog.getPlugin(currAttr.getRelationName());
           if (plugin == nullptr) {
             string error_msg =
                 string("[Expression Flusher: ] No plugin provided");
@@ -175,7 +176,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::PlaceholderExpression *e) {
   Catalog &catalog = Catalog::getInstance();
 
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   // Resetting activeRelation here would break nested-record-projections
   // activeRelation = "";
@@ -196,7 +197,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::ProteusValueExpression *e) {
   Catalog &catalog = Catalog::getInstance();
 
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   // Resetting activeRelation here would break nested-record-projections
   // activeRelation = "";
@@ -214,7 +215,7 @@ ProteusValue ExpressionFlusherVisitor::visit(
 ProteusValue ExpressionFlusherVisitor::visit(
     const expressions::RecordProjection *e) {
   Catalog &catalog = Catalog::getInstance();
-  Plugin *plugin = catalog.getPlugin(activeRelation);
+  std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
 
   if (activeRelation != e->getOriginalRelationName()) {
     ExpressionGeneratorVisitor exprGenerator(context, currState);
@@ -312,9 +313,9 @@ ProteusValue ExpressionFlusherVisitor::visit(
     } else {
       // Path involves a primitive datatype
       //(e.g., the result of unnesting a list of primitives)
-      Plugin *pg = catalog.getPlugin(activeRelation);
+      std::shared_ptr<Plugin> rel_pg = catalog.getPlugin(activeRelation);
       RecordAttribute tupleIdentifier(activeRelation, activeLoop,
-                                      pg->getOIDType());
+                                      rel_pg->getOIDType());
       mem_path = currState[tupleIdentifier];
     }
     plugin->flushValue(context, mem_path, e->getExpressionType(), outputFile);

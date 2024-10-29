@@ -116,7 +116,7 @@ class PlanExecutor {
     return ExpressionParser{catalogParser, arg}.parseAccumulator(acc);
   }
 
-  Plugin *parsePlugin(const rapidjson::Value &val);
+  std::shared_ptr<Plugin> parsePlugin(const rapidjson::Value &val);
 
   void cleanUp();
 };

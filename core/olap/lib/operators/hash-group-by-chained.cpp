@@ -693,7 +693,7 @@ void HashGroupByChained::generate_scan(OlapParallelContext *context) {
   // Builder->CreateBr      (CondBB);
 
   std::string relName = agg_exprs[0].expr.getRegisteredRelName();
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
 
   AllocaInst *mem_itemCtr = context->CreateEntryBlockAlloca(
       F, "i_ptr", pg->getOIDType()->getLLVMType(llvmContext));

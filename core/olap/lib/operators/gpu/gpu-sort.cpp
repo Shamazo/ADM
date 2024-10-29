@@ -207,7 +207,7 @@ void GpuSort::consume(OlapParallelContext *const context,
 
   map<RecordAttribute, ProteusValueMemory> bindings{childState.getBindings()};
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 
@@ -285,7 +285,7 @@ void GpuSort::consume(OlapParallelContext *const context,
 void GpuSort::flush_sorted() {
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 

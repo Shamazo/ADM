@@ -465,7 +465,8 @@ void Nest::generateProbe(OlapParallelContext *context) const {
    * and the result of the aggr.
    */
 
-  Plugin *htPlugin = new BinaryInternalPlugin(context, htName);
+  std::shared_ptr<Plugin> htPlugin =
+      std::make_shared<BinaryInternalPlugin>(context, htName);
   RecordAttribute attr_aggr =
       RecordAttribute(htName, aggregateName, outputExpr->getExpressionType());
   catalog.registerPlugin(htName, htPlugin);

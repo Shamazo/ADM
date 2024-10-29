@@ -82,7 +82,7 @@ void OuterUnnest::generate(Context *const context,
   BasicBlock *loopCond, *loopBody, *loopInc, *loopEnd;
   AllocaInst *mem_accumulating = nullptr;
   ProteusValueMemory nestedValueItem;
-  Plugin *pg = path.getRelevantPlugin();
+  std::shared_ptr<Plugin> pg = path.getRelevantPlugin();
   {
     Builder->SetInsertPoint(IfNotNull);
 

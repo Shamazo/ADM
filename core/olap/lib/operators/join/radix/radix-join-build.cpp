@@ -418,7 +418,7 @@ void RadixJoinBuild::consume(OlapParallelContext *const context,
       if (isCached) {
         string activeRelation = e.getOriginalRelationName();
         string projName = e.getProjectionName();
-        Plugin *plugin = catalog.getPlugin(activeRelation);
+        std::shared_ptr<Plugin> plugin = catalog.getPlugin(activeRelation);
         valToMaterialize =
             (plugin->readCachedValue(info, childState, context)).value;
       } else {

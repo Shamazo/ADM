@@ -60,7 +60,7 @@ Sort::Sort(Operator *const child, OlapParallelContext *const context,
 void Sort::produce_(OlapParallelContext *context) {
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
   // Type   * cnt_type   = PointerType::getUnqual(ArrayType::get(oid_type,
@@ -178,7 +178,7 @@ void Sort::consume(OlapParallelContext *const context,
   BasicBlock *insBB = Builder->GetInsertBlock();
   Function *F = insBB->getParent();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   auto *oid_type = (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 
   AllocaInst *ready_cnt_mem =
@@ -221,7 +221,7 @@ void Sort::consume(OlapParallelContext *const context,
 void Sort::flush_sorted() {
   LLVMContext &llvmContext = context->getLLVMContext();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(relName);
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(relName);
   auto *oid_type = (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
 
   std::vector<size_t> params;

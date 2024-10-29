@@ -76,7 +76,7 @@ void CpuToGpu::generateGpuSide(OlapParallelContext *context) {
     wantedFieldsArg_id.emplace_back(context->appendParameter(t, true, true));
   }
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
   IntegerType *oid_type =
       (IntegerType *)pg->getOIDType()->getLLVMType(llvmContext);
@@ -199,7 +199,7 @@ void CpuToGpu::consume(OlapParallelContext *const context,
         i);
   }
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
 
   RecordAttribute tupleOID(wantedFields[0]->getRelationName(), activeLoop,

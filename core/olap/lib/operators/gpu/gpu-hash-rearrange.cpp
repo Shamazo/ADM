@@ -48,7 +48,7 @@ void GpuHashRearrange::produce_(OlapParallelContext *context) {
         PointerType::getUnqual(ArrayType::get(t_ptr, numOfBuckets))));
   }
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(matExpr[0].getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 
@@ -91,7 +91,7 @@ void GpuHashRearrange::consume(OlapParallelContext *context,
   BasicBlock *insBB = Builder->GetInsertBlock();
   Function *F = insBB->getParent();
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(matExpr[0].getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 
@@ -662,7 +662,7 @@ void GpuHashRearrange::consume_flush(OlapParallelContext *context,
 
   context->setEndingBlock(endIBB);
 
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(matExpr[0].getRegisteredRelName());
   Type *oid_type = pg->getOIDType()->getLLVMType(llvmContext);
 

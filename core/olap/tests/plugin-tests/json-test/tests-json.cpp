@@ -65,21 +65,23 @@ class JSONTest : public ::testing::Test {
 
   void TearDown() override {}
 
-  jsonPipelined::JSONPlugin *openJSON(Context *const context, string &fname,
-                                      ExpressionType *schema,
+  std::shared_ptr<jsonPipelined::JSONPlugin> openJSON(Context *const context,
+                                                      string &fname,
+                                                      ExpressionType *schema,
                                       size_t linehint = 1000) {
-    jsonPipelined::JSONPlugin *plugin =
-        new jsonPipelined::JSONPlugin(context, fname, schema, linehint);
+    auto plugin = std::make_shared<jsonPipelined::JSONPlugin>(context, fname,
+                                                              schema, linehint);
     catalog->registerPlugin(fname, plugin);
 
     return plugin;
   }
 
-  jsonPipelined::JSONPlugin *openJSON(Context *const context, string &fname,
-                                      ExpressionType *schema, size_t linehint,
+  std::shared_ptr<jsonPipelined::JSONPlugin> openJSON(Context *const context,
+                                                      string &fname,
+                                                      ExpressionType *schema, size_t linehint,
                                       jsmntok_t **tokens) {
-    jsonPipelined::JSONPlugin *plugin =
-        new jsonPipelined::JSONPlugin(context, fname, schema, linehint, tokens);
+    auto plugin = std::make_shared<jsonPipelined::JSONPlugin>(
+        context, fname, schema, linehint, tokens);
     catalog->registerPlugin(fname, plugin);
     return plugin;
   }
@@ -102,7 +104,7 @@ class JSONTest : public ::testing::Test {
 
       for (auto &p : pipelines) {
         {
-          time_block t("T: ");
+          time_block t2("T: ");
 
           p->open((void *)&session);
           p->consume();
@@ -155,8 +157,7 @@ TEST_F(JSONTest, String) {
   ListType documentType = ListType(rec);
 
   int linehint = 3;
-  jsonPipelined::JSONPlugin *pg =
-      openJSON(&ctx, fname, &documentType, linehint);
+  auto pg = openJSON(&ctx, fname, &documentType, linehint);
   Scan scan = Scan(*pg);
 
   /**
@@ -182,7 +183,7 @@ TEST_F(JSONTest, String) {
   sel.setParent(&printOp);
   printOp.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 }
 
 TEST_F(JSONTest, ScanJSON) {
@@ -200,7 +201,7 @@ TEST_F(JSONTest, ScanJSON) {
   RecordType inner(std::list<RecordAttribute *>{&attr, &attr2});
   ListType documentType = ListType(inner);
 
-  jsonPipelined::JSONPlugin *pg = openJSON(&ctx, fname, &documentType);
+  auto pg = openJSON(&ctx, fname, &documentType);
   Scan scan(*pg);
 
   /* Reduce */
@@ -210,7 +211,7 @@ TEST_F(JSONTest, ScanJSON) {
   scan.setParent(&flush);
   flush.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 }
 
 TEST_F(JSONTest, SelectJSON) {
@@ -226,7 +227,7 @@ TEST_F(JSONTest, SelectJSON) {
   RecordType inner(std::list<RecordAttribute *>{&attr, &attr2});
   ListType documentType = ListType(inner);
 
-  jsonPipelined::JSONPlugin *pg = openJSON(&ctx, fname, &documentType);
+  auto pg = openJSON(&ctx, fname, &documentType);
   Scan scan = Scan(*pg);
 
   /**
@@ -243,7 +244,7 @@ TEST_F(JSONTest, SelectJSON) {
   sel.setParent(&flush);
   flush.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 }
 
 TEST_F(JSONTest, unnestJSON) {
@@ -281,7 +282,7 @@ TEST_F(JSONTest, unnestJSON) {
   RecordType inner(atts);
   ListType documentType(inner);
 
-  jsonPipelined::JSONPlugin *pg = openJSON(&ctx, fname, &documentType);
+  auto pg = openJSON(&ctx, fname, &documentType);
   Scan scan(*pg);
 
   expressions::InputArgument inputArg(&inner, 0);
@@ -308,7 +309,7 @@ TEST_F(JSONTest, unnestJSON) {
 
   flush.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 #pragma clang diagnostic pop
 }
 
@@ -343,8 +344,7 @@ TEST_F(JSONTest, reduceListObjectFlat) {
   /**
    * SCAN
    */
-  jsonPipelined::JSONPlugin *pg =
-      openJSON(&ctx, fname, &documentType, linehint);
+  auto pg = openJSON(&ctx, fname, &documentType, linehint);
   Scan scan(*pg);
 
   expressions::InputArgument arg{&inner, 0};
@@ -357,7 +357,7 @@ TEST_F(JSONTest, reduceListObjectFlat) {
 
   flush.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 }
 
 /* SELECT MAX(obj.b) FROM jsonFile obj WHERE obj.b  > 43 */
@@ -396,7 +396,8 @@ TEST_F(JSONTest, reduceMax) {
   std::string outRel{"output"};
   {
     RecordType r{};
-    Plugin *newPg = new pm::CSVPlugin(&ctx, outRel, r, {}, ',', 10, 1, false);
+    auto newPg = std::make_shared<pm::CSVPlugin>(
+        &ctx, outRel, r, std::vector<RecordAttribute *>{}, ',', 10, 1, false);
     Catalog::getInstance().registerPlugin(*(new string(outRel)), newPg);
   }
 
@@ -426,8 +427,7 @@ TEST_F(JSONTest, reduceMax) {
   /**
    * SCAN
    */
-  jsonPipelined::JSONPlugin *pg =
-      openJSON(&ctx, fname, &documentType, lineHint);
+  auto pg = openJSON(&ctx, fname, &documentType, lineHint);
   Scan scan(*pg);
 
   /**
@@ -455,14 +455,15 @@ TEST_F(JSONTest, reduceMax) {
     std::string outRel{"output2"};
     {
       RecordType r{};
-      Plugin *newPg = new pm::CSVPlugin(&ctx, outRel, r, {}, ',', 10, 1, false);
+      auto newPg = std::make_shared<pm::CSVPlugin>(
+          &ctx, outRel, r, std::vector<RecordAttribute *>{}, ',', 10, 1, false);
       Catalog::getInstance().registerPlugin(*(new string(outRel)), newPg);
     }
 
     /**
      * SCAN
      */
-    jsonPipelined::JSONPlugin *pgCached =
+    auto pgCached =
         openJSON(&ctx, fname, &documentType, lineHint, pg->getTokens());
     Scan scan(*pgCached);
 
@@ -483,7 +484,7 @@ TEST_F(JSONTest, reduceMax) {
     reduce.setParent(&flush);
     flush.produce(&ctx);
 
-    EXPECT_TRUE(executePlan(ctx, testLabel, {pgCached}));
+    EXPECT_TRUE(executePlan(ctx, testLabel, {pgCached.get()}));
   }
   pg->finish();
 #pragma clang diagnostic pop
@@ -515,7 +516,8 @@ TEST_F(JSONTest, reduceDeeperMax) {
   std::string outRel{"output"};
   {
     RecordType r{};
-    Plugin *newPg = new pm::CSVPlugin(&ctx, outRel, r, {}, ',', 10, 1, false);
+    auto newPg = std::make_shared<pm::CSVPlugin>(
+        &ctx, outRel, r, std::vector<RecordAttribute *>{}, ',', 10, 1, false);
     Catalog::getInstance().registerPlugin(*(new string(outRel)), newPg);
   }
 
@@ -545,8 +547,7 @@ TEST_F(JSONTest, reduceDeeperMax) {
   /**
    * SCAN
    */
-  jsonPipelined::JSONPlugin *pg =
-      openJSON(&ctx, fname, &documentType, lineHint);
+  auto pg = openJSON(&ctx, fname, &documentType, lineHint);
   Scan scan = Scan(*pg);
 
   /**
@@ -570,7 +571,7 @@ TEST_F(JSONTest, reduceDeeperMax) {
 
   flush.produce(&ctx);
 
-  EXPECT_TRUE(executePlan(ctx, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
 #pragma clang diagnostic pop
 }
 
@@ -593,7 +594,8 @@ TEST_F(JSONTest, jsonRelBuilder) {
   {
     std::string outRel{"output"};
     RecordType r{};
-    Plugin *newPg = new pm::CSVPlugin(&ctx, outRel, r, {}, ',', 10, 1, false);
+    auto newPg = std::make_shared<pm::CSVPlugin>(
+        &ctx, outRel, r, std::vector<RecordAttribute *>{}, ',', 10, 1, false);
     Catalog::getInstance().registerPlugin(*(new string(outRel)), newPg);
   }
 
@@ -623,8 +625,7 @@ TEST_F(JSONTest, jsonRelBuilder) {
   /**
    * SCAN
    */
-  jsonPipelined::JSONPlugin *pg =
-      openJSON(&ctx, fname, &documentType, lineHint);
+  auto pg = openJSON(&ctx, fname, &documentType, lineHint);
 
   RelBuilderFactory factory{testLabel};
   auto statement =
@@ -640,6 +641,6 @@ TEST_F(JSONTest, jsonRelBuilder) {
           })
           .prepare();
 
-  EXPECT_TRUE(executePlan(statement, testLabel, {pg}));
+  EXPECT_TRUE(executePlan(statement, testLabel, {pg.get()}));
 #pragma clang diagnostic pop
 }

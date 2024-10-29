@@ -56,7 +56,7 @@ void Unnest::generate(Context *const context,
    * ENTRY:
    * init the vars used by the plugin
    */
-  Plugin *pg = path.getRelevantPlugin();
+  std::shared_ptr<Plugin> pg = path.getRelevantPlugin();
   ProteusValueMemory mem_currentObjId =
       pg->initCollectionUnnest(nestedValueAll);
   Builder->CreateBr(loopCond);

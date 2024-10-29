@@ -161,7 +161,8 @@ void ZipInitiate::generate_send() {
   map<RecordAttribute, ProteusValueMemory> *bindings =
       new map<RecordAttribute, ProteusValueMemory>();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(targetAttr->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(targetAttr->getRelationName());
 
   Value *ptr = Builder->CreateSelect(
       Builder->CreateICmpNE(current, context->createInt32(0)),
@@ -357,7 +358,8 @@ void ZipCollect::cacheFormatLeft() {
   LLVMContext &llvmContext = context->getLLVMContext();
   ZipParam p;
 
-  Plugin *pg = Catalog::getInstance().getPlugin(inputLeft->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(inputLeft->getRelationName());
 
   Type *int32_type = Type::getInt32Ty(context->getLLVMContext());
   Type *int64_type = Type::getInt64Ty(context->getLLVMContext());
@@ -382,7 +384,8 @@ void ZipCollect::cacheFormatRight() {
   LLVMContext &llvmContext = context->getLLVMContext();
   ZipParam p;
 
-  Plugin *pg = Catalog::getInstance().getPlugin(inputRight->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(inputRight->getRelationName());
 
   Type *int32_type = Type::getInt32Ty(context->getLLVMContext());
   Type *int64_type = Type::getInt64Ty(context->getLLVMContext());
@@ -407,7 +410,7 @@ void ZipCollect::pipeFormat() {
   LLVMContext &llvmContext = context->getLLVMContext();
   ZipParam p1, p2;
 
-  Plugin *pg = Catalog::getInstance().getPlugin(
+  std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(
       wantedFieldsLeft[0].getRegisteredRelName());
 
   Type *int32_type = Type::getInt32Ty(context->getLLVMContext());
@@ -475,7 +478,8 @@ void ZipCollect::generate_cache_left(Context *const context,
       mem_offset->getType()->getPointerElementType(), mem_offset);
   Value *offset_blk = Builder->CreateMul(offset, step);
 
-  Plugin *pg = Catalog::getInstance().getPlugin(inputLeft->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(inputLeft->getRelationName());
   RecordAttribute tupleCnt =
       RecordAttribute(inputLeft->getRelationName(), "activeCnt",
                       pg->getOIDType());  // FIXME: OID type for blocks ?
@@ -614,7 +618,8 @@ void ZipCollect::generate_cache_right(Context *const context,
       mem_offset->getType()->getPointerElementType(), mem_offset);
   Value *offset_blk = Builder->CreateMul(offset, step);
 
-  Plugin *pg = Catalog::getInstance().getPlugin(inputRight->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(inputRight->getRelationName());
   RecordAttribute tupleCnt =
       RecordAttribute(inputRight->getRelationName(), "activeCnt",
                       pg->getOIDType());  // FIXME: OID type for blocks ?
@@ -740,7 +745,8 @@ void ZipCollect::generate_send() {
   map<RecordAttribute, ProteusValueMemory> *bindings =
       new map<RecordAttribute, ProteusValueMemory>();
 
-  Plugin *pg = Catalog::getInstance().getPlugin(targetAttr->getRelationName());
+  std::shared_ptr<Plugin> pg =
+      Catalog::getInstance().getPlugin(targetAttr->getRelationName());
 
   Value *ptr = Builder->CreateLoad(
       mem_blocks2->getType()->getPointerElementType(), mem_blocks2);
@@ -1063,7 +1069,7 @@ void ZipForward::consume(Context *const context,
       current);
   Value *N =
       Builder->CreateLoad(Nptr->getType()->getPointerElementType(), Nptr);
-  Plugin *pg =
+  std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
   RecordAttribute tupleCnt = RecordAttribute(
       wantedFields[0].getRegisteredRelName(), "activeCnt", pg->getOIDType());

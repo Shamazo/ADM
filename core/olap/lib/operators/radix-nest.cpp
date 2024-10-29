@@ -89,7 +89,6 @@ Nest::Nest(Context *const context, vector<Monoid> accs,
 
   Catalog &catalog = Catalog::getInstance();
 
-  Plugin *htPlugin;
   {
     // TODO: using a binary internal plugin seems more appropriate, but creates
     // some problems, especially with records and lists for now
@@ -97,8 +96,9 @@ Nest::Nest(Context *const context, vector<Monoid> accs,
 
     vector<RecordAttribute *> projs;
     std::string *htString = new std::string(htName);
-    htPlugin = new pm::CSVPlugin(context, *htString, *rec, projs, 1, 1);
-    catalog.registerPlugin(*htString, htPlugin);
+    auto htPlugin =
+        std::make_unique<pm::CSVPlugin>(context, *htString, *rec, projs, 1, 1);
+    catalog.registerPlugin(*htString, std::move(htPlugin));
   }
   // Plugin *htPlugin = new BinaryInternalPlugin(context, htName);
   // catalog.registerPlugin(htName, htPlugin);
