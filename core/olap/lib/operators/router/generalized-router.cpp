@@ -426,70 +426,82 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
             break;
           }
           default: {
-            auto srcServer = [&]() -> llvm::Value * {
-              try {
-                return Builder->CreateLoad(
-                    childState[{wantedFields[0]->getRelationName(), "srcServer",
-                                new Int64Type()}]
-                        .mem->getType()
-                        ->getPointerElementType(),
-                    childState[{wantedFields[0]->getRelationName(), "srcServer",
-                                new Int64Type()}]
-                        .mem);
-              } catch (const std::out_of_range &) {
-                return context->createInt64(InfiniBandManager::server_id());
-              }
-            }();
+            //        TODO: handle remote and local routing difference
+            //        For now commenting out remote to enable re-try for local
+            //        routing
+            //            auto srcServer = [&]() -> llvm::Value * {
+            //              try {
+            //                return Builder->CreateLoad(
+            //                    childState[{wantedFields[0]->getRelationName(),
+            //                    "srcServer",
+            //                                new Int64Type()}]
+            //                        .mem->getType()
+            //                        ->getPointerElementType(),
+            //                    childState[{wantedFields[0]->getRelationName(),
+            //                    "srcServer",
+            //                                new Int64Type()}]
+            //                        .mem);
+            //              } catch (const std::out_of_range &) {
+            //                return
+            //                context->createInt64(InfiniBandManager::server_id());
+            //              }
+            //            }();
+            //
+            //                        bool may_retry = false;
+            //
+            //            auto phi_type =
+            //                llvm::IntegerType::getInt32Ty(context->getLLVMContext());
+            //            llvm::BasicBlock *b1;
+            //            llvm::BasicBlock *b2;
+            //                        llvm::Value *p1;
+            //                        llvm::Value *p2;
+            //                        context
+            //                            ->gen_if({Builder->CreateICmpEQ(
+            //                                          srcServer,
+            //                                          context->createInt64(
+            //                                                         InfiniBandManager::server_id())),
+            //                                      context->createFalse()})([&]()
+            //                                      {
+            auto &x = *routing;
+            LOG(INFO) << demangle(typeid(x).name());
+            auto r = routing->evaluate(context, childState, retry_cnt);
 
-            bool may_retry = false;
+            r.target->setName("target");
+            target = Builder->CreateTruncOrBitCast(
+                r.target, llvm::Type::getInt32Ty(llvmContext));
+            //                  may_retry = r.may_retry;
 
-            auto phi_type =
-                llvm::IntegerType::getInt32Ty(context->getLLVMContext());
-            llvm::BasicBlock *b1;
-            llvm::BasicBlock *b2;
-            llvm::Value *p1;
-            llvm::Value *p2;
-            context
-                ->gen_if({Builder->CreateICmpEQ(
-                              srcServer, context->createInt64(
-                                             InfiniBandManager::server_id())),
-                          context->createFalse()})([&]() {
-                  auto &x = *routing;
-                  LOG(INFO) << demangle(typeid(x).name());
-                  auto r = routing->evaluate(context, childState, retry_cnt);
+            //                  b1 = Builder->GetInsertBlock();
+            //                })
+            //                .gen_else([&]() {
+            //                  p2 = Builder->CreateURem(
+            //                      Builder->CreateTruncOrBitCast(
+            //                          context->gen_call(rand, {}),
+            //                          llvm::Type::getInt32Ty(llvmContext)),
+            //                      context->createInt32(
+            //                          topology::getInstance()
+            //                              .getCpuNumaNodeCount()));  // TODO
+            //                              assumes CPU
+            //                                                         // NUMA
+            //                                                         affinitization
+            //                                                         // only
+            //                                                         for now
+            //                  may_retry = false;
+            //
+            //                  b2 = Builder->GetInsertBlock();
+            //                });
+            //
+            //            auto phi = Builder->CreatePHI(phi_type, 2);
+            //            phi->addIncoming(p1, b1);
+            //            phi->addIncoming(p2, b2);
+            //            target = phi;
 
-                  r.target->setName("target");
-                  p1 = Builder->CreateTruncOrBitCast(
-                      r.target, llvm::Type::getInt32Ty(llvmContext));
-                  may_retry = r.may_retry;
-
-                  b1 = Builder->GetInsertBlock();
-                })
-                .gen_else([&]() {
-                  p2 = Builder->CreateURem(
-                      Builder->CreateTruncOrBitCast(
-                          context->gen_call(rand, {}),
-                          llvm::Type::getInt32Ty(llvmContext)),
-                      context->createInt32(
-                          topology::getInstance()
-                              .getCpuNumaNodeCount()));  // TODO assumes CPU
-                                                         // NUMA affinitization
-                                                         // only for now
-                  may_retry = false;
-
-                  b2 = Builder->GetInsertBlock();
-                });
-
-            auto phi = Builder->CreatePHI(phi_type, 2);
-            phi->addIncoming(p1, b1);
-            phi->addIncoming(p2, b2);
-            target = phi;
-
-            assert(!may_retry &&
-                   "Unimplemented, needs to take another path above due to the "
-                   "mismatch of the two may_retry paths");
+            //            assert(!may_retry &&
+            //                   "Unimplemented, needs to take another path
+            //                   above due to the " "mismatch of the two
+            //                   may_retry paths");
             param_ptr = context->gen_call(
-                (may_retry)
+                (r.may_retry)
                     ? (proteus::try_acquireBufferGeneralized /* FIXME */)
                     : (proteus::acquireBufferGeneralized),
                 {target, exchange, groupId});
@@ -888,7 +900,6 @@ proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
     int target, bool polling, int64_t groupId) {
   DCHECK_LT(target, free_pool.size());
   if (free_pool.at(target).empty_unsafe() && polling) {
-    LOG(INFO) << free_pool.at(target).size_unsafe();
     nvtxRangePop();
     return nullptr;
   }
