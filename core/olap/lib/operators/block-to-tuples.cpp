@@ -244,7 +244,8 @@ void BlockToTuples::consume(OlapParallelContext *context,
           }
 
           variableBindings[field.getRegisteredAs()] =
-              context->toMem(ptr, context->createFalse());
+              context->toMem(ptr, context->createFalse(),
+                             field.getRegisteredAttrName() + "-ptr-");
         }
 
         // Triggering parent
