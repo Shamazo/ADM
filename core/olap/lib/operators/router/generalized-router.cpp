@@ -55,14 +55,16 @@ void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
 
 GeneralizedRouterConsumer::GeneralizedRouterConsumer(
     GeneralizedRouter &producer, DegreeOfParallelism fanout,
-    std::unique_ptr<Affinitizer> aff, DeviceType target_device)
+    std::unique_ptr<Affinitizer> aff, DeviceType target_device,
+    int consumer_index)
     : experimental::UnaryOperator(&producer),
       producer(producer),
       fanout(fanout),
       aff(std::move(aff)),
       aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
                                                   this->aff.get())),
-      target_device(target_device) {}
+      target_device(target_device),
+      consumer_index(consumer_index) {}
 
 void GeneralizedRouterConsumer::produce_(OlapParallelContext *context) {
   consume(context, {*this, {}});
@@ -241,7 +243,7 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
           _wantedFields, affs, device_types);
     }
     default: {
-      assert(false && "Unimplemented");  // FIXME: rest of the policies
+      CHECK(false) << "Unimplemented";  // FIXME: rest of the policies
     }
   }
 }
@@ -670,7 +672,7 @@ GeneralizedRouterConsumer *GeneralizedRouter::appendConsumer(
   }
 
   consumers.emplace_back(std::make_unique<GeneralizedRouterConsumer>(
-      *this, dop, std::move(aff), target_device));
+      *this, dop, std::move(aff), target_device, consumers.size()));
   return consumers.back().get();
 }
 
@@ -704,20 +706,35 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
   producer.ready_fifo.at(target_queue)
       .foreachItemDo(
           [&]() {
-            const int fifo_size =
-                producer.ready_fifo.at(target_queue).size_unsafe();
-            counterlogger.log(producer.getUUID(),
-                              counter_type::ROUTER_READY_QUEUE_SIZE, fifo_size,
-                              target_queue);
-            const int free_size =
-                producer.free_pool.at(target_queue).size_unsafe();
-            counterlogger.log(producer.getUUID(),
-                              counter_type::ROUTER_FREE_POOL_SIZE, free_size,
-                              target_queue);
+            // We don't update the counters on every iteration to reduce log
+            // flooding
+            static int count;
+            count += 1;
+            if (count % 5 == 0) {
+              const int fifo_size =
+                  producer.ready_fifo.at(target_queue).size_unsafe();
+              counterlogger.log(producer.getUUID(),
+                                counter_type::ROUTER_READY_QUEUE_SIZE,
+                                fifo_size, target_queue);
+              const int free_size =
+                  producer.free_pool.at(target_queue).size_unsafe();
+              counterlogger.log(producer.getUUID(),
+                                counter_type::ROUTER_FREE_POOL_SIZE, free_size,
+                                target_queue);
+            }
             return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
                 id, pipGen->getUUID(), pip->getGroup()};
           },
           [&](void *ptr) {
+            int curr_count =
+                consumed_count.fetch_add(1, std::memory_order_relaxed);
+            // We don't update the count on every iteration to reduce log
+            // flooding
+            if (curr_count % 10 == 0) {
+              counterlogger.log(producer.getUUID(),
+                                counter_type::GROUTER_CONSUME_COUNT, curr_count,
+                                consumer_index);
+            }
             f(ptr);
 
             {
@@ -768,6 +785,7 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
     }
     MemoryManager::freePinned(buffer_mem);
   }
+  consumed_count = 0;
 }
 
 void GeneralizedRouterConsumer::spawnWorker(const void *session,

@@ -53,12 +53,16 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
   std::unique_ptr<Affinitizer> aff;
   std::unique_ptr<AffinityPolicy> aff_policy;
   const DeviceType target_device;
+  /// used only for recoding counter statistics
+  const int consumer_index;
+  /// Count of rowgroups/items that this consumer has consumed
+  alignas(64) std::atomic<int> consumed_count;
 
  public:
   GeneralizedRouterConsumer(GeneralizedRouter &producer,
                             DegreeOfParallelism fanout,
                             std::unique_ptr<Affinitizer> aff,
-                            DeviceType target_device);
+                            DeviceType target_device, int consumer_index);
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;

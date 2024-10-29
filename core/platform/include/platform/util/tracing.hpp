@@ -103,7 +103,11 @@ enum class range_log_op {
  * Counter types
  * New counters can be added without updating the parser
  */
-enum class counter_type { ROUTER_READY_QUEUE_SIZE, ROUTER_FREE_POOL_SIZE };
+enum class counter_type {
+  ROUTER_READY_QUEUE_SIZE,
+  ROUTER_FREE_POOL_SIZE,
+  GROUTER_CONSUME_COUNT
+};
 
 #ifndef NTRACE
 class logger {
