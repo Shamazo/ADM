@@ -148,6 +148,27 @@ class CpuNumaNodeAffinitizer : public Affinitizer {
   }
 };
 
+// Function to shuffle adjacent indexes in IDX if the values they index in
+// distance are the same
+inline void shuffleAdjacentIndexes(std::vector<size_t> &IDX,
+                                   const std::vector<uint32_t> &distance) {
+  if (IDX.empty()) return;
+
+  static thread_local auto rng =
+      std::default_random_engine{std::random_device{}()};
+  auto start = IDX.begin();
+
+  while (start != IDX.end()) {
+    auto end =
+        std::adjacent_find(start, IDX.end(), [&distance](size_t i1, size_t i2) {
+          return distance[i1] != distance[i2];
+        });
+    if (end != IDX.end()) ++end;  // Include the last equal element
+    std::shuffle(start, end, rng);
+    start = end;
+  }
+}
+
 class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
  public:
   /**
@@ -252,6 +273,10 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
       stable_sort(idx.begin(), idx.end(),
                   [&v = std::as_const(node_local_to_nvme.distance)](
                       size_t i1, size_t i2) { return v[i1] < v[i2]; });
+      // shuffle because NUMA nodes on the other socket are often all equal
+      // distance so on a chiplet system we could end up sending all NVMe data
+      // from socket 0 to the same NUMA node on socket 1
+      shuffleAdjacentIndexes(idx, node_local_to_nvme.distance);
       for (const auto &i : idx) {
         const auto &cpu_node = topo.getCpuNumaNodes()[i];
         if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
