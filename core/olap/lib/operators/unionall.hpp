@@ -28,12 +28,19 @@
 
 class UnionAll : public Router {
  public:
-  UnionAll(std::vector<Operator *> &children,
-           const std::vector<RecordAttribute *> &wantedFields,
-           DegreeOfParallelism fanout = DegreeOfParallelism{1})
-      : Router(children[0], fanout, wantedFields, 8, std::nullopt,
-               RoutingPolicy::RANDOM, getDefaultAffinitizer(DeviceType::CPU)),
-        children(children) {
+  struct Args {
+    std::vector<Operator *> children;
+    std::vector<RecordAttribute *> wantedFields;
+    DegreeOfParallelism fanout = DegreeOfParallelism{1};
+    RoutingPolicy policy = RoutingPolicy::RANDOM;
+    std::unique_ptr<Affinitizer> affinitizer =
+        getDefaultAffinitizer(DeviceType::CPU);
+    size_t slack = 8;
+  };
+  UnionAll(UnionAll::Args args)
+      : Router(args.children[0], args.fanout, args.wantedFields, args.slack,
+               std::nullopt, args.policy, std::move(args.affinitizer)),
+        children(std::move(args.children)) {
     CHECK_GT(children.size(), 0)
         << "UnionAll operator must have at least one child";
     setChild(nullptr);

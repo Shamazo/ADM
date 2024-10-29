@@ -1015,23 +1015,27 @@ SplitRelBuilder RelBuilder::gsplit(size_t slack,
 }
 
 RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,
-                                DegreeOfParallelism fanout) const {
+                                DegreeOfParallelism fanout,
+                                std::unique_ptr<Affinitizer> aff) const {
   std::vector<RecordAttribute *> projections;
   for (const auto &attr : getOutputArg().getProjections()) {
     projections.emplace_back(new RecordAttribute{attr});
   }
 
-  return unionAll(children, projections, fanout);
+  return unionAll(children, projections, fanout, std::move(aff));
 }
 
 RelBuilder RelBuilder::unionAll(
     const std::vector<RelBuilder> &children,
     const std::vector<RecordAttribute *> &wantedFields,
-    DegreeOfParallelism fanout) const {
+    DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff) const {
   std::vector<Operator *> c2{root};
   c2.reserve(children.size() + 1);
   for (const auto &c : children) c2.emplace_back(c.root);
-  auto op = new UnionAll(c2, wantedFields, fanout);
+  auto op = new UnionAll({.children = std::move(c2),
+                          .wantedFields = wantedFields,
+                          .fanout = fanout,
+                          .affinitizer = std::move(aff)});
   for (const auto &c : children) c.apply(op);
   return apply(op);
 }
