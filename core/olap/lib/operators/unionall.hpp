@@ -44,7 +44,11 @@ class UnionAll : public Router {
     CHECK_GT(children.size(), 0)
         << "UnionAll operator must have at least one child";
     setChild(nullptr);
-    producers = children.size() * children[0]->getDOP().dop;
+    producers = 0;
+    for (const auto &child : children) {
+      producers += child->getDOP().dop;
+    }
+    LOG(INFO) << "unionAll producers: " << producers;
     remaining_producers = producers;
   }
 
