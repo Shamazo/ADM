@@ -73,13 +73,13 @@ TEST(CSV, ScanCsvPM) {
   auto pg =
       std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 2);
   catalog.registerPlugin(filename, pg);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * ROOT
    */
-  Root rootOp = Root(&scan);
-  scan.setParent(&rootOp);
+  Root rootOp = Root(scan);
+  scan->setParent(&rootOp);
   rootOp.produce(&ctx);
 
   // Run function
@@ -141,13 +141,13 @@ TEST(CSV, ScanCsvWideBuildPM) {
   auto pg =
       std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 6);
   catalog.registerPlugin(filename, pg);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * ROOT
    */
-  Root rootOp = Root(&scan);
-  scan.setParent(&rootOp);
+  Root rootOp = Root(scan);
+  scan->setParent(&rootOp);
   rootOp.produce(&ctx);
 
   // Run function
@@ -209,13 +209,13 @@ void scanCsvWideUsePM_(size_t *newline, short **offsets) {
   auto pg = std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields,
                                             ';', 10, 6, newline, offsets);
   catalog.registerPlugin(filename, pg);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * ROOT
    */
-  Root rootOp = Root(&scan);
-  scan.setParent(&rootOp);
+  Root rootOp = Root(scan);
+  scan->setParent(&rootOp);
   rootOp.produce(&ctx);
 
   // Run function
@@ -277,13 +277,13 @@ TEST(CSV, scanCsvWideUsePM) {
   auto pg =
       std::make_shared<pm::CSVPlugin>(&ctx, filename, rec1, whichFields, 10, 6);
   catalog.registerPlugin(filename, pg);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * ROOT
    */
-  Root rootOp = Root(&scan);
-  scan.setParent(&rootOp);
+  Root rootOp = Root(scan);
+  scan->setParent(&rootOp);
   rootOp.produce(&ctx);
 
   // Run function
@@ -335,13 +335,13 @@ TEST(CSV, scanCsvWideUsePM) {
 //
 //  CSVPlugin *pg = new CSVPlugin(&ctx, filename, rec1, whichFields);
 //  catalog.registerPlugin(filename, pg);
-//  Scan scan = Scan(*pg);
+//  auto scan = std::make_shared<Scan>(*pg);
 //
 //  /**
 //   * ROOT
 //   */
-//  Root rootOp = Root(&scan);
-//  scan.setParent(&rootOp);
+//  Root rootOp = Root(scan);
+//  scan->setParent(&rootOp);
 //  rootOp.produce(&ctx);
 //
 //  // Run function

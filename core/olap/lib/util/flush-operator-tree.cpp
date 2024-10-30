@@ -47,7 +47,7 @@ std::ostream &operator<<(std::ostream &out, const spacer &s) {
   out << demangle(typeid(s.op).name());
   out << '(' << s.op.getRowType() << ") [" << s.op.getUUID() << "]\n";
   if (auto u = dynamic_cast<const UnionAll *>(&s.op)) {
-    for (const auto c : u->getChildren()) out << s.step(*c);
+    for (const auto &c : u->getChildren()) out << s.step(*c);
   } else if (dynamic_cast<const Scan *>(&s.op)) {
   } else if (auto c = dynamic_cast<const UnaryOperator *>(&s.op)) {
     out << s.step(*(c->getChild()));

@@ -31,8 +31,8 @@
 #include <platform/util/tracing.hpp>
 
 MemMoveScaleOut::MemMoveScaleOut(
-    Operator *const child, const std::vector<RecordAttribute *> &wantedFields,
-    size_t slack)
+    std::shared_ptr<Operator> child,
+    const std::vector<RecordAttribute *> &wantedFields, size_t slack)
     : MemMoveDevice(child, wantedFields, slack, true) {}
 
 MemMoveScaleOut::MemMoveConf *MemMoveScaleOut::createMoveConf() const {

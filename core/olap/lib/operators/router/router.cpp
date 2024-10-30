@@ -526,7 +526,7 @@ void Router::spawnWorker(size_t i, const void *session) {
 
 void Router::open(Pipeline *pip) {
   std::lock_guard<std::mutex> guard(init_mutex);
-  event_range<range_log_op::ROUTER_OPEN> er{id, pip->getGeneratorUUID(),
+  event_range<range_log_op::ROUTER_OPEN> er{m_id, pip->getGeneratorUUID(),
                                             pip->getGroup()};
   if (firers.empty()) {
     free_pool = new threadsafe_set<void *>[fanout];
@@ -544,7 +544,7 @@ void Router::open(Pipeline *pip) {
 
 void Router::close(Pipeline *pip) {
   // time_block t("Tterm_exchange: ");
-  event_range<range_log_op::ROUTER_CLOSE> er{id, pip->getGeneratorUUID(),
+  event_range<range_log_op::ROUTER_CLOSE> er{m_id, pip->getGeneratorUUID(),
                                              pip->getGroup()};
 
   int rem = --remaining_producers;
@@ -555,7 +555,7 @@ void Router::close(Pipeline *pip) {
     {
       nvtxRangePushA("Exchange_waiting_to_close");
       event_range<range_log_op::ROUTER_CLOSE_JOIN_CONS> er2{
-          id, pip->getGeneratorUUID(), pip->getGroup()};
+          m_id, pip->getGeneratorUUID(), pip->getGroup()};
       for (auto &t : firers) t.get();
       nvtxRangePop();
     }

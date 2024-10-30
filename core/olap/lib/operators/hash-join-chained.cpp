@@ -36,12 +36,12 @@ using namespace llvm;
 HashJoinChained::HashJoinChained(std::vector<GpuMatExpr> build_mat_exprs,
                                  std::vector<size_t> build_packet_widths,
                                  expression_t build_keyexpr,
-                                 Operator *const build_child,
+                                 std::shared_ptr<Operator> const build_child,
 
                                  std::vector<GpuMatExpr> probe_mat_exprs,
                                  const std::vector<size_t> &probe_packet_widths,
                                  expression_t probe_keyexpr,
-                                 Operator *const probe_child,
+                                 std::shared_ptr<Operator> const probe_child,
 
                                  int hash_bits,
 

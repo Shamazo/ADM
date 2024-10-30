@@ -1762,7 +1762,7 @@ void CSVPlugin::scanAndPopulatePM(const ::Operator &producer) {
   Builder->SetInsertPoint(IncBB);
 
   // Triggering parent
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   //    cout << "Forwarding " << (*variableBindings).size() << endl;
   opParent->consume(context, {producer, variableBindings});
   Value *val_1 = context->createInt32(1);
@@ -2090,7 +2090,7 @@ void CSVPlugin::scanPM(const ::Operator &producer) {
   Builder->SetInsertPoint(pmScanInc);
   //    cout << "Forwarding " << (*variableBindings).size() << endl;
   OperatorState state(producer, *variableBindings);
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, state);
   Value *val_1 = context->createInt32(1);
   val_lineCtr = Builder->CreateLoad(

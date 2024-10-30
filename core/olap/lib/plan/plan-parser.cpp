@@ -245,7 +245,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
   assert(val[keyOp].IsString());
   const char *opName = val["operator"].GetString();
 
-  Operator *newOp = nullptr;
+  std::shared_ptr<Operator> newOp = nullptr;
 
   if (strcmp(opName, "reduce") == 0) {
     /* "Multi - reduce"! */
@@ -441,8 +441,8 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
 
     Path projPath{pathAlias, proj};
 
-    auto newOp = new Unnest(p, projPath, childOp.root);
-    childOp->setParent(newOp);
+    auto _newOp = std::make_shared<Unnest>(p, projPath, childOp.root);
+    childOp->setParent(_newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "outer_unnest") == 0) {
@@ -474,8 +474,8 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
 
     Path projPath{pathAlias, proj};
 
-    newOp = new OuterUnnest(p, projPath, childOp);
-    childOp->setParent(newOp);
+    newOp = std::make_shared<OuterUnnest>(p, projPath, childOp);
+    childOp->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "groupby") == 0 ||
@@ -536,14 +536,14 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     assert(val["probe_input"].IsObject());
     auto p = parseOperator(val["probe_input"]);
     auto probe_arg = p.getOutputArg();
-    Operator *probe_op = p.root;
+    std::shared_ptr<Operator> probe_op = p.root;
 
     /* parse operator input */
     assert(val.HasMember("build_input"));
     assert(val["build_input"].IsObject());
     auto b = parseOperator(val["build_input"]);
     auto build_arg = b.getOutputArg();
-    Operator *build_op = b.root;
+    std::shared_ptr<Operator> build_op = b.root;
 
     /*number of cpu partitions*/
     assert(val.HasMember("numOfBuckets"));
@@ -719,37 +719,37 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
       probe_widths.push_back(w.GetInt());
     }
 
-    auto *xch_build = new Router(build_op, DegreeOfParallelism{numPartitioners},
-                                 build_attr_block, slack, std::nullopt,
-                                 RoutingPolicy::LOCAL, DeviceType::CPU);
-    build_op->setParent(xch_build);
-    Operator *btt_build =
-        new BlockToTuples(xch_build, build_expr, false, gran_t::THREAD);
-    xch_build->setParent(btt_build);
-    Operator *part_build = new HashRearrange(
+    auto xch_build = std::make_shared<Router>(
+        build_op, DegreeOfParallelism{numPartitioners}, build_attr_block, slack,
+        std::nullopt, RoutingPolicy::LOCAL, DeviceType::CPU);
+    build_op->setParent(xch_build.get());
+    auto btt_build = std::make_shared<BlockToTuples>(xch_build, build_expr,
+                                                     false, gran_t::THREAD);
+    xch_build->setParent(btt_build.get());
+    auto part_build = std::make_shared<HashRearrange>(
         btt_build, numOfBuckets, build_expr, build_expr[0], build_hash_attr);
-    btt_build->setParent(part_build);
+    btt_build->setParent(part_build.get());
     build_attr_block.push_back(build_hash_attr);
-    auto *xch_build2 =
-        new Router(part_build, DegreeOfParallelism{1}, build_attr_block, slack,
-                   std::nullopt, RoutingPolicy::LOCAL, DeviceType::GPU);
-    part_build->setParent(xch_build2);
+    auto xch_build2 = std::make_shared<Router>(
+        part_build, DegreeOfParallelism{1}, build_attr_block, slack,
+        std::nullopt, RoutingPolicy::LOCAL, DeviceType::GPU);
+    part_build->setParent(xch_build2.get());
 
-    auto *xch_probe = new Router(probe_op, DegreeOfParallelism{numPartitioners},
-                                 probe_attr_block, slack, std::nullopt,
-                                 RoutingPolicy::LOCAL, DeviceType::CPU);
-    probe_op->setParent(xch_probe);
-    Operator *btt_probe =
-        new BlockToTuples(xch_probe, probe_expr, false, gran_t::THREAD);
-    xch_probe->setParent(btt_probe);
-    Operator *part_probe = new HashRearrange(
+    auto xch_probe = std::make_shared<Router>(
+        probe_op, DegreeOfParallelism{numPartitioners}, probe_attr_block, slack,
+        std::nullopt, RoutingPolicy::LOCAL, DeviceType::CPU);
+    probe_op->setParent(xch_probe.get());
+    auto btt_probe = std::make_shared<BlockToTuples>(xch_probe, probe_expr,
+                                                     false, gran_t::THREAD);
+    xch_probe->setParent(btt_probe.get());
+    auto part_probe = std::make_shared<HashRearrange>(
         btt_probe, numOfBuckets, probe_expr, probe_expr[0], probe_hash_attr);
-    btt_probe->setParent(part_probe);
+    btt_probe->setParent(part_probe.get());
     probe_attr_block.push_back(probe_hash_attr);
-    auto *xch_probe2 =
-        new Router(part_probe, DegreeOfParallelism{1}, probe_attr_block, slack,
-                   std::nullopt, RoutingPolicy::LOCAL, DeviceType::GPU);
-    part_probe->setParent(xch_probe2);
+    auto xch_probe2 = std::make_shared<Router>(
+        part_probe, DegreeOfParallelism{1}, probe_attr_block, slack,
+        std::nullopt, RoutingPolicy::LOCAL, DeviceType::GPU);
+    part_probe->setParent(xch_probe2.get());
 
     auto *attr_ptr =
         new RecordAttribute(1, "coordinator", "ptr", new IntType(), true);
@@ -785,69 +785,71 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     f_atts_target_v.push_back(attr_target);
     f_atts_target_v.push_back(attr_splitter);
 
-    auto *coord =
-        new ZipCollect(attr_ptr, attr_splitter, attr_target,
-                       new RecordAttribute(*build_attr[0], true),
-                       new RecordAttribute(*probe_attr[0], true), xch_build2,
-                       xch_probe2, (OlapParallelContext *)ctx, numOfBuckets,
-                       build_hash_attr, build_hashed_expr_block,
-                       probe_hash_attr, probe_hashed_expr_block, "coordinator");
-    xch_build2->setParent(coord);
-    xch_probe2->setParent(coord);
+    auto coord = std::make_shared<ZipCollect>(
+        attr_ptr, attr_splitter, attr_target,
+        new RecordAttribute(*build_attr[0], true),
+        new RecordAttribute(*probe_attr[0], true), xch_build2, xch_probe2,
+        (OlapParallelContext *)ctx, numOfBuckets, build_hash_attr,
+        build_hashed_expr_block, probe_hash_attr, probe_hashed_expr_block,
+        "coordinator");
+    xch_build2->setParent(coord.get());
+    xch_probe2->setParent(coord.get());
 
-    auto *xch_proc = new Router(coord, DegreeOfParallelism{numConcurrent},
-                                f_atts_target_v, slack, expr_target,
-                                RoutingPolicy::HASH_BASED, DeviceType::GPU);
-    coord->setParent(xch_proc);
-    auto *initiator = new ZipInitiate(attr_ptr, attr_splitter, attr_target,
-                                      xch_proc, (OlapParallelContext *)ctx,
-                                      numOfBuckets, coord->getStateLeft(),
-                                      coord->getStateRight(), "launcher");
-    xch_proc->setParent(initiator);
+    auto xch_proc = std::make_shared<Router>(
+        coord, DegreeOfParallelism{numConcurrent}, f_atts_target_v, slack,
+        expr_target, RoutingPolicy::HASH_BASED, DeviceType::GPU);
+    coord->setParent(xch_proc.get());
+    auto initiator = std::make_shared<ZipInitiate>(
+        attr_ptr, attr_splitter, attr_target, xch_proc,
+        (OlapParallelContext *)ctx, numOfBuckets, coord->getStateLeft(),
+        coord->getStateRight(), "launcher");
+    xch_proc->setParent(initiator.get());
     PipelineGen **pip_rcv = initiator->pipeSocket();
 
-    auto *fwd_build =
-        new ZipForward(attr_target, initiator, (OlapParallelContext *)ctx,
-                       build_hashed_expr, "forwarder", coord->getStateLeft());
+    auto fwd_build = std::make_shared<ZipForward>(
+        attr_target, initiator, (OlapParallelContext *)ctx, build_hashed_expr,
+        "forwarder", coord->getStateLeft());
 
-    Operator *mmd_build =
-        new MemMoveDevice(fwd_build, build_hashed_attr_block, 4, false);
-    fwd_build->setParent(mmd_build);
-    Operator *ctg_build = new CpuToGpu(mmd_build, build_hashed_attr_block);
-    mmd_build->setParent(ctg_build);
-    Operator *btt_build2 =
-        new BlockToTuples(ctg_build, build_prejoin_expr, true, gran_t::GRID);
-    ctg_build->setParent(btt_build2);
-    auto *hpart1 = new HashPartitioner(
+    std::shared_ptr<Operator> mmd_build = std::make_shared<MemMoveDevice>(
+        fwd_build, build_hashed_attr_block, 4, false);
+    fwd_build->setParent(mmd_build.get());
+    std::shared_ptr<Operator> ctg_build =
+        std::make_shared<CpuToGpu>(mmd_build, build_hashed_attr_block);
+    mmd_build->setParent(ctg_build.get());
+    std::shared_ptr<Operator> btt_build2 = std::make_shared<BlockToTuples>(
+        ctg_build, build_prejoin_expr, true, gran_t::GRID);
+    ctg_build->setParent(btt_build2.get());
+    auto hpart1 = std::make_shared<HashPartitioner>(
         build_join_expr, build_widths, build_prejoin_expr[0], btt_build2,
         (OlapParallelContext *)ctx, maxBuildInputSize, 13, "partition_hash_1");
-    btt_build2->setParent(hpart1);
+    btt_build2->setParent(hpart1.get());
 
-    auto *fwd_probe =
-        new ZipForward(attr_target, initiator, (OlapParallelContext *)ctx,
-                       probe_hashed_expr, "forwarder", coord->getStateRight());
+    auto fwd_probe = std::make_shared<ZipForward>(
+        attr_target, initiator, (OlapParallelContext *)ctx, probe_hashed_expr,
+        "forwarder", coord->getStateRight());
 
-    Operator *mmd_probe =
-        new MemMoveDevice(fwd_probe, probe_hashed_attr_block, 4, false);
-    fwd_probe->setParent(mmd_probe);
-    Operator *ctg_probe = new CpuToGpu(mmd_probe, probe_hashed_attr_block);
-    mmd_probe->setParent(ctg_probe);
-    Operator *btt_probe2 =
-        new BlockToTuples(ctg_probe, probe_prejoin_expr, true, gran_t::GRID);
-    ctg_probe->setParent(btt_probe2);
-    auto *hpart2 = new HashPartitioner(
+    std::shared_ptr<Operator> mmd_probe = std::make_shared<MemMoveDevice>(
+        fwd_probe, probe_hashed_attr_block, 4, false);
+    fwd_probe->setParent(mmd_probe.get());
+    std::shared_ptr<Operator> ctg_probe =
+        std::make_shared<CpuToGpu>(mmd_probe, probe_hashed_attr_block);
+    mmd_probe->setParent(ctg_probe.get());
+    std::shared_ptr<Operator> btt_probe2 = std::make_shared<BlockToTuples>(
+        ctg_probe, probe_prejoin_expr, true, gran_t::GRID);
+    ctg_probe->setParent(btt_probe2.get());
+    auto hpart2 = std::make_shared<HashPartitioner>(
         probe_join_expr, probe_widths, probe_prejoin_expr[0], btt_probe2,
         (OlapParallelContext *)ctx, maxProbeInputSize, 13, "partition_hash_2");
-    btt_probe2->setParent(hpart2);
+    btt_probe2->setParent(hpart2.get());
 
-    newOp = new GpuPartitionedHashJoinChained(
+    newOp = std::make_shared<GpuPartitionedHashJoinChained>(
         build_join_expr, build_widths, build_join_expr[0].expr, std::nullopt,
         hpart1, probe_join_expr, probe_widths, probe_join_expr[0].expr,
         std::nullopt, hpart2, hpart1->getState(), hpart2->getState(),
         maxBuildInputSize, maxProbeInputSize, 13, (OlapParallelContext *)ctx,
         "hj_part", pip_rcv, nullptr);
-    hpart1->setParent(newOp);
-    hpart2->setParent(newOp);
+    hpart1->setParent(newOp.get());
+    hpart2->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "partitioned-hashjoin-chained") == 0) {
@@ -856,14 +858,14 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     assert(val["probe_input"].IsObject());
     auto p = parseOperator(val["probe_input"]);
     auto probe_arg = p.getOutputArg();
-    Operator *probe_op = p.root;
+    std::shared_ptr<Operator> probe_op = p.root;
 
     /* parse operator input */
     assert(val.HasMember("build_input"));
     assert(val["build_input"].IsObject());
     auto b = parseOperator(val["build_input"]);
     auto build_arg = b.getOutputArg();
-    Operator *build_op = b.root;
+    std::shared_ptr<Operator> build_op = b.root;
 
     assert(val.HasMember("build_k"));
     auto build_key_expr = parseExpression(val["build_k"], build_arg);
@@ -949,17 +951,17 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
 
     int log_parts = 13;
 
-    auto *part_left =
-        new HashPartitioner(build_e, build_widths, build_key_expr, build_op,
-                            dynamic_cast<OlapParallelContext *>(this->ctx),
-                            maxBuildInputSize, log_parts, "part1");
+    auto part_left = std::make_shared<HashPartitioner>(
+        build_e, build_widths, build_key_expr, build_op,
+        dynamic_cast<OlapParallelContext *>(this->ctx), maxBuildInputSize,
+        log_parts, "part1");
 
-    auto *part_right =
-        new HashPartitioner(probe_e, probe_widths, probe_key_expr, probe_op,
-                            dynamic_cast<OlapParallelContext *>(this->ctx),
-                            maxProbeInputSize, log_parts, "part1");
+    auto part_right = std::make_shared<HashPartitioner>(
+        probe_e, probe_widths, probe_key_expr, probe_op,
+        dynamic_cast<OlapParallelContext *>(this->ctx), maxProbeInputSize,
+        log_parts, "part1");
 
-    newOp = new GpuPartitionedHashJoinChained(
+    newOp = std::make_shared<GpuPartitionedHashJoinChained>(
         build_e, build_widths, build_key_expr, build_minorkey_expr, part_left,
         probe_e, probe_widths, probe_key_expr, probe_minorkey_expr, part_right,
         part_left->getState(), part_right->getState(), maxBuildInputSize,
@@ -967,14 +969,14 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
         dynamic_cast<OlapParallelContext *>(this->ctx), "phjc", nullptr,
         nullptr);
 
-    build_op->setParent(part_left);
-    probe_op->setParent(part_right);
+    build_op->setParent(part_left.get());
+    probe_op->setParent(part_right.get());
 
     build_op = part_left;
     probe_op = part_right;
 
-    build_op->setParent(newOp);
-    probe_op->setParent(newOp);
+    build_op->setParent(newOp.get());
+    probe_op->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "hashjoin-chained") == 0) {
@@ -1015,9 +1017,9 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
 
     /* parse operator input */
     auto left = parseOperator(val["leftInput"]);
-    Operator *leftOp = left.root;
+    std::shared_ptr<Operator> leftOp = left.root;
     auto right = parseOperator(val["rightInput"]);
-    Operator *rightOp = right.root;
+    std::shared_ptr<Operator> rightOp = right.root;
 
     // Predicate
     assert(val.HasMember(keyPred));
@@ -1131,13 +1133,13 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     }
     vector<RecordAttribute *> oidsRight = vector<RecordAttribute *>();
     MapToVec(mapOidsRight, oidsRight);
-    auto *matRight =
-        new Materializer(fieldsRight, exprsRight, oidsRight, outputModesRight);
+    auto matRight = std::make_shared<Materializer>(fieldsRight, exprsRight,
+                                                   oidsRight, outputModesRight);
 
-    newOp = new RadixJoin(pred, leftOp, rightOp, this->ctx, "radixHashJoin",
-                          *matLeft, *matRight);
-    leftOp->setParent(newOp);
-    rightOp->setParent(newOp);
+    newOp = std::make_shared<RadixJoin>(pred, leftOp, rightOp, this->ctx,
+                                        "radixHashJoin", *matLeft, *matRight);
+    leftOp->setParent(newOp.get());
+    rightOp->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "nest") == 0) {
@@ -1257,16 +1259,17 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     MapToVec(mapOids, oids);
     /* FIXME This constructor breaks nest use cases that trigger caching */
     /* Check similar hook in radix-nest.cpp */
-    auto *matCoarse =
-        new Materializer(fieldsToMat, exprsToMat, oids, outputModes);
+    auto matCoarse = std::make_shared<Materializer>(fieldsToMat, exprsToMat,
+                                                    oids, outputModes);
 
     // Materializer* matCoarse = new Materializer(exprsToMat);
 
     // Put operator together
-    newOp = new radix::Nest(this->ctx, accs, outputExprs, aggrLabels, predExpr,
-                            std::vector<expression_t>{groupByExpr},
-                            nullsToZerosExpr, childOp, "radixNest", *matCoarse);
-    childOp->setParent(newOp);
+    newOp = std::make_shared<radix::Nest>(
+        this->ctx, accs, outputExprs, aggrLabels, predExpr,
+        std::vector<expression_t>{groupByExpr}, nullsToZerosExpr, childOp,
+        "radixNest", *matCoarse);
+    childOp->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "select") == 0) {
@@ -1366,7 +1369,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
 
     datasetInfo->exprType = new BagType{*rec};
 
-    newOp = new DictScan(
+    newOp = std::make_shared<DictScan>(
         this->ctx, RecordAttribute{relName, attrName, new DStringType(dict)},
         regex, *reg_as);
 
@@ -1543,8 +1546,8 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     }
 
     assert(dynamic_cast<OlapParallelContext *>(this->ctx));
-    newOp = new MemMoveLocalTo(childOp, projections, slack);
-    childOp->setParent(newOp);
+    newOp = std::make_shared<MemMoveLocalTo>(childOp, projections, slack);
+    childOp->setParent(newOp.get());
 
     return RelBuilder(ctx, newOp);
   } else if (strcmp(opName, "exchange") == 0 || strcmp(opName, "router") == 0) {
@@ -1660,10 +1663,10 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
                                     : RoutingPolicy::RANDOM);
 
       assert(dynamic_cast<OlapParallelContext *>(this->ctx));
-      newOp = new Split(childOp, numOfParents, projections, slack, hash,
-                        policy_type);
+      newOp = std::make_shared<Split>(childOp, numOfParents, projections, slack,
+                                      hash, policy_type);
       splitOps[split_id] = newOp;
-      childOp->setParent(newOp);
+      childOp->setParent(newOp.get());
     } else {
       newOp = splitOps[split_id];
       // Splits from common subtrees may have the same split_id, but subtrees
@@ -1811,7 +1814,8 @@ std::shared_ptr<Plugin> PlanExecutor::parsePlugin(const rapidjson::Value &val) {
     }
 
     newPg = std::make_shared<pm::CSVPlugin>(
-        this->ctx, *pathDynamicCopy, *recType, projections, delim, linehint, policy, stringBrackets, hasHeader);
+        this->ctx, *pathDynamicCopy, *recType, projections, delim, linehint,
+        policy, stringBrackets, hasHeader);
   } else if (pgType == "json") {
     assert(val.HasMember(keyLineHint));
     assert(val[keyLineHint].IsInt());
@@ -1858,7 +1862,8 @@ std::shared_ptr<Plugin> PlanExecutor::parsePlugin(const rapidjson::Value &val) {
     assert(dynamic_cast<OlapParallelContext *>(this->ctx));
 
     newPg = std::make_shared<BinaryBlockPlugin>(
-        dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy, *recType, projections);
+        dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy,
+        *recType, projections);
   } else {
     assert(dynamic_cast<OlapParallelContext *>(this->ctx));
 
@@ -1893,7 +1898,8 @@ std::shared_ptr<Plugin> PlanExecutor::parsePlugin(const rapidjson::Value &val) {
       }
 
       newPg = std::shared_ptr<Plugin>{create(
-          dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy, *recType, projections /*, const rapidjson::Value &val */)};
+          dynamic_cast<OlapParallelContext *>(this->ctx), *pathDynamicCopy,
+          *recType, projections /*, const rapidjson::Value &val */)};
       // FIXME: a better interface would be to also pass the current json value,
       //  so that plugins can read their own attributes.
     }

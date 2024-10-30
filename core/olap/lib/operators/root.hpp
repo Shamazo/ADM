@@ -29,7 +29,7 @@
  */
 class Root : public UnaryOperator {
  public:
-  Root(Operator *const child) : UnaryOperator(child) {}
+  Root(std::shared_ptr<Operator> child) : UnaryOperator(child) {}
   ~Root() override { LOG(INFO) << "Collapsing root operator"; }
   void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,

@@ -52,9 +52,10 @@ class ZipCollect : public BinaryOperator {
  public:
   ZipCollect(RecordAttribute *ptrAttr, RecordAttribute *splitter,
              RecordAttribute *targetAttr, RecordAttribute *inputLeft,
-             RecordAttribute *inputRight, Operator *const leftChild,
-             Operator *const rightChild, OlapParallelContext *const context,
-             int numOfBuckets, RecordAttribute *hash_key_left,
+             RecordAttribute *inputRight, std::shared_ptr<Operator> leftChild,
+             std::shared_ptr<Operator> rightChild,
+             OlapParallelContext *const context, int numOfBuckets,
+             RecordAttribute *hash_key_left,
              const std::vector<expression_t> &wantedFieldsLeft,
              RecordAttribute *hash_key_right,
              const std::vector<expression_t> &wantedFieldsRight,
@@ -138,7 +139,7 @@ class ZipCollect : public BinaryOperator {
 class ZipInitiate : public UnaryOperator {
  public:
   ZipInitiate(RecordAttribute *ptrAttr, RecordAttribute *splitter,
-              RecordAttribute *targetAttr, Operator *const child,
+              RecordAttribute *targetAttr, std::shared_ptr<Operator> child,
               OlapParallelContext *const context, int numOfBuckets,
               ZipState &state1, ZipState &state2, string opLabel);
 
@@ -196,7 +197,7 @@ class ZipInitiate : public UnaryOperator {
 
 class ZipForward : public UnaryOperator {
  public:
-  ZipForward(RecordAttribute *targetAttr, Operator *const child,
+  ZipForward(RecordAttribute *targetAttr, std::shared_ptr<Operator> child,
              OlapParallelContext *const context,
              const std::vector<expression_t> &wantedFields, string opLabel,
              ZipState &state);

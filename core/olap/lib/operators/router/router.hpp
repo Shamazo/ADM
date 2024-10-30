@@ -50,7 +50,7 @@ void freeBuffer(int target, Router *xch, void *buff);
 
 class Router : public experimental::UnaryOperator {
  public:
-  Router(Operator *const child, DegreeOfParallelism fanout,
+  Router(std::shared_ptr<Operator> child, DegreeOfParallelism fanout,
          std::vector<RecordAttribute *> wantedFields, size_t slack,
          std::optional<expression_t> hash, RoutingPolicy policy_type,
          std::unique_ptr<Affinitizer> aff)
@@ -70,7 +70,7 @@ class Router : public experimental::UnaryOperator {
     assert(this->aff && "Affinitizer should be non-null");
   }
 
-  Router(Operator *const child, DegreeOfParallelism numOfParents,
+  Router(std::shared_ptr<Operator> child, DegreeOfParallelism numOfParents,
          std::vector<RecordAttribute *> wantedFields, int slack,
          std::optional<expression_t> hash, RoutingPolicy policy_type,
          DeviceType targets)

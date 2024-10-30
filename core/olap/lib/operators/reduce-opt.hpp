@@ -37,7 +37,8 @@ namespace opt {
 /* MULTIPLE ACCUMULATORS SUPPORTED */
 class Reduce : public experimental::UnaryOperator {
  public:
-  Reduce(std::vector<agg_t> aggs, expression_t pred, Operator *const child)
+  Reduce(std::vector<agg_t> aggs, expression_t pred,
+         std::shared_ptr<Operator> child)
       : UnaryOperator(child), aggs(std::move(aggs)), pred(std::move(pred)) {}
 
   void produce_(OlapParallelContext *context) override;

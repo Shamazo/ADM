@@ -51,7 +51,7 @@ class Nest : public UnaryOperator {
        std::vector<string> aggrLabels, expression_t pred,
        const list<expressions::InputArgument> &f_grouping,
        const list<expressions::InputArgument> &g_nullToZero,
-       Operator *const child, char *opLabel, Materializer &mat);
+       std::shared_ptr<Operator> const child, char *opLabel, Materializer &mat);
   ~Nest() override { LOG(INFO) << "Collapsing Nest operator"; }
   void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,

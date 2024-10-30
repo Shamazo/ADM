@@ -54,11 +54,11 @@ void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
 }
 
 GeneralizedRouterConsumer::GeneralizedRouterConsumer(
-    GeneralizedRouter &producer, DegreeOfParallelism fanout,
+    std::shared_ptr<GeneralizedRouter> producer, DegreeOfParallelism fanout,
     std::unique_ptr<Affinitizer> aff, DeviceType target_device,
     int consumer_index)
-    : experimental::UnaryOperator(&producer),
-      producer(producer),
+    : experimental::UnaryOperator(producer),
+      producer(producer.get()),
       fanout(fanout),
       aff(std::move(aff)),
       aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
@@ -71,7 +71,7 @@ void GeneralizedRouterConsumer::produce_(OlapParallelContext *context) {
 
   catch_pip = context->operator->();
 
-  producer.produceForConsumer(*this, context);
+  producer->produceForConsumer(*this, context);
 }
 
 void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
@@ -79,11 +79,11 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
   auto &llvmContext = context->getLLVMContext();
 
   std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(
-      producer.wantedFields[0]->getRelationName());
+      producer->wantedFields[0]->getRelationName());
 
   auto nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
   const bool is_nvme_plugin = nvme_plugin != nullptr;
-  const bool non_scan_move = producer.wantedFields[0]->getRelationName().find(
+  const bool non_scan_move = producer->wantedFields[0]->getRelationName().find(
                                  "tmp") != std::string::npos;
 
   const ExpressionType *ptoid = pg->getOIDType();
@@ -91,19 +91,19 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
   llvm::Type *oidType = ptoid->getLLVMType(llvmContext);
 
   std::vector<llvm::Type *> param_typelist;
-  for (auto field : producer.wantedFields) {
+  for (auto field : producer->wantedFields) {
     auto *wtype = field->getLLVMType(llvmContext);
     if (wtype == nullptr)
       wtype = oidType;  // FIXME: dirty hack for JSON inner lists
 
     param_typelist.push_back(wtype);
-    producer.need_cnt =
-        producer.need_cnt || (field->getOriginalType()->getTypeID() == BLOCK);
+    producer->need_cnt =
+        producer->need_cnt || (field->getOriginalType()->getTypeID() == BLOCK);
   }
 
   param_typelist.push_back(oidType);                              // oid
   param_typelist.push_back(llvm::Type::getInt64Ty(llvmContext));  // srcServer
-  if (producer.need_cnt) param_typelist.push_back(oidType);       // cnt
+  if (producer->need_cnt) param_typelist.push_back(oidType);      // cnt
 
   // This currently assumes that if we are routing blocks (need_cnt) and using
   // the nvme plugin, then we need to add tupleCnt as a param. This may not
@@ -113,24 +113,24 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
     param_typelist.push_back(oidType);  // the real tupleCnt. For NvmePlugin cnt
                                         // is the number of blocks
 
-  producer.params_type = llvm::StructType::get(llvmContext, param_typelist);
-  producer.buf_size = context->getSizeOf(producer.params_type);
+  producer->params_type = llvm::StructType::get(llvmContext, param_typelist);
+  producer->buf_size = context->getSizeOf(producer->params_type);
 
   // blockCnt for NvmePlugin
-  RecordAttribute tupleCnt(producer.wantedFields[0]->getRelationName(),
+  RecordAttribute tupleCnt(producer->wantedFields[0]->getRelationName(),
                            "activeCnt",
                            pg->getOIDType());  // FIXME: OID type for blocks ?
-  RecordAttribute tupleIdentifier(producer.wantedFields[0]->getRelationName(),
+  RecordAttribute tupleIdentifier(producer->wantedFields[0]->getRelationName(),
                                   activeLoop, pg->getOIDType());
-  RecordAttribute realTupleCnt(producer.wantedFields[0]->getRelationName(),
+  RecordAttribute realTupleCnt(producer->wantedFields[0]->getRelationName(),
                                "tupleCnt", pg->getOIDType());
-  RecordAttribute srcServer{producer.wantedFields[0]->getRelationName(),
+  RecordAttribute srcServer{producer->wantedFields[0]->getRelationName(),
                             "srcServer",
                             new Int64Type()};  // FIXME: OID type for blocks ?
 
   // Generate catch code
   auto p = context->appendParameter(
-      llvm::PointerType::get(producer.params_type, 0), true, true);
+      llvm::PointerType::get(producer->params_type, 0), true, true);
   context->setGlobalFunction();
 
   auto *Builder = context->getBuilder();
@@ -153,30 +153,31 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
 
   map<RecordAttribute, ProteusValueMemory> variableBindings;
 
-  for (size_t i = 0; i < producer.wantedFields.size(); ++i) {
+  for (size_t i = 0; i < producer->wantedFields.size(); ++i) {
     auto *param = Builder->CreateExtractValue(params, i);
 
     // FIMXE: should we alse transfer this information ?
-    variableBindings[*(producer.wantedFields[i])] =
+    variableBindings[*(producer->wantedFields[i])] =
         context->toMem(param, context->createFalse());
   }
-  auto *oid = Builder->CreateExtractValue(params, producer.wantedFields.size());
+  auto *oid =
+      Builder->CreateExtractValue(params, producer->wantedFields.size());
   variableBindings[tupleIdentifier] =
       context->toMem(oid, context->createFalse());
 
   auto *srv =
-      Builder->CreateExtractValue(params, producer.wantedFields.size() + 1);
+      Builder->CreateExtractValue(params, producer->wantedFields.size() + 1);
   variableBindings[srcServer] =
       context->toMem(srv, context->createFalse(), "srcServer");
 
-  if (producer.need_cnt) {
+  if (producer->need_cnt) {
     auto *cnt =
-        Builder->CreateExtractValue(params, producer.wantedFields.size() + 2);
+        Builder->CreateExtractValue(params, producer->wantedFields.size() + 2);
     variableBindings[tupleCnt] = context->toMem(cnt, context->createFalse());
 
     if (is_nvme_plugin && !non_scan_move) {
-      llvm::Value *tuple_cnt =
-          Builder->CreateExtractValue(params, producer.wantedFields.size() + 3);
+      llvm::Value *tuple_cnt = Builder->CreateExtractValue(
+          params, producer->wantedFields.size() + 3);
       variableBindings[realTupleCnt] =
           context->toMem(tuple_cnt, context->createFalse());
     }
@@ -236,8 +237,9 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
       std::vector<Affinitizer *> affs;
       std::vector<DeviceType> device_types;
       for (auto &consumer : consumers) {
-        affs.emplace_back(consumer->aff.get());
-        device_types.emplace_back(consumer->target_device);
+        auto c_ptr = consumer.lock();
+        affs.emplace_back(c_ptr->aff.get());
+        device_types.emplace_back(c_ptr->target_device);
       }
       return std::make_unique<routing::RandomSplitDataLocal>(
           _wantedFields, affs, device_types);
@@ -250,8 +252,8 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
 
 void GeneralizedRouter::produceForConsumer(
     const GeneralizedRouterConsumer &cons, OlapParallelContext *context) {
-  assert(cons.producer == *this);
-  if (&cons == consumers.back().get()) {
+  assert(cons.producer == this);
+  if (&cons == consumers.back().lock().get()) {
     produce(context);
   }
 }
@@ -390,7 +392,8 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
 
   // Warmup threads to avoid thread creation overhead
   for (const auto &cons : consumers) {
-    for (int i = 0; i < cons->fanout; i++) {
+    auto c_ptr = cons.lock();
+    for (int i = 0; i < c_ptr->fanout; i++) {
       firers.emplace_back([]() {});
     }
   }
@@ -548,9 +551,10 @@ size_t GeneralizedRouter::getNumberOfQueues() const {
     }
     case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
       // Note: code path is not tested at the moment
-      size_t consumer_dop = consumers.front()->getDOP();
+      size_t consumer_dop = consumers.front().lock()->getDOP();
       for (const auto &cons : consumers) {
-        CHECK_EQ(cons->getDOP(), consumer_dop)
+        auto c_ptr = cons.lock();
+        CHECK_EQ(c_ptr->getDOP(), consumer_dop)
             << "All consumers must have the "
                "same DOP for SHARED_HASH_BASED";
       }
@@ -569,7 +573,10 @@ size_t GeneralizedRouter::getNumberOfQueues() const {
 
 DegreeOfParallelism GeneralizedRouter::getDOP() const {
   size_t total = 0;
-  for (auto &cons : consumers) total += cons->getDOP();
+  for (auto &cons : consumers) {
+    auto c_ptr = cons.lock();
+    total += c_ptr->getDOP();
+  }
   return DegreeOfParallelism{total};
 }
 
@@ -607,14 +614,14 @@ void GeneralizedRouter::create_queues() {
 }
 
 void GeneralizedRouter::open(Pipeline *pip) {
-  event_range<range_log_op::GROUTER_OPEN> er{id, pip->getGeneratorUUID(),
+  event_range<range_log_op::GROUTER_OPEN> er{m_id, pip->getGeneratorUUID(),
                                              pip->getGroup()};
   std::lock_guard<std::mutex> guard(init_mutex);
 
   if (firers.empty()) {
     {
       event_range<range_log_op::GROUTER_CREATE_QUEUES> e{
-          id, pip->getGeneratorUUID()};
+          m_id, pip->getGeneratorUUID()};
       create_queues();
     }
     remaining_producers = producers;
@@ -640,10 +647,11 @@ void GeneralizedRouter::open(Pipeline *pip) {
     };
     size_t consumer_index = 0;
     for (auto &cons : consumers) {
+      auto c_ptr = cons.lock();
       event_range<range_log_op::GROUTER_INIT_CONS> e{
-          id, cons->catch_pip->getUUID()};
-      cons->spawnWorker(pip->getSession(), queue_offset(consumer_index),
-                        firers);
+          m_id, c_ptr->catch_pip->getUUID()};
+      c_ptr->spawnWorker(pip->getSession(), queue_offset(consumer_index),
+                         firers);
       consumer_index += 1;
     }
   }
@@ -656,7 +664,7 @@ void GeneralizedRouter::close(Pipeline *pip) {
   CHECK_GE(rem, 0);
 
   if (rem == 0) {
-    event_range<range_log_op::GROUTER_CLOSE> er{id, pip->getUUID(),
+    event_range<range_log_op::GROUTER_CLOSE> er{m_id, pip->getUUID(),
                                                 pip->getGroup()};
     for (auto &r : ready_fifo) {
       r.close();
@@ -670,7 +678,7 @@ void GeneralizedRouter::close(Pipeline *pip) {
   }
 }
 
-GeneralizedRouterConsumer *GeneralizedRouter::appendConsumer(
+std::shared_ptr<GeneralizedRouterConsumer> GeneralizedRouter::appendConsumer(
     DeviceType target_device, DegreeOfParallelism dop,
     std::unique_ptr<Affinitizer> aff) {
   if (dop < aff->countAffCUs()) {
@@ -683,39 +691,42 @@ GeneralizedRouterConsumer *GeneralizedRouter::appendConsumer(
     }
   }
 
-  consumers.emplace_back(std::make_unique<GeneralizedRouterConsumer>(
-      *this, dop, std::move(aff), target_device, consumers.size()));
-  return consumers.back().get();
+  auto new_consumer = std::make_shared<GeneralizedRouterConsumer>(
+      getSelfPtr(), dop, std::move(aff), target_device, consumers.size());
+  consumers.emplace_back(std::weak_ptr(new_consumer));
+  return new_consumer;
 }
 
 bool GeneralizedRouterConsumer::isFiltering() const {
-  return producer.isFiltering();
+  return producer->isFiltering();
 }
 
 RecordType GeneralizedRouterConsumer::getRowType() const {
-  return producer.getRowType();
+  return producer->getRowType();
 }
 
 DegreeOfParallelism GeneralizedRouterConsumer::getDOPServers() const {
-  return producer.getDOPServers();
+  return producer->getDOPServers();
 }
 
 DeviceType GeneralizedRouterConsumer::getDeviceType() const {
-  return producer.getDeviceType();
+  return producer->getDeviceType();
 }
 
-bool GeneralizedRouterConsumer::isPacked() const { return producer.isPacked(); }
+bool GeneralizedRouterConsumer::isPacked() const {
+  return producer->isPacked();
+}
 
 proteus::traits::HomReplication GeneralizedRouterConsumer::getHomReplication()
     const {
-  return producer.getHomReplication();
+  return producer->getHomReplication();
 }
 
 void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
                                               PipelineGen *pipGen,
                                               std::function<void(void *)> f) {
-  DCHECK_LE(target_queue, producer.ready_fifo.size());
-  producer.ready_fifo.at(target_queue)
+  DCHECK_LE(target_queue, producer->ready_fifo.size());
+  producer->ready_fifo.at(target_queue)
       .foreachItemDo(
           [&]() {
             // We don't update the counters on every iteration to reduce log
@@ -724,18 +735,18 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
             count += 1;
             if (count % 5 == 0) {
               const int fifo_size =
-                  producer.ready_fifo.at(target_queue).size_unsafe();
-              counterlogger.log(producer.getUUID(),
+                  producer->ready_fifo.at(target_queue).size_unsafe();
+              counterlogger.log(producer->getUUID(),
                                 counter_type::ROUTER_READY_QUEUE_SIZE,
                                 fifo_size, target_queue);
               const int free_size =
-                  producer.free_pool.at(target_queue).size_unsafe();
-              counterlogger.log(producer.getUUID(),
+                  producer->free_pool.at(target_queue).size_unsafe();
+              counterlogger.log(producer->getUUID(),
                                 counter_type::ROUTER_FREE_POOL_SIZE, free_size,
                                 target_queue);
             }
             return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
-                id, pipGen->getUUID(), pip->getGroup()};
+                m_id, pipGen->getUUID(), pip->getGroup()};
           },
           [&](void *ptr) {
             int curr_count =
@@ -743,15 +754,15 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
             // We don't update the count on every iteration to reduce log
             // flooding
             if (curr_count % 10 == 0) {
-              counterlogger.log(producer.getUUID(),
+              counterlogger.log(producer->getUUID(),
                                 counter_type::GROUTER_CONSUME_COUNT, curr_count,
                                 consumer_index);
             }
             f(ptr);
 
             {
-              producer.freeBufferGeneralized(target_queue,
-                                             proteus::managed_ptr{ptr});
+              producer->freeBufferGeneralized(target_queue,
+                                              proteus::managed_ptr{ptr});
               std::this_thread::yield();
             }
           });
@@ -768,15 +779,15 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
 
   auto exec_affinity = cu.set_on_scope();
   auto pip = pipGen->getPipeline(local_target);
-  event_range<range_log_op::GROUTER_CONS_FIRE> e{id, pip->getGeneratorUUID(),
-                                                 pip->getGroup()};
+  event_range<range_log_op::GROUTER_CONS_FIRE> er{m_id, pip->getGeneratorUUID(),
+                                                  pip->getGroup()};
   // if we remove that, following opens may allocate memory to wrong socket!
   std::this_thread::yield();
   void *buffer_mem = nullptr;
   if (should_allocate_queue_buffs) {
-    event_range<range_log_op::GROUTER_ALLOC_QUEUE_BUFFS> e{
-        id, pip->getGeneratorUUID(), pip->getGroup()};
-    buffer_mem = producer.allocate_buffers_for_queue(target_queue);
+    event_range<range_log_op::GROUTER_ALLOC_QUEUE_BUFFS> er2{
+        m_id, pip->getGeneratorUUID(), pip->getGroup()};
+    buffer_mem = producer->allocate_buffers_for_queue(target_queue);
   }
 
   pip->open(session);
@@ -788,11 +799,11 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
 
   pip->close();
   if (buffer_mem != nullptr) {
-    for (int j = 0; j < producer.slack; ++j) {
+    for (int j = 0; j < producer->slack; ++j) {
       /* Release and ignore, it will be handled by the following freePinned */
       ((void)(producer
-                  .acquireBufferGeneralized(target_queue, false,
-                                            pip->getGroup())
+                  ->acquireBufferGeneralized(target_queue, false,
+                                             pip->getGroup())
                   .release()));
     }
     MemoryManager::freePinned(buffer_mem);
@@ -811,7 +822,7 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
   /// This is important for the case where a consumer may only run on a subset
   /// of nodes/gpus
   const std::vector<int> local_targets =
-      [dop = getDOP(), routing_policy = producer.policy_type,
+      [dop = getDOP(), routing_policy = producer->policy_type,
        device_type = target_device,
        affinitizer = aff.get()]() -> std::vector<int> {
     if (routing_policy == GeneralizedRoutingPolicy::SHARED_RANDOM) {
@@ -864,7 +875,7 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
   for (size_t i = 0; i < fanout; ++i) {
     // The firers allocate buffers so that open can be parallelized
     const bool alloc_buffers = [&]() -> bool {
-      switch (producer.policy_type) {
+      switch (producer->policy_type) {
         case GeneralizedRoutingPolicy::SHARED_RANDOM: {
           return firers.empty();
         }
@@ -875,7 +886,7 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
         case GeneralizedRoutingPolicy::SHARED_LOCAL: {
           // this _may_ be a race condition
           if (i < local_targets.size()) {
-            return producer.free_pool
+            return producer->free_pool
                 .at(local_targets[i % local_targets.size()])
                 .empty();
           } else {

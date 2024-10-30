@@ -134,7 +134,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
     virtual void release(MemMoveDevice::workunit *buff);
   };
 
-  MemMoveDevice(Operator *const child,
+  MemMoveDevice(std::shared_ptr<Operator> const child,
                 const std::vector<RecordAttribute *> &wantedFields,
                 size_t slack, bool to_cpu, std::vector<bool> do_transfer)
       : UnaryOperator(child),
@@ -143,7 +143,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
         to_cpu(to_cpu),
         do_transfer(std::move(do_transfer)) {}
 
-  MemMoveDevice(Operator *const child,
+  MemMoveDevice(std::shared_ptr<Operator> const child,
                 const std::vector<RecordAttribute *> &wantedFields,
                 size_t slack, bool to_cpu)
       : MemMoveDevice(child, wantedFields, slack, to_cpu,

@@ -426,7 +426,7 @@ void JSONPlugin::scanObjects(const ::Operator &producer, Function *debug) {
 //    ArgsV.clear();
 #endif
   OperatorState *state = new OperatorState(producer, *variableBindings);
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, *state);
 
   // readPath(val_offset,"b");

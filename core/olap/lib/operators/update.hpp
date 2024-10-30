@@ -32,7 +32,7 @@
 
 class Update : public experimental::UnaryOperator {
  public:
-  Update(Operator *child, expression_t outputExprs);
+  Update(std::shared_ptr<Operator> child, expression_t outputExprs);
 
   void produce_(OlapParallelContext *context) override;
   void consume(OlapParallelContext *context,

@@ -26,17 +26,16 @@
 
 #include "reduce-opt.hpp"
 
-//#ifdef DEBUG
+// #ifdef DEBUG
 #define DEBUGREDUCE
-//#endif
+// #endif
 
-class [[deprecated("Use opt::Reduce")]] Reduce : public opt::Reduce{
-  public :
-
-      Reduce(Monoid acc, expressions::Expression *outputExpr,
-             expressions::Expression *pred, Operator *const child,
-             Context *context) :
-          opt::Reduce({acc}, {outputExpr}, pred, child, context, true){}
+class [[deprecated("Use opt::Reduce")]] Reduce : public opt::Reduce {
+ public:
+  Reduce(Monoid acc, expressions::Expression *outputExpr,
+         expressions::Expression *pred, std::shared_ptr<Operator> child,
+         Context *context)
+      : opt::Reduce({acc}, {outputExpr}, pred, child, context, true) {}
 };
 
 #endif /* REDUCE_HPP_ */

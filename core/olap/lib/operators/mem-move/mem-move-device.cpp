@@ -43,6 +43,7 @@
 
 #include "compression.hpp"
 #include "lib/util/catalog.hpp"
+#include "mem-move-device.hpp"
 #include "olap/plugins/binary-block-nvme-plugin.hpp"
 
 buff_pair buff_pair::not_moved(proteus::managed_ptr buff) {
@@ -674,7 +675,7 @@ void MemMoveDevice::open(Pipeline *pip) {
   static profiling::ProfileRegionType pr_type =
       profiling::ProfileRegionType("memmove::open");
   profiling::ProfileRegion pr(pr_type);
-  event_range<range_log_op::MEMMOVE_OPEN> er{id, catch_pip->getUUID(),
+  event_range<range_log_op::MEMMOVE_OPEN> er{m_id, catch_pip->getUUID(),
                                              pip->getGroup()};
   // nvtxRangePushA("memmove::open");
   cudaStream_t strm = createNonBlockingStream();
@@ -771,7 +772,7 @@ void MemMoveDevice::close(Pipeline *pip) {
   auto *mmc = pip->getStateVar<MemMoveConf *>(memmvconf_var);
 
   {
-    event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
+    event_range<range_log_op::MEMMOVE_CLOSE> er{m_id, catch_pip->getUUID(),
                                                 pip->getGroup()};
     mmc->tran.close();
     if (mmc->io_uring) {
@@ -781,9 +782,9 @@ void MemMoveDevice::close(Pipeline *pip) {
     nvtxRangePop();
     mmc->worker.get();
   }
+  event_range<range_log_op::MEMMOVE_CLOSE_CLEAN_UP> er{
+      m_id, catch_pip->getUUID(), pip->getGroup()};
 
-  event_range<range_log_op::MEMMOVE_CLOSE_CLEAN_UP> er{id, catch_pip->getUUID(),
-                                                       pip->getGroup()};
   //  if (!to_cpu) {
   //    CUfileError_t status = cuFileStreamDeregister(mmc->strm);
   //    CHECK_EQ(status.err, CU_FILE_SUCCESS)

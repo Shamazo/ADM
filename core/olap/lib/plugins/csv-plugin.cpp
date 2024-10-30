@@ -1068,7 +1068,7 @@ void CSVPlugin::scanCSV(const ::Operator &producer, Function *debug) {
 
   // Triggering parent
   OperatorState *state = new OperatorState(producer, variableBindings);
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, *state);
 
   //    BYTECODE

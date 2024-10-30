@@ -26,9 +26,9 @@
 
 #include "reduce-opt.hpp"
 
-//#ifdef DEBUG
+// #ifdef DEBUG
 #define DEBUGREDUCENOPRED
-//#endif
+// #endif
 
 /**
  * In many cases, the plan that is produced includes
@@ -37,12 +37,11 @@
  * This simplified operator implementation does not perform
  * whether p is true
  */
-class [[deprecated("Use opt::Reduce")]] ReduceNoPred : public opt::Reduce{
-  public :
-
-      ReduceNoPred(Monoid acc, expressions::Expression *outputExpr,
-                   Operator *const child, Context *context) :
-          opt::Reduce({acc}, {outputExpr}, true, child, context, true){}
+class [[deprecated("Use opt::Reduce")]] ReduceNoPred : public opt::Reduce {
+ public:
+  ReduceNoPred(Monoid acc, expressions::Expression *outputExpr,
+               std::shared_ptr<Operator> child, Context *context)
+      : opt::Reduce({acc}, {outputExpr}, true, child, context, true) {}
 };
 
 #endif /* REDUCENOPRED_HPP_ */

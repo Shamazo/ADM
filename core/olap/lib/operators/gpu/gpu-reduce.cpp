@@ -31,7 +31,7 @@ using namespace llvm;
 namespace opt {
 
 GpuReduce::GpuReduce(std::vector<agg_t> accs, expression_t pred,
-                     Operator *child)
+                     std::shared_ptr<Operator> child)
     : Reduce(std::move(accs), std::move(pred), child) {
   for (const auto &expr : this->aggs) {
     if (!expr.getExpressionType()->isPrimitive()) {

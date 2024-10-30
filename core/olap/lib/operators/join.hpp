@@ -26,8 +26,9 @@
 
 class Join : public BinaryOperator {
  public:
-  Join(expressions::BinaryExpression *predicate, Operator *leftChild,
-       Operator *rightChild, char *opLabel, Materializer &mat)
+  Join(expressions::BinaryExpression *predicate,
+       std::shared_ptr<Operator> leftChild,
+       std::shared_ptr<Operator> rightChild, char *opLabel, Materializer &mat)
       : BinaryOperator(leftChild, rightChild),
         pred(predicate),
         htName(opLabel),

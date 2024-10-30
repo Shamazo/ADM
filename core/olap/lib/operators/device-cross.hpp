@@ -29,7 +29,7 @@
 
 class DeviceCross : public UnaryOperator {
  protected:
-  DeviceCross(Operator *const child) : UnaryOperator(child) {}
+  DeviceCross(std::shared_ptr<Operator> const child) : UnaryOperator(child) {}
 
  public:
   virtual void consume(OlapParallelContext *const context,

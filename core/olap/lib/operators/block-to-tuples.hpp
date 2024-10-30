@@ -30,8 +30,9 @@
 
 class BlockToTuples : public experimental::UnaryOperator {
  public:
-  BlockToTuples(Operator *const child, std::vector<expression_t> wantedFields,
-                bool gpu = true, gran_t granularity = gran_t::GRID)
+  BlockToTuples(std::shared_ptr<Operator> const child,
+                std::vector<expression_t> wantedFields, bool gpu = true,
+                gran_t granularity = gran_t::GRID)
       : UnaryOperator(child),
         wantedFields(std::move(wantedFields)),
         granularity(granularity),

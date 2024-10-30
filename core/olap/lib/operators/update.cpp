@@ -29,7 +29,7 @@
 
 using namespace llvm;
 
-Update::Update(Operator *child, expression_t outputExpr)
+Update::Update(std::shared_ptr<Operator> child, expression_t outputExpr)
     : UnaryOperator(child),
       relName(outputExpr.getRegisteredRelName()),
       outputExpr(std::move(outputExpr)) {}

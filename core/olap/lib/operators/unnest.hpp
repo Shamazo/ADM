@@ -36,12 +36,12 @@
  */
 class Unnest : public UnaryOperator {
  public:
-  Unnest(expression_t pred, Path path, Operator *const child)
+  Unnest(expression_t pred, Path path, std::shared_ptr<Operator> child)
       : UnaryOperator(child), path(path), pred(std::move(pred)) {
     Catalog &catalog = Catalog::getInstance();
     catalog.registerPlugin(path.toString(), path.getRelevantPlugin());
   }
-  Unnest(expression_t pred, expression_t path, Operator *const child)
+  Unnest(expression_t pred, expression_t path, std::shared_ptr<Operator> child)
       : Unnest(pred,
                Path(path.getRegisteredRelName(),
                     dynamic_cast<const expressions::RecordProjection *>(

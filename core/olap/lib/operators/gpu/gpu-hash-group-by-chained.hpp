@@ -35,8 +35,9 @@
 class GpuHashGroupByChained : public HashGroupByChained {
  public:
   GpuHashGroupByChained(std::vector<GpuAggrMatExpr> agg_exprs,
-                        std::vector<expression_t> key_expr, Operator *child,
-                        int hash_bits, size_t maxInputSize);
+                        std::vector<expression_t> key_expr,
+                        std::shared_ptr<Operator> child, int hash_bits,
+                        size_t maxInputSize);
 
   void produce_(OlapParallelContext *context) override;
 

@@ -27,7 +27,7 @@
 
 class Select : public experimental::UnaryOperator {
  public:
-  Select(expression_t expr, Operator *child)
+  Select(expression_t expr, std::shared_ptr<Operator> child)
       : UnaryOperator(child), expr(std::move(expr)) {}
 
   void produce_(OlapParallelContext *context) override;

@@ -29,6 +29,7 @@
 #include <platform/common/common.hpp>
 #include <platform/topology/device-types.hpp>
 #include <stduuid/uuid.hpp>
+#include <utility>
 
 #include "lib/plugins/output/plugins-output.hpp"
 #include "llvm/IR/IRBuilder.h"
@@ -60,10 +61,15 @@ enum class HomParallelization {
 
 class Operator {
  public:
-  Operator() : parent(nullptr), id(uuids::uuid_system_generator{}()) {}
-  virtual ~Operator() { LOG(INFO) << "Collapsing operator"; }
-  virtual void setParent(Operator *parent) { this->parent = parent; }
-  Operator *const getParent() const { return parent; }
+  Operator() : m_parent(nullptr), m_id(uuids::uuid_system_generator{}()) {}
+  virtual ~Operator() = default;
+  virtual void setParent(Operator *parent) { this->m_parent = parent; }
+  /**
+   * Callee must ensure that the parent operator is not deallocated before using
+   * this ptr
+   * @return A non-owning pointer to the parent operator
+   */
+  Operator *const getParent() const { return m_parent; }
   // Overloaded operator used in checks for children of Join op. More complex
   // cases may require different handling
   bool operator==(
@@ -74,7 +80,7 @@ class Operator {
 
  protected:
   virtual void produce_(OlapParallelContext *context) = 0;
-  const uuids::uuid id;
+  const uuids::uuid m_id;
 
  public:
   virtual void produce(OlapParallelContext *context) final {
@@ -93,9 +99,9 @@ class Operator {
   virtual void consume(Context *const context,
                        const OperatorState &childState) = 0;
 
-  [[nodiscard]] uuids::uuid getUUID() const { return id; }
+  [[nodiscard]] uuids::uuid getUUID() const { return m_id; }
 
-  virtual RecordType getRowType() const = 0;
+  [[nodiscard]] virtual RecordType getRowType() const = 0;
   //  {
   //    // FIXME: throw an exception for now, but as soon as existing classes
   //    // implementat it, we should mark it function abstract
@@ -120,16 +126,25 @@ class Operator {
   [[nodiscard]] virtual bool isPacked() const = 0;
 
  private:
-  Operator *parent;
+  Operator *m_parent;
 };
 
 class UnaryOperator : public Operator {
  public:
-  UnaryOperator(Operator *const child) : Operator(), child(child) {}
-  ~UnaryOperator() override { LOG(INFO) << "Collapsing unary operator"; }
+  /**
+   * @param child child operator. Parents hold shared ownership of their
+   * children
+   */
+  UnaryOperator(std::shared_ptr<Operator> child)
+      : Operator(), m_child(std::move(child)) {}
+  ~UnaryOperator() override = default;
 
-  [[nodiscard]] virtual Operator *getChild() const { return child; }
-  void setChild(Operator *child) { this->child = child; }
+  [[nodiscard]] virtual std::shared_ptr<Operator> getChild() const {
+    return m_child;
+  }
+  void setChild(std::shared_ptr<Operator> child) {
+    this->m_child = std::move(child);
+  }
 
   [[nodiscard]] DeviceType getDeviceType() const override {
     return getChild()->getDeviceType();
@@ -150,21 +165,38 @@ class UnaryOperator : public Operator {
   }
 
  private:
-  Operator *child;
+  std::shared_ptr<Operator> m_child;
 };
 
 class BinaryOperator : public Operator {
  public:
-  BinaryOperator(Operator *leftChild, Operator *rightChild)
-      : Operator(), leftChild(leftChild), rightChild(rightChild) {}
-  BinaryOperator(Operator *leftChild, Operator *rightChild,
-                 Plugin *const leftPlugin, Plugin *const rightPlugin)
-      : Operator(), leftChild(leftChild), rightChild(rightChild) {}
-  ~BinaryOperator() override { LOG(INFO) << "Collapsing binary operator"; }
-  Operator *getLeftChild() const { return leftChild; }
-  Operator *getRightChild() const { return rightChild; }
-  void setLeftChild(Operator *leftChild) { this->leftChild = leftChild; }
-  void setRightChild(Operator *rightChild) { this->rightChild = rightChild; }
+  /**
+   * @note Parents hold shared ownership of their children
+   */
+  BinaryOperator(std::shared_ptr<Operator> leftChild,
+                 std::shared_ptr<Operator> rightChild)
+      : Operator(),
+        m_leftChild(std::move(leftChild)),
+        m_rightChild(std::move(rightChild)) {}
+  BinaryOperator(std::shared_ptr<Operator> leftChild,
+                 std::shared_ptr<Operator> rightChild, Plugin *const leftPlugin,
+                 Plugin *const rightPlugin)
+      : Operator(),
+        m_leftChild(std::move(leftChild)),
+        m_rightChild(std::move(rightChild)) {}
+  ~BinaryOperator() override = default;
+  [[nodiscard]] std::shared_ptr<Operator> getLeftChild() const {
+    return m_leftChild;
+  }
+  [[nodiscard]] std::shared_ptr<Operator> getRightChild() const {
+    return m_rightChild;
+  }
+  void setLeftChild(std::shared_ptr<Operator> leftChild) {
+    this->m_leftChild = std::move(leftChild);
+  }
+  void setRightChild(std::shared_ptr<Operator> rightChild) {
+    this->m_rightChild = std::move(rightChild);
+  }
 
   [[nodiscard]] DeviceType getDeviceType() const override {
     auto dev = getLeftChild()->getDeviceType();
@@ -191,8 +223,8 @@ class BinaryOperator : public Operator {
   }
 
  protected:
-  Operator *leftChild;
-  Operator *rightChild;
+  std::shared_ptr<Operator> m_leftChild;
+  std::shared_ptr<Operator> m_rightChild;
 };
 
 /**

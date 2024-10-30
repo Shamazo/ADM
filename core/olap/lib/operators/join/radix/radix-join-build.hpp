@@ -86,7 +86,7 @@ struct kvBuf {
 
 class RadixJoinBuild : public UnaryOperator {
  public:
-  RadixJoinBuild(expression_t keyExpr, Operator *child,
+  RadixJoinBuild(expression_t keyExpr, std::shared_ptr<Operator> child,
                  OlapParallelContext *context, string opLabel,
                  Materializer &mat, llvm::StructType *htEntryType,
                  size_t size

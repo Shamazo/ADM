@@ -50,8 +50,8 @@ class Nest : public experimental::UnaryOperator {
   Nest(Monoid acc, expressions::Expression *outputExpr,
        expressions::Expression *pred,
        const list<expressions::InputArgument> &f_grouping,
-       const list<expressions::InputArgument> &g_nullToZero, Operator *child,
-       char *opLabel, Materializer &mat);
+       const list<expressions::InputArgument> &g_nullToZero,
+       std::shared_ptr<Operator> child, char *opLabel, Materializer &mat);
   ~Nest() override { LOG(INFO) << "Collapsing Nest operator"; }
   void produce_(OlapParallelContext *context) override;
   void consume(OlapParallelContext *context,

@@ -32,7 +32,7 @@
 
 class Flush : public experimental::UnaryOperator {
  public:
-  Flush(std::vector<expression_t> outputExprs, Operator *child,
+  Flush(std::vector<expression_t> outputExprs, std::shared_ptr<Operator> child,
         std::string outPath);
   void produce_(OlapParallelContext *context) override;
   void consume(OlapParallelContext *context,

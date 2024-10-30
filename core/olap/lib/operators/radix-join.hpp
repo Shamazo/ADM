@@ -36,9 +36,10 @@
 
 class RadixJoin : public BinaryOperator {
  public:
-  RadixJoin(const expressions::BinaryExpression &predicate, Operator *leftChild,
-            Operator *rightChild, Context *const context, const char *opLabel,
-            Materializer &matLeft, Materializer &matRight);
+  RadixJoin(const expressions::BinaryExpression &predicate,
+            std::shared_ptr<Operator> leftChild,
+            std::shared_ptr<Operator> rightChild, Context *const context,
+            const char *opLabel, Materializer &matLeft, Materializer &matRight);
   ~RadixJoin() override;
   void produce_(OlapParallelContext *context) override;
   //    void produceNoCache() ;
@@ -95,8 +96,8 @@ class RadixJoin : public BinaryOperator {
   llvm::Type *keyType;
   llvm::StructType *htEntryType;
 
-  RadixJoinBuild *buildR;
-  RadixJoinBuild *buildS;
+  std::shared_ptr<RadixJoinBuild> buildR;
+  std::shared_ptr<RadixJoinBuild> buildS;
 
   // size_t htR_mem_kv_id;
   // size_t htS_mem_kv_id;

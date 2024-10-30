@@ -32,8 +32,9 @@ using namespace llvm;
 namespace opt {
 // Reduce::Reduce(std::vector<Monoid> accs, std::vector<expression_t>
 // outputExprs,
-//               expression_t pred, Operator *const child, Context *context,
-//               bool flushResults, const char *outPath)
+//               expression_t pred, std::shared_ptr<Operator>  child, Context
+//               *context,//               bool flushResults, const char
+//               *outPath)
 //    : UnaryOperator(child),
 //      accs(std::move(accs)),
 //      outputExprs(std::move(outputExprs)),

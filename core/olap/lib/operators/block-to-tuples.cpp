@@ -255,7 +255,7 @@ void BlockToTuples::consume(OlapParallelContext *context,
 }
 
 void BlockToTuples::open(Pipeline *pip) {
-  event_range<range_log_op::UNPACK_OPEN> er{id, pip->getGeneratorUUID(),
+  event_range<range_log_op::UNPACK_OPEN> er{m_id, pip->getGeneratorUUID(),
                                             pip->getGroup()};
   void **buffs;
 
@@ -277,7 +277,7 @@ void BlockToTuples::open(Pipeline *pip) {
 }
 
 void BlockToTuples::close(Pipeline *pip) {
-  event_range<range_log_op::UNPACK_CLOSE> er{id, pip->getGeneratorUUID(),
+  event_range<range_log_op::UNPACK_CLOSE> er{m_id, pip->getGeneratorUUID(),
                                              pip->getGroup()};
   void **h_buffs;
   void **buffs = pip->getStateVar<void **>(old_buffs.at(0));

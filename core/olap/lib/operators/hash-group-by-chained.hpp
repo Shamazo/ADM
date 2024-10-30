@@ -36,7 +36,8 @@
 class HashGroupByChained : public experimental::UnaryOperator {
  public:
   HashGroupByChained(std::vector<GpuAggrMatExpr> agg_exprs,
-                     std::vector<expression_t> key_expr, Operator *child,
+                     std::vector<expression_t> key_expr,
+                     std::shared_ptr<Operator> child,
 
                      int hash_bits,
 

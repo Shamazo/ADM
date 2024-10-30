@@ -28,7 +28,7 @@
 #include "lib/expressions/expressions-generator.hpp"
 
 void Split::produce_(OlapParallelContext *context) {
-  UnaryOperator::setParent(parent[produce_calls]);
+  UnaryOperator::setParent(parents[produce_calls]);
   generate_catch(context);
 
   catch_pip.push_back(context->operator->());

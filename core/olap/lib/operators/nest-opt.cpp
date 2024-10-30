@@ -50,7 +50,8 @@ Nest::Nest(std::vector<Monoid> accs, std::vector<expression_t> outputExprs,
            std::vector<string> aggrLabels, expression_t pred,
            const list<expressions::InputArgument> &f_grouping,
            const list<expressions::InputArgument> &g_nullToZero,
-           Operator *const child, char *opLabel, Materializer &mat)
+           std::shared_ptr<Operator> const child, char *opLabel,
+           Materializer &mat)
     : UnaryOperator(child),
       accs(accs),
       outputExprs(outputExprs),

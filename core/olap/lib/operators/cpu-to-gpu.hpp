@@ -29,7 +29,7 @@
 
 class CpuToGpu : public DeviceCross {
  public:
-  CpuToGpu(Operator *const child,
+  CpuToGpu(std::shared_ptr<Operator> const child,
            const std::vector<RecordAttribute *> &wantedFields)
       : DeviceCross(child), wantedFields(wantedFields) {}
 

@@ -30,7 +30,8 @@
  */
 class NullFilter : public UnaryOperator {
  public:
-  NullFilter(expressions::InputArgument *expr, Operator *const child)
+  NullFilter(expressions::InputArgument *expr,
+             std::shared_ptr<Operator> const child)
       : UnaryOperator(child), expr(expr) {}
   ~NullFilter() override { LOG(INFO) << "Collapsing null_filter operator"; }
 

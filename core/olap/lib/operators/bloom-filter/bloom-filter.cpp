@@ -68,8 +68,8 @@ void cleanBloomFilterRegistry() {
   bloom_filter_registry.clear();
 }
 
-BloomFilter::BloomFilter(Operator *child, expression_t e, size_t filterSize,
-                         uint64_t bloomId)
+BloomFilter::BloomFilter(std::shared_ptr<Operator> child, expression_t e,
+                         size_t filterSize, uint64_t bloomId)
     : experimental::UnaryOperator(child),
       bf_expr(std::move(e)),
       filterSize(filterSize),

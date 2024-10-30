@@ -47,7 +47,7 @@ const size_t bucket_size_mask = bucket_size - 1;
 HashPartitioner::HashPartitioner(const std::vector<GpuMatExpr> &parts_mat_exprs,
                                  const std::vector<size_t> &parts_packet_widths,
                                  expression_t parts_keyexpr,
-                                 Operator *const parts_child,
+                                 std::shared_ptr<Operator> const parts_child,
                                  OlapParallelContext *context,
                                  size_t maxInputSize, int log_parts,
                                  string opLabel)
@@ -409,19 +409,19 @@ GpuPartitionedHashJoinChained::GpuPartitionedHashJoinChained(
     const std::vector<GpuMatExpr> &build_mat_exprs,
     const std::vector<size_t> &build_packet_widths, expression_t build_keyexpr,
     std::optional<expression_t> build_minor_keyexpr,
-    HashPartitioner *const build_child,
+    std::shared_ptr<HashPartitioner> build_child,
 
     const std::vector<GpuMatExpr> &probe_mat_exprs,
     const std::vector<size_t> &probe_mat_packet_widths,
     expression_t probe_keyexpr, std::optional<expression_t> probe_minor_keyexpr,
-    HashPartitioner *const probe_child,
+    std::shared_ptr<HashPartitioner> probe_child,
 
     PartitionState &state_left, PartitionState &state_right,
 
     size_t maxBuildInputSize, size_t maxProbeInputSize,
 
     int log_parts, OlapParallelContext *context, string opLabel,
-    PipelineGen **caller, Operator *const unionop)
+    PipelineGen **caller, std::shared_ptr<Operator> const unionop)
     : build_mat_exprs(build_mat_exprs),
       probe_mat_exprs(probe_mat_exprs),
       build_packet_widths(build_packet_widths),

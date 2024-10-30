@@ -36,7 +36,7 @@ using namespace llvm;
 
 GpuHashGroupByChained::GpuHashGroupByChained(
     std::vector<GpuAggrMatExpr> agg_exprs, std::vector<expression_t> key_expr,
-    Operator *child, int hash_bits, size_t maxInputSize_pre)
+    std::shared_ptr<Operator> child, int hash_bits, size_t maxInputSize_pre)
     : HashGroupByChained(std::move(agg_exprs), std::move(key_expr), child,
                          hash_bits,
                          std::max(maxInputSize_pre, size_t{128} * 1024)) {

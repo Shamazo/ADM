@@ -28,7 +28,7 @@
 class Scan : public experimental::UnaryOperator {
  public:
   explicit Scan(Plugin &pg) : UnaryOperator(nullptr), pg(pg) {}
-  [[nodiscard]] Operator *getChild() const final {
+  [[nodiscard]] std::shared_ptr<Operator> getChild() const final {
     throw runtime_error(string("Scan operator has no children"));
   }
 

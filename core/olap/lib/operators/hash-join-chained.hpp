@@ -34,12 +34,13 @@ class HashJoinChained : public BinaryOperator {
  public:
   HashJoinChained(std::vector<GpuMatExpr> build_mat_exprs,
                   std::vector<size_t> build_packet_widths,
-                  expression_t build_keyexpr, Operator *const build_child,
+                  expression_t build_keyexpr,
+                  std::shared_ptr<Operator> const build_child,
                   std::vector<GpuMatExpr> probe_mat_exprs,
                   const std::vector<size_t> &probe_packet_widths,
-                  expression_t probe_keyexpr, Operator *const probe_child,
-                  int hash_bits, size_t maxBuildInputSize,
-                  string opLabel = "hj_chained");
+                  expression_t probe_keyexpr,
+                  std::shared_ptr<Operator> const probe_child, int hash_bits,
+                  size_t maxBuildInputSize, string opLabel = "hj_chained");
   ~HashJoinChained() override {
     LOG(INFO) << "Collapsing HashJoinChained operator";
   }

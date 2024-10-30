@@ -31,7 +31,7 @@
 
 class Sort : public UnaryOperator {
  public:
-  Sort(Operator *const child, OlapParallelContext *const context,
+  Sort(std::shared_ptr<Operator> child, OlapParallelContext *const context,
        const std::vector<expression_t> &orderByFields,
        const std::vector<direction> &dirs);
 

@@ -32,8 +32,9 @@
 
 class GpuToCpu : public DeviceCross {
  public:
-  GpuToCpu(Operator *const child, std::vector<RecordAttribute *> wantedFields,
-           size_t size, gran_t granularity = gran_t::GRID)
+  GpuToCpu(std::shared_ptr<Operator> const child,
+           std::vector<RecordAttribute *> wantedFields, size_t size,
+           gran_t granularity = gran_t::GRID)
       : DeviceCross(child),
         wantedFields(std::move(wantedFields)),
         size(size),

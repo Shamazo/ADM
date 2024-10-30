@@ -31,7 +31,7 @@
 
 class HashRearrange : public experimental::UnaryOperator {
  public:
-  HashRearrange(Operator *const child, int numOfBuckets,
+  HashRearrange(std::shared_ptr<Operator> const child, int numOfBuckets,
                 std::vector<expression_t> wantedFields, expression_t hashExpr,
                 RecordAttribute *hashProject = nullptr)
       : UnaryOperator(child),

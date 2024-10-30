@@ -32,7 +32,7 @@ Nest::Nest(Monoid acc, expressions::Expression *outputExpr,
            expressions::Expression *pred,
            const list<expressions::InputArgument> &f_grouping,
            const list<expressions::InputArgument> &g_nullToZero,
-           Operator *child, char *opLabel, Materializer &mat)
+           std::shared_ptr<Operator> child, char *opLabel, Materializer &mat)
     : UnaryOperator(child),
       acc(acc),
       outputExpr(outputExpr),

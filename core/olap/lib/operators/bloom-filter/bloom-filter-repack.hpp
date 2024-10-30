@@ -30,7 +30,7 @@
 
 class BloomFilterRepack : public BloomFilter {
  public:
-  BloomFilterRepack(Operator *const child, expression_t probe,
+  BloomFilterRepack(std::shared_ptr<Operator> child, expression_t probe,
                     std::vector<expression_t> wantedFields, size_t filterSize,
                     uint64_t bloomId)
       : BloomFilter(child, std::move(probe), filterSize, bloomId),

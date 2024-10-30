@@ -27,7 +27,7 @@
 class Print : public UnaryOperator {
  public:
   Print(llvm::Function *debug, expressions::RecordProjection *arg,
-        Operator *const child)
+        std::shared_ptr<Operator> child)
       : UnaryOperator(child), arg(arg), print(debug) {}
   ~Print() override { LOG(INFO) << "Collapsing print operator"; }
 

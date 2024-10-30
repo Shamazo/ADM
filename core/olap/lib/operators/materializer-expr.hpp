@@ -47,10 +47,11 @@ struct matBuf {
  */
 class ExprMaterializer : public UnaryOperator {
  public:
-  ExprMaterializer(expressions::Expression *expr, Operator *const child,
-                   Context *const context, char *opLabel);
+  ExprMaterializer(expressions::Expression *expr,
+                   std::shared_ptr<Operator> child, Context *const context,
+                   char *opLabel);
   ExprMaterializer(expressions::Expression *expr, int linehint,
-                   Operator *const child, Context *const context,
+                   std::shared_ptr<Operator> child, Context *const context,
                    char *opLabel);
   ~ExprMaterializer() override;
   void produce_(OlapParallelContext *context) override;

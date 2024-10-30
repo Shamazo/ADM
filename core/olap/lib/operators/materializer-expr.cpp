@@ -30,7 +30,7 @@
 using namespace llvm;
 
 ExprMaterializer::ExprMaterializer(expressions::Expression *toMat,
-                                   Operator *const child,
+                                   std::shared_ptr<Operator> child,
                                    Context *const context, char *opLabel)
     : UnaryOperator(child), toMat(toMat), context(context), opLabel(opLabel) {
   Function *F = context->getGlobalFunction();
@@ -80,7 +80,7 @@ ExprMaterializer::ExprMaterializer(expressions::Expression *toMat,
 }
 
 ExprMaterializer::ExprMaterializer(expressions::Expression *toMat, int linehint,
-                                   Operator *const child,
+                                   std::shared_ptr<Operator> child,
                                    Context *const context, char *opLabel)
     : UnaryOperator(child), toMat(toMat), context(context), opLabel(opLabel) {
   Function *F = context->getGlobalFunction();

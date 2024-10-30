@@ -27,7 +27,8 @@
 
 using namespace llvm;
 
-RadixJoinBuild::RadixJoinBuild(expression_t keyExpr, Operator *child,
+RadixJoinBuild::RadixJoinBuild(expression_t keyExpr,
+                               std::shared_ptr<Operator> child,
                                OlapParallelContext *context, string opLabel,
                                Materializer &mat, StructType *htEntryType,
                                size_t /* bytes */ size,
@@ -58,7 +59,7 @@ RadixJoinBuild::~RadixJoinBuild() {
 void RadixJoinBuild::produce_(OlapParallelContext *context) {
   initializeState(context);
 
-  Operator *newChild = nullptr;
+  std::shared_ptr<Operator> newChild = nullptr;
 
   // TODO: enable cache
   // if (!this->child->isFiltering()) {

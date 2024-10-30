@@ -47,7 +47,7 @@ expressions::RecordConstruction buildSortOutputExpression(
   return {attrs};
 }
 
-Sort::Sort(Operator *const child, OlapParallelContext *const context,
+Sort::Sort(std::shared_ptr<Operator> child, OlapParallelContext *const context,
            const std::vector<expression_t> &orderByFields,
            const std::vector<direction> &dirs)
     : UnaryOperator(child),

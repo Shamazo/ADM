@@ -28,8 +28,8 @@
 
 class BloomFilter : public experimental::UnaryOperator {
  public:
-  BloomFilter(Operator *child, expression_t e, size_t filterSize,
-              uint64_t bloomId);
+  BloomFilter(std::shared_ptr<Operator> child, expression_t e,
+              size_t filterSize, uint64_t bloomId);
 
   [[nodiscard]] RecordType getRowType() const override {
     return getChild()->getRowType();

@@ -29,7 +29,7 @@
 class UnionAll : public Router {
  public:
   struct Args {
-    std::vector<Operator *> children;
+    std::vector<std::shared_ptr<Operator>> children;
     std::vector<RecordAttribute *> wantedFields;
     DegreeOfParallelism fanout = DegreeOfParallelism{1};
     RoutingPolicy policy = RoutingPolicy::RANDOM;
@@ -81,10 +81,12 @@ class UnionAll : public Router {
     return x;
   }
 
-  std::vector<Operator *> getChildren() const { return children; }
+  std::vector<std::shared_ptr<Operator>> getChildren() const {
+    return children;
+  }
 
  private:
-  std::vector<Operator *> children;
+  std::vector<std::shared_ptr<Operator>> children;
 };
 
 #endif /* UNIONALL_HPP_ */

@@ -45,7 +45,7 @@ class MemBroadcastScaleOut : public MemBroadcastDevice {
     bool getPropagated(MemMoveDevice::workunit **ret) override;
   };
 
-  MemBroadcastScaleOut(Operator *const child,
+  MemBroadcastScaleOut(std::shared_ptr<Operator> child,
                        OlapParallelContext *const context,
                        const std::vector<RecordAttribute *> &wantedFields,
                        int num_of_targets, bool to_cpu,

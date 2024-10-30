@@ -54,7 +54,8 @@ class HashPartitioner : public UnaryOperator {
  public:
   HashPartitioner(const std::vector<GpuMatExpr> &parts_mat_exprs,
                   const std::vector<size_t> &parts_packet_widths,
-                  expression_t parts_keyexpr, Operator *const parts_child,
+                  expression_t parts_keyexpr,
+                  std::shared_ptr<Operator> const parts_child,
                   OlapParallelContext *context, size_t maxInputSize,
                   int log_parts, std::string opLabel);
 
@@ -112,13 +113,13 @@ class GpuPartitionedHashJoinChained : public BinaryOperator {
       const std::vector<size_t> &build_packet_widths,
       expression_t build_keyexpr,
       std::optional<expression_t> build_minor_keyexpr,
-      HashPartitioner *const build_child,
+      std::shared_ptr<HashPartitioner> build_child,
 
       const std::vector<GpuMatExpr> &probe_mat_exprs,
       const std::vector<size_t> &probe_mat_packet_widths,
       expression_t probe_keyexpr,
       std::optional<expression_t> probe_minor_keyexpr,
-      HashPartitioner *const probe_child,
+      std::shared_ptr<HashPartitioner> probe_child,
 
       PartitionState &state_left, PartitionState &state_right,
 
@@ -126,7 +127,7 @@ class GpuPartitionedHashJoinChained : public BinaryOperator {
 
       int log_parts, OlapParallelContext *context,
       std::string opLabel = "hj_chained", PipelineGen **caller = nullptr,
-      Operator *const unionop = nullptr);
+      std::shared_ptr<Operator> unionop = nullptr);
   ~GpuPartitionedHashJoinChained() override {
     LOG(INFO) << "Collapsing GpuOptJoin operator";
   }
@@ -231,7 +232,7 @@ class GpuPartitionedHashJoinChained : public BinaryOperator {
   PartitionState &state_left;
   PartitionState &state_right;
 
-  Operator *unionop;
+  std::shared_ptr<Operator> unionop;
 
   int hash_bits;
   size_t maxBuildInputSize;

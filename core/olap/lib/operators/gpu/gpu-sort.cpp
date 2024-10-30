@@ -71,7 +71,8 @@ std::string computeSuffix(OlapParallelContext *const context,
   return suffix;
 }
 
-GpuSort::GpuSort(Operator *const child, OlapParallelContext *const context,
+GpuSort::GpuSort(std::shared_ptr<Operator> const child,
+                 OlapParallelContext *const context,
                  const std::vector<expression_t> &orderByFields,
                  const std::vector<direction> &dirs, gran_t granularity)
     : UnaryOperator(child),

@@ -52,7 +52,7 @@ expression_t getGrouping(const std::vector<expression_t> &f_grouping) {
 Nest::Nest(Context *const context, vector<Monoid> accs,
            vector<expression_t> outputExprs, vector<string> aggrLabels,
            expression_t pred, expression_t f_grouping,
-           expression_t g_nullToZero, Operator *const child,
+           expression_t g_nullToZero, std::shared_ptr<Operator> child,
            const std::string &opLabel, Materializer &mat)
     : Nest(context, accs, outputExprs, aggrLabels, pred,
            std::vector<expression_t>{f_grouping}, g_nullToZero, child, opLabel,
@@ -69,7 +69,7 @@ Nest::Nest(Context *const context, vector<Monoid> accs,
 Nest::Nest(Context *const context, vector<Monoid> accs,
            vector<expression_t> outputExprs, vector<string> aggrLabels,
            expression_t pred, std::vector<expression_t> f_grouping_v,
-           expression_t g_nullToZero, Operator *const child,
+           expression_t g_nullToZero, std::shared_ptr<Operator> child,
            const std::string &opLabel, Materializer &mat)
     : UnaryOperator(child),
       accs(accs),
@@ -158,8 +158,8 @@ Nest::Nest(Context *const context, vector<Monoid> accs,
   size_t kvSize = size;
 
   assert(context->getSizeOf(he_type->getLLVMType(llvmContext)) == (64 / 8));
-  build = new RadixJoinBuild(he, child, this->context, htName, mat, htEntryType,
-                             size, kvSize, true);
+  build = std::make_shared<RadixJoinBuild>(
+      he, child, this->context, htName, mat, htEntryType, size, kvSize, true);
 
   //  /* Defined in consume() */
   payloadType = build->getPayloadType();
@@ -198,8 +198,8 @@ void Nest::produce_(OlapParallelContext *context) {
   //     }
   // );
 
-  Operator *child = getChild();
-  child->setParent(build);
+  std::shared_ptr<Operator> child = getChild();
+  child->setParent(build.get());
   build->setParent(this);
   setChild(build);
 
@@ -335,12 +335,12 @@ void Nest::probeHT() const {
   auto clusterCountR_id = context->appendStateVar(
       PointerType::getUnqual(int32_type),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
 
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, this->build);
+        Value *build_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, this->build.get());
         Function *clusterCnts = context->getFunction("getClusterCounts");
-        return Builder->CreateCall(clusterCnts, {pip, build});
+        return Builder->CreateCall(clusterCnts, {pip, build_ptr});
       },
       [=](llvm::Value *, llvm::Value *s) {
         Function *f = context->getFunction("free");
@@ -353,12 +353,13 @@ void Nest::probeHT() const {
   auto htR_mem_kv_id = context->appendStateVar(
       PointerType::getUnqual(htEntryType),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
-
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, this->build);
+        // assumption that `this->build.get()` will be a valid pointer at query
+        // runtime
+        Value *build_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, this->build.get());
         Function *ht_mem_kv = context->getFunction("getHTMemKV");
-        Value *char_ht_mem = Builder->CreateCall(ht_mem_kv, {pip, build});
+        Value *char_ht_mem = Builder->CreateCall(ht_mem_kv, {pip, build_ptr});
         return Builder->CreateBitCast(char_ht_mem,
                                       PointerType::getUnqual(htEntryType));
       },
@@ -374,12 +375,13 @@ void Nest::probeHT() const {
   auto relR_mem_relation_id = context->appendStateVar(
       char_ptr_type,
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
-
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, this->build);
+        // assumption that `this->build.get()` will be a valid pointer at query
+        // runtime
+        Value *build_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, this->build.get());
         Function *rel_mem = context->getFunction("getRelationMem");
-        return Builder->CreateCall(rel_mem, vector<Value *>{pip, build});
+        return Builder->CreateCall(rel_mem, vector<Value *>{pip, build_ptr});
       },
       [=](llvm::Value *, llvm::Value *s) {
         IRBuilder<> *Builder = context->getBuilder();

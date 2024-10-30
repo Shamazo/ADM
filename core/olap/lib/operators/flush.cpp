@@ -29,8 +29,8 @@
 
 using namespace llvm;
 
-Flush::Flush(std::vector<expression_t> outputExprs_v, Operator *const child,
-             std::string outPath)
+Flush::Flush(std::vector<expression_t> outputExprs_v,
+             std::shared_ptr<Operator> const child, std::string outPath)
     : UnaryOperator(child),
       outPath(std::move(outPath)),
       outputExpr(outputExprs_v),

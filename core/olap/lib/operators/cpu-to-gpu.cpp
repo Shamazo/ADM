@@ -42,7 +42,7 @@ void CpuToGpu::produce_(OlapParallelContext *context) {
   context->pushPipeline(gpu_pip);
 
   context->registerOpen(this, [this](Pipeline *pip) {
-    event_range<range_log_op::CPU2GPU_OPEN> er{id, gpu_pip->getUUID(),
+    event_range<range_log_op::CPU2GPU_OPEN> er{m_id, gpu_pip->getUUID(),
                                                pip->getGroup()};
     auto strm = createNonBlockingStream();
     pip->setStateVar<void *>(this->childVar_id, gpu_pip->getKernel());
@@ -50,7 +50,7 @@ void CpuToGpu::produce_(OlapParallelContext *context) {
   });
 
   context->registerClose(this, [this](Pipeline *pip) {
-    event_range<range_log_op::CPU2GPU_CLOSE> er{id, gpu_pip->getUUID(),
+    event_range<range_log_op::CPU2GPU_CLOSE> er{m_id, gpu_pip->getUUID(),
                                                 pip->getGroup()};
     syncAndDestroyStream(pip->getStateVar<cudaStream_t>(this->strmVar_id));
   });

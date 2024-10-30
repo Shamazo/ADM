@@ -34,7 +34,7 @@ using namespace llvm;
 
 HashGroupByChained::HashGroupByChained(std::vector<GpuAggrMatExpr> agg_exprs,
                                        std::vector<expression_t> key_expr,
-                                       Operator *child,
+                                       std::shared_ptr<Operator> child,
 
                                        int hash_bits,
 

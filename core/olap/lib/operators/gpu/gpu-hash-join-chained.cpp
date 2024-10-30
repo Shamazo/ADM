@@ -60,6 +60,8 @@ void GpuHashJoinChained::close_build(Pipeline *pip) {
   int32_t h_cnt = -1;
   gpu_run(cudaMemcpy(&h_cnt, pip->getStateVar<int32_t *>(cnt_param_id),
                      sizeof(int32_t), cudaMemcpyDefault));
+  LOG(INFO) << "Actual build input size: " << h_cnt
+            << " (capacity: " << maxBuildInputSize << ")";
   LOG_IF(INFO, h_cnt < 0.5 * maxBuildInputSize || h_cnt >= maxBuildInputSize)
       << "Actual build input size: " << h_cnt
       << " (capacity: " << maxBuildInputSize << ")";

@@ -45,7 +45,7 @@ void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff);
 
 class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
  protected:
-  GeneralizedRouter &producer;
+  GeneralizedRouter *producer;
 
   const DegreeOfParallelism fanout;
   PipelineGen *catch_pip;
@@ -59,7 +59,7 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
   alignas(64) std::atomic<int> consumed_count;
 
  public:
-  GeneralizedRouterConsumer(GeneralizedRouter &producer,
+  GeneralizedRouterConsumer(std::shared_ptr<GeneralizedRouter> producer,
                             DegreeOfParallelism fanout,
                             std::unique_ptr<Affinitizer> aff,
                             DeviceType target_device, int consumer_index);
@@ -79,8 +79,6 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
   [[nodiscard]] proteus::traits::HomReplication getHomReplication()
       const override;
 
-  [[nodiscard]] GeneralizedRouter &getProducer() const { return producer; }
-
  protected:
   void produce_(OlapParallelContext *context) override;
   virtual void spawnWorker(const void *session, size_t queue_offset,
@@ -94,7 +92,9 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
 };
 
 class GeneralizedRouter final : public experimental::UnaryOperator {
-  std::vector<std::unique_ptr<GeneralizedRouterConsumer>> consumers;
+  // weak_ptr because consumers are parent operators who have an owning
+  // shared_ptr to this GeneralizedRouter
+  std::vector<std::weak_ptr<GeneralizedRouterConsumer>> consumers;
 
   threadvector firers;
 
@@ -140,16 +140,42 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   const GeneralizedRoutingPolicy policy_type;
   std::unique_ptr<routing::RoutingPolicy> routing;
+  std::weak_ptr<GeneralizedRouter> self_ptr;
+
+ protected:
+  struct ConstructorGuard {
+    explicit ConstructorGuard(int) {}
+  };
 
  public:
-  GeneralizedRouter(Operator *child, size_t slack,
-                    std::vector<RecordAttribute *> attrs,
-                    GeneralizedRoutingPolicy policy_type)
-      : experimental::UnaryOperator(child),
-        slack(slack),
-        wantedFields(std::move(attrs)),
-        policy_type(policy_type),
-        producers(child->getDOP()) {}
+  struct Args {
+    std::shared_ptr<Operator> child;
+    size_t slack;
+    std::vector<RecordAttribute *> attrs;
+    GeneralizedRoutingPolicy policy_type;
+  };
+
+  static std::shared_ptr<GeneralizedRouter> create(Args args) {
+    auto op = std::make_shared<GeneralizedRouter>(ConstructorGuard{0},
+                                                  std::move(args));
+    op->setSelfPtr(op);
+    return op;
+  }
+
+  /**
+   * GeneralizedRouter can only be constructed on the heap using the create
+   * method. This constructor should not be called directly.
+   * This is to ensure ownership and lifetimes, as GeneralizedRouterConsumers
+   * share ownership of a GeneralizedRouter.
+   */
+  explicit GeneralizedRouter([[maybe_unused]] ConstructorGuard guard, Args args)
+      : experimental::UnaryOperator(std::move(args.child)),
+        slack(args.slack),
+        producers(getChild()->getDOP()),
+        wantedFields(std::move(args.attrs)),
+        policy_type(args.policy_type),
+        params_type(nullptr),
+        buf_size(0) {}
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
@@ -160,11 +186,16 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   [[nodiscard]] DegreeOfParallelism getDOP() const override;
 
-  GeneralizedRouterConsumer *appendConsumer(DeviceType target_device,
-                                            DegreeOfParallelism dop,
-                                            std::unique_ptr<Affinitizer> aff);
+  std::shared_ptr<GeneralizedRouterConsumer> appendConsumer(
+      DeviceType target_device, DegreeOfParallelism dop,
+      std::unique_ptr<Affinitizer> aff);
 
  protected:
+  void setSelfPtr(const std::shared_ptr<GeneralizedRouter> &self) {
+    self_ptr = self;
+  }
+  std::shared_ptr<GeneralizedRouter> getSelfPtr() { return self_ptr.lock(); }
+
   /**
    * Aquire a buffer from a free_pool
    * @param target The free pool to aquire a buffer from

@@ -30,8 +30,9 @@
 
 class GpuHashRearrange : public experimental::UnaryOperator {
  public:
-  GpuHashRearrange(Operator *const child, OlapParallelContext *const context,
-                   int numOfBuckets, const std::vector<expression_t> &matExpr,
+  GpuHashRearrange(std::shared_ptr<Operator> const child,
+                   OlapParallelContext *const context, int numOfBuckets,
+                   const std::vector<expression_t> &matExpr,
                    expression_t hashExpr,
                    RecordAttribute *hashProject = nullptr)
       : UnaryOperator(child),

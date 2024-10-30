@@ -63,13 +63,13 @@ class SplitRelBuilder;
 class RelBuilder {
  protected:
   OlapParallelContext* ctx;
-  Operator* root;
+  std::shared_ptr<Operator> root;
 
-  RelBuilder(OlapParallelContext* ctx, Operator* root);
-  RelBuilder(const RelBuilder& builder, Operator* root);
+  RelBuilder(OlapParallelContext* ctx, std::shared_ptr<Operator> root);
+  RelBuilder(const RelBuilder& builder, std::shared_ptr<Operator> root);
 
-  Operator* registerOutput(Operator* op) const;
-  RelBuilder apply(Operator* op) const;
+  std::shared_ptr<Operator> registerOutput(std::shared_ptr<Operator> op) const;
+  RelBuilder apply(std::shared_ptr<Operator> op) const;
 
   [[nodiscard]] expressions::InputArgument getOutputArg() const;
 
@@ -583,8 +583,8 @@ class RelBuilder {
     return unnest(expr(getOutputArg()));
   }
 
-  Operator* operator->() { return root; }
-  Operator* operator->() const { return root; }
+  std::shared_ptr<Operator> operator->() { return root; }
+  std::shared_ptr<Operator> operator->() const { return root; }
 
   /**
    * Compile the plan

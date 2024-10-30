@@ -30,7 +30,8 @@
 
 class OuterUnnest : public UnaryOperator {
  public:
-  OuterUnnest(expression_t pred, Path path, Operator *const child)
+  OuterUnnest(expression_t pred, Path path,
+              std::shared_ptr<Operator> const child)
       : UnaryOperator(child), path(std::move(path)), pred(std::move(pred)) {}
   ~OuterUnnest() override { LOG(INFO) << "Collapsing Outer Unnest operator"; }
   void produce_(OlapParallelContext *context) override;

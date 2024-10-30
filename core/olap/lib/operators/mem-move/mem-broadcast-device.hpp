@@ -59,7 +59,7 @@ class MemBroadcastDevice : public MemMoveDevice {
     //  virtual void *pull(void *buff) { return buff; }
   };
 
-  MemBroadcastDevice(Operator *const child,
+  MemBroadcastDevice(std::shared_ptr<Operator> child,
                      const std::vector<RecordAttribute *> &wantedFields,
                      int num_of_targets, bool to_cpu, bool always_share = false)
       : MemMoveDevice(child, wantedFields, 8 * num_of_targets, to_cpu),

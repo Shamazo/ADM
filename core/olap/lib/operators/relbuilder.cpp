@@ -65,12 +65,13 @@
 #include "unnest.hpp"
 #include "update.hpp"
 
-RelBuilder::RelBuilder(OlapParallelContext *ctx, Operator *root)
+RelBuilder::RelBuilder(OlapParallelContext *ctx, std::shared_ptr<Operator> root)
     : ctx(ctx), root(root) {}
 
-RelBuilder::RelBuilder(const RelBuilder &builder, Operator *root)
+RelBuilder::RelBuilder(const RelBuilder &builder,
+                       std::shared_ptr<Operator> root)
     : RelBuilder(builder.ctx, root) {
-  if (builder.root) builder.root->setParent(root);
+  if (builder.root) builder.root->setParent(root.get());
 }
 
 std::string RelBuilder::getModuleName() const { return ctx->getModuleName(); }
@@ -114,7 +115,8 @@ void RelBuilder::setOIDType(CatalogParser &catalog, std::string relName,
   catalog.getInputInfo(std::move(relName))->oidType = type;
 }
 
-Operator *RelBuilder::registerOutput(Operator *op) const {
+std::shared_ptr<Operator> RelBuilder::registerOutput(
+    std::shared_ptr<Operator> op) const {
   // Registered op's output relation, if it's not already registered
   auto args = op->getRowType().getArgs();
   if (!args.empty()) {
@@ -126,12 +128,12 @@ Operator *RelBuilder::registerOutput(Operator *op) const {
   return op;
 }
 
-RelBuilder RelBuilder::apply(Operator *op) const {
-  return {*this, registerOutput(op)};
+RelBuilder RelBuilder::apply(std::shared_ptr<Operator> op) const {
+  return {*this, registerOutput(std::move(op))};
 }
 
 RelBuilder RelBuilder::scan(Plugin &pg) const {
-  return RelBuilder{ctx, new Scan(pg)};
+  return RelBuilder{ctx, std::make_shared<Scan>(pg)};
 }
 
 RelBuilder RelBuilder::memmove_scaleout(
@@ -139,7 +141,7 @@ RelBuilder RelBuilder::memmove_scaleout(
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
-  auto op = new MemMoveScaleOut(root, wantedFields, slack);
+  auto op = std::make_shared<MemMoveScaleOut>(root, wantedFields, slack);
   return apply(op);
 }
 
@@ -149,8 +151,8 @@ RelBuilder RelBuilder::membrdcst(
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
-  auto op =
-      new MemBroadcastDevice(root, wantedFields, fanout, to_cpu, always_share);
+  auto op = std::make_shared<MemBroadcastDevice>(root, wantedFields, fanout,
+                                                 to_cpu, always_share);
   return apply(op);
 }
 
@@ -186,8 +188,8 @@ RelBuilder RelBuilder::membrdcst_scaleout(
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
-  auto op = new MemBroadcastScaleOut(root, ctx, wantedFields, fanout, to_cpu,
-                                     always_share);
+  auto op = std::make_shared<MemBroadcastScaleOut>(
+      root, ctx, wantedFields, fanout, to_cpu, always_share);
   return apply(op);
 }
 
@@ -213,8 +215,8 @@ RelBuilder RelBuilder::memmove(
   for (const auto &attr : wantedFields) {
     assert(dynamic_cast<const BlockType *>(attr->getOriginalType()));
   }
-  auto op = new MemMoveDevice(root, wantedFields, slack, to == DeviceType::CPU,
-                              do_transfer);
+  auto op = std::make_shared<MemMoveDevice>(root, wantedFields, slack,
+                                            to == DeviceType::CPU, do_transfer);
   return apply(op);
 }
 
@@ -294,25 +296,26 @@ RelBuilder RelBuilder::to_cpu(gran_t granularity, size_t size) const {
 
 RelBuilder RelBuilder::to_gpu(
     const std::vector<RecordAttribute *> &wantedFields) const {
-  auto op = new CpuToGpu(root, wantedFields);
+  auto op = std::make_shared<CpuToGpu>(root, wantedFields);
   return apply(op);
 }
 
 RelBuilder RelBuilder::to_cpu(
     const std::vector<RecordAttribute *> &wantedFields, gran_t granularity,
     size_t size) const {
-  auto op = new GpuToCpu(root, wantedFields, size, granularity);
+  auto op = std::make_shared<GpuToCpu>(root, wantedFields, size, granularity);
   return apply(op);
 }
 
 RelBuilder RelBuilder::filter(expression_t pred) const {
-  auto op = new Select(std::move(pred), root);
+  auto op = std::make_shared<Select>(std::move(pred), root);
   return apply(op);
 }
 
 RelBuilder RelBuilder::project(const std::vector<expression_t> &proj) const {
   assert(!proj.empty());
-  auto op = new Project(proj, proj[0].getRegisteredRelName(), root, ctx);
+  auto op = std::make_shared<Project>(proj, proj[0].getRegisteredRelName(),
+                                      root, ctx);
   return apply(op);
 }
 
@@ -325,7 +328,7 @@ RelBuilder RelBuilder::unpack(
 
 RelBuilder RelBuilder::unpack(const std::vector<expression_t> &projections,
                               gran_t granularity) const {
-  auto op = new BlockToTuples(
+  auto op = std::make_shared<BlockToTuples>(
       root, projections, root->getDeviceType() == DeviceType::GPU, granularity);
   return apply(op);
 }
@@ -333,12 +336,12 @@ RelBuilder RelBuilder::unpack(const std::vector<expression_t> &projections,
 RelBuilder RelBuilder::pack(const std::vector<expression_t> &projections,
                             expression_t hashExpr, size_t numOfBuckets) const {
   if (root->getDeviceType() == DeviceType::GPU) {
-    auto op = new GpuHashRearrange(root, ctx, numOfBuckets, projections,
-                                   std::move(hashExpr));
+    auto op = std::make_shared<GpuHashRearrange>(
+        root, ctx, numOfBuckets, projections, std::move(hashExpr));
     return apply(op);
   } else {
-    auto op =
-        new HashRearrange(root, numOfBuckets, projections, std::move(hashExpr));
+    auto op = std::make_shared<HashRearrange>(root, numOfBuckets, projections,
+                                              std::move(hashExpr));
     return apply(op);
   }
 }
@@ -352,10 +355,10 @@ RelBuilder RelBuilder::reduce(const std::vector<expression_t> &e,
     aggs.emplace_back(e[i], accs[i]);
   }
   if (root->getDeviceType() == DeviceType::GPU) {
-    auto op = new opt::GpuReduce(std::move(aggs), true, root);
+    auto op = std::make_shared<opt::GpuReduce>(std::move(aggs), true, root);
     return apply(op);
   } else {
-    auto op = new opt::Reduce(std::move(aggs), true, root);
+    auto op = std::make_shared<opt::Reduce>(std::move(aggs), true, root);
     return apply(op);
   }
 }
@@ -365,15 +368,17 @@ RelBuilder RelBuilder::groupby(const std::vector<expression_t> &e,
                                size_t hash_bits, size_t maxInputSize) const {
   switch (root->getDeviceType()) {
     case DeviceType::GPU: {
-      auto op = new GpuHashGroupByChained(agg_exprs, e, root, hash_bits,
-                                          maxInputSize);
+      auto op = std::make_shared<GpuHashGroupByChained>(
+          agg_exprs, e, root, hash_bits, maxInputSize);
       return apply(op);
     }
     case DeviceType::CPU: {
-      auto op =
-          new HashGroupByChained(agg_exprs, e, root, hash_bits, maxInputSize);
+      auto op = std::make_shared<HashGroupByChained>(agg_exprs, e, root,
+                                                     hash_bits, maxInputSize);
       return apply(op);
     }
+    default:
+      throw std::runtime_error("Unsupported device type");
   }
 }
 
@@ -394,11 +399,11 @@ RelBuilder RelBuilder::sort(const std::vector<expression_t> &orderByFields,
   }
   switch (root->getDeviceType()) {
     case DeviceType::GPU: {
-      auto op = new GpuSort(root, ctx, orderByFields, dirs);
+      auto op = std::make_shared<GpuSort>(root, ctx, orderByFields, dirs);
       return apply(op);
     }
     case DeviceType::CPU: {
-      auto op = new Sort(root, ctx, orderByFields, dirs);
+      auto op = std::make_shared<Sort>(root, ctx, orderByFields, dirs);
       return apply(op)
           .unpack([&](const auto &arg) -> std::vector<expression_t> {
             return {arg["__sorted"]};
@@ -413,6 +418,8 @@ RelBuilder RelBuilder::sort(const std::vector<expression_t> &orderByFields,
             return attrs;
           });
     }
+    default:
+      throw std::runtime_error("Unsupported device type");
   }
 }
 
@@ -450,12 +457,12 @@ RelBuilder RelBuilder::print(const std::vector<expression_t> &e,
   datasetInfo->exprType =
       new BagType{RecordType{std::vector<RecordAttribute *>{args}}};
 
-  auto op = new Flush(e, root, outrel);
+  auto op = std::make_shared<Flush>(e, root, outrel);
   return apply(op);
 }
 
 RelBuilder RelBuilder::unnest(expression_t e) const {
-  auto op = new Unnest(true, std::move(e), root);
+  auto op = std::make_shared<Unnest>(true, std::move(e), root);
   return apply(op);
 }
 
@@ -465,12 +472,12 @@ PreparedStatement RelBuilder::prepare() {
   root->produce(ctx);
   ctx->prepareFunction(ctx->getGlobalFunction());
   ctx->compileAndLoad();
-  auto p = dynamic_cast<Flush *>(root);
+  auto p = dynamic_cast<Flush *>(root.get());
   std::string outputFile = (p) ? p->getOutputPath() : ctx->getModuleName();
   return {ctx->getPipelines(), outputFile,
           // FIXME: we have no lifetime specs for ops, so here we leak
           //  root on purpose. We should fix the issue on its root.
-          std::shared_ptr<Operator>(std::shared_ptr<Operator>{}, root)};
+          root};
 }
 
 RelBuilder RelBuilder::router(
@@ -479,12 +486,12 @@ RelBuilder RelBuilder::router(
     RoutingPolicy p, DeviceType target,
     std::unique_ptr<Affinitizer> aff) const {
   if (aff) {
-    auto op = new Router(root, fanout, wantedFields, slack, std::move(hash), p,
-                         std::move(aff));
+    auto op = std::make_shared<Router>(root, fanout, wantedFields, slack,
+                                       std::move(hash), p, std::move(aff));
     return apply(op);
   } else {
-    auto op = new Router(root, fanout, wantedFields, slack, std::move(hash), p,
-                         target);
+    auto op = std::make_shared<Router>(root, fanout, wantedFields, slack,
+                                       std::move(hash), p, target);
     return apply(op);
   }
 }
@@ -495,9 +502,9 @@ RelBuilder RelBuilder::router_scaleout(
     RoutingPolicy p, DeviceType targets) const {
   assert((p == RoutingPolicy::HASH_BASED) == (hash.has_value()));
   assert((p != RoutingPolicy::RANDOM) || (!hash.has_value()));
-  auto op =
-      new RouterScaleOut(root, DegreeOfParallelism{fanout}, wantedFields, slack,
-                         std::move(hash), p, targets, root->getDOPServers());
+  auto op = std::make_shared<RouterScaleOut>(
+      root, DegreeOfParallelism{fanout}, wantedFields, slack, std::move(hash),
+      p, targets, root->getDOPServers());
   return apply(op);
 }
 
@@ -595,7 +602,7 @@ class HintRowCount : public experimental::UnaryOperator {
  public:
   const double expected;
 
-  HintRowCount(Operator *op, double expected)
+  HintRowCount(std::shared_ptr<Operator> op, double expected)
       : UnaryOperator(op), expected(expected) {}
 
   [[nodiscard]] RecordType getRowType() const override {
@@ -616,7 +623,7 @@ class HintRowCount : public experimental::UnaryOperator {
 
 [[nodiscard]] RelBuilder RelBuilder::hintRowCount(
     double expectedRowCount) const {
-  auto op = new HintRowCount(root, expectedRowCount);
+  auto op = std::make_shared<HintRowCount>(root, expectedRowCount);
   return apply(op);
 }
 
@@ -625,7 +632,7 @@ using v_t =
                  MemBroadcastScaleOut *, MemBroadcastDevice *, MemMoveDevice *,
                  HashRearrange *, BloomFilterBuild *, BlockToTuples *,
                  HintRowCount *, Select *, Project *, BloomFilterRepack *>;
-double expected(Operator *op);
+double expected(std::shared_ptr<Operator> op);
 
 class ExpectedTuplesOutputSize {
  public:
@@ -686,8 +693,8 @@ struct vinit {
   }
 };
 
-double expected(Operator *op) {
-  auto obj = vinit<v_t>{}.get(op);
+double expected(std::shared_ptr<Operator> op) {
+  auto obj = vinit<v_t>{}.get(op.get());
   return std::visit(ExpectedTuplesOutputSize{}, obj);
 }
 
@@ -770,7 +777,7 @@ RelBuilder RelBuilder::join(RelBuilder build, expression_t build_k,
            root->getHomParallelization() ==
                proteus::traits::HomParallelization::SINGLE);
 
-    auto op = new GpuHashJoinChained(
+    auto op = std::make_shared<GpuHashJoinChained>(
         build_e, build_w, std::move(build_k), build.root, probe_e, probe_w,
         std::move(probe_k), root, hash_bits, maxBuildInputSize);
     build.apply(op);
@@ -780,13 +787,13 @@ RelBuilder RelBuilder::join(RelBuilder build, expression_t build_k,
             proteus::traits::HomReplication::BRDCST ||
         root->getHomParallelization() ==
             proteus::traits::HomParallelization::SINGLE) {
-      auto op = new HashJoinChained(
+      auto op = std::make_shared<HashJoinChained>(
           build_e, build_w, std::move(build_k), build.root, probe_e, probe_w,
           std::move(probe_k), root, hash_bits, maxBuildInputSize);
       build.apply(op);
       return apply(op);
     } else {
-      auto op = new HashJoinChainedMorsel(
+      auto op = std::make_shared<HashJoinChainedMorsel>(
           build_e, build_w, std::move(build_k), build.root, probe_e, probe_w,
           std::move(probe_k), root, hash_bits, maxBuildInputSize);
       build.apply(op);
@@ -978,7 +985,7 @@ RelBuilder RelBuilder::print(
 
 RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
                              std::unique_ptr<Affinitizer> aff) const {
-  return apply(new Split(
+  return apply(std::make_shared<Split>(
       root, alternatives,
       [&] {
         std::vector<RecordAttribute *> attrs;
@@ -1000,20 +1007,24 @@ RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
 
 SplitRelBuilder RelBuilder::gsplit(size_t slack,
                                    GeneralizedRoutingPolicy p) const {
-  return SplitRelBuilder{apply(new proteus::GeneralizedRouter(
-      root, slack,
-      [&] {
-        std::vector<RecordAttribute *> attrs;
-        for (const auto &attr : getOutputArg().getProjections()) {
-          if (p == GeneralizedRoutingPolicy::SHARED_HASH_BASED &&
-              attr.getAttrName() == "__broadcastTarget") {
-            continue;
-          }
-          attrs.emplace_back(new RecordAttribute{attr});
-        }
-        return attrs;
-      }(),
-      p))};
+  return SplitRelBuilder{apply(proteus::GeneralizedRouter::create(
+      {.child = root,
+       .slack = slack,
+       .attrs =
+           [&] {
+             std::vector<RecordAttribute *> attrs;
+             for (const auto &attr : getOutputArg().getProjections()) {
+               if (p == GeneralizedRoutingPolicy::SHARED_HASH_BASED &&
+                   attr.getAttrName() == "__broadcastTarget") {
+                 continue;
+               }
+               attrs.emplace_back(new RecordAttribute{attr});
+             }
+             return attrs;
+           }(),
+       .policy_type = p})
+
+                                   )};
 }
 
 RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,
@@ -1031,26 +1042,29 @@ RelBuilder RelBuilder::unionAll(
     const std::vector<RelBuilder> &children,
     const std::vector<RecordAttribute *> &wantedFields,
     DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff) const {
-  std::vector<Operator *> c2{root};
+  std::vector<std::shared_ptr<Operator>> c2{root};
   c2.reserve(children.size() + 1);
   for (const auto &c : children) c2.emplace_back(c.root);
-  auto op = new UnionAll({.children = std::move(c2),
-                          .wantedFields = wantedFields,
-                          .fanout = fanout,
-                          .affinitizer = std::move(aff)});
+  auto op =
+      std::make_shared<UnionAll>(UnionAll::Args{.children = std::move(c2),
+                                                .wantedFields = wantedFields,
+                                                .fanout = fanout,
+                                                .affinitizer = std::move(aff)});
   for (const auto &c : children) c.apply(op);
   return apply(op);
 }
 
 RelBuilder RelBuilder::bloomfilter_probe(expression_t pred, size_t filterSize,
                                          uint64_t bloomId) const {
-  auto op = new BloomFilterProbe(root, std::move(pred), filterSize, bloomId);
+  auto op = std::make_shared<BloomFilterProbe>(root, std::move(pred),
+                                               filterSize, bloomId);
   return apply(op);
 }
 
 RelBuilder RelBuilder::bloomfilter_build(expression_t pred, size_t filterSize,
                                          uint64_t bloomId) const {
-  auto op = new BloomFilterBuild(root, std::move(pred), filterSize, bloomId);
+  auto op = std::make_shared<BloomFilterBuild>(root, std::move(pred),
+                                               filterSize, bloomId);
   return apply(op);
 }
 
@@ -1058,8 +1072,8 @@ RelBuilder RelBuilder::bloomfilter_repack(expression_t pred,
                                           std::vector<expression_t> attr,
                                           size_t filterSize,
                                           uint64_t bloomId) const {
-  auto op = new BloomFilterRepack(root, std::move(pred), std::move(attr),
-                                  filterSize, bloomId);
+  auto op = std::make_shared<BloomFilterRepack>(
+      root, std::move(pred), std::move(attr), filterSize, bloomId);
   return apply(op);
 }
 
@@ -1070,7 +1084,7 @@ RelBuilder RelBuilder::update(
 }
 
 RelBuilder RelBuilder::update(expression_t e) const {
-  auto op = new Update(root, std::move(e));
+  auto op = std::make_shared<Update>(root, std::move(e));
   return apply(op);
 }
 
@@ -1132,7 +1146,7 @@ std::ostream &operator<<(std::ostream &out, const RelBuilder &builder) {
 }
 
 SplitRelBuilder::SplitRelBuilder(RelBuilder builder) : src(std::move(builder)) {
-  CHECK_NE(dynamic_cast<proteus::GeneralizedRouter *>(src.root), nullptr)
+  CHECK_NE(dynamic_cast<proteus::GeneralizedRouter *>(src.root.get()), nullptr)
       << "SplitRelBuilder can only be constructed if the root operator of the "
          "provided RelBuilder is a GeneralizedRouter";
 }
@@ -1144,7 +1158,6 @@ RelBuilder SplitRelBuilder::path(DeviceType target,
 
 RelBuilder SplitRelBuilder::path(DeviceType target, DegreeOfParallelism dop,
                                  std::unique_ptr<Affinitizer> aff) const {
-  return {src.ctx,
-          dynamic_cast<proteus::GeneralizedRouter *>(src.root)->appendConsumer(
-              target, dop, std::move(aff))};
+  return {src.ctx, dynamic_cast<proteus::GeneralizedRouter *>(src.root.get())
+                       ->appendConsumer(target, dop, std::move(aff))};
 }

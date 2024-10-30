@@ -27,7 +27,7 @@
 
 class Split : public Router {
  public:
-  Split(Operator *const child, size_t numOfParents,
+  Split(std::shared_ptr<Operator> child, size_t numOfParents,
         const std::vector<RecordAttribute *> &wantedFields, size_t slack,
         std::optional<expression_t> hash = std::nullopt,
         RoutingPolicy policy_type = RoutingPolicy::LOCAL)
@@ -45,7 +45,7 @@ class Split : public Router {
   void setParent(Operator *parent) override {
     UnaryOperator::setParent(parent);
 
-    this->parent.emplace_back(parent);
+    this->parents.emplace_back(parent);
   }
 
   DegreeOfParallelism getDOP() const override { return getChild()->getDOP(); }
@@ -66,7 +66,7 @@ class Split : public Router {
  private:
   size_t produce_calls;
   std::vector<PipelineGen *> catch_pip;
-  std::vector<Operator *> parent;
+  std::vector<Operator *> parents;
 };
 
 #endif /* SPLIT_HPP_ */

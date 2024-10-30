@@ -91,12 +91,13 @@ class Nest : public UnaryOperator {
   Nest(Context *const context, std::vector<Monoid> accs,
        std::vector<expression_t> outputExprs, std::vector<string> aggrLabels,
        expression_t pred, std::vector<expression_t> f_grouping,
-       expression_t g_nullToZero, Operator *const child,
+       expression_t g_nullToZero, std::shared_ptr<Operator> child,
        const std::string &opLabel, Materializer &mat);
   Nest(Context *const context, std::vector<Monoid> accs,
        std::vector<expression_t> outputExprs, std::vector<string> aggrLabels,
        expression_t pred, expression_t f_grouping, expression_t g_nullToZero,
-       Operator *const child, const std::string &opLabel, Materializer &mat);
+       std::shared_ptr<Operator> child, const std::string &opLabel,
+       Materializer &mat);
   ~Nest() override { LOG(INFO) << "Collapsing Nest operator"; }
   void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
@@ -153,7 +154,7 @@ class Nest : public UnaryOperator {
   std::string htName;
   Materializer mat;
   OlapParallelContext *context;
-  RadixJoinBuild *build;
+  std::shared_ptr<RadixJoinBuild> build;
 
   /**
    * Relevant to radix-based HT

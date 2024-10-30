@@ -68,7 +68,7 @@ class JSONTest : public ::testing::Test {
   std::shared_ptr<jsonPipelined::JSONPlugin> openJSON(Context *const context,
                                                       string &fname,
                                                       ExpressionType *schema,
-                                      size_t linehint = 1000) {
+                                                      size_t linehint = 1000) {
     auto plugin = std::make_shared<jsonPipelined::JSONPlugin>(context, fname,
                                                               schema, linehint);
     catalog->registerPlugin(fname, plugin);
@@ -78,8 +78,9 @@ class JSONTest : public ::testing::Test {
 
   std::shared_ptr<jsonPipelined::JSONPlugin> openJSON(Context *const context,
                                                       string &fname,
-                                                      ExpressionType *schema, size_t linehint,
-                                      jsmntok_t **tokens) {
+                                                      ExpressionType *schema,
+                                                      size_t linehint,
+                                                      jsmntok_t **tokens) {
     auto plugin = std::make_shared<jsonPipelined::JSONPlugin>(
         context, fname, schema, linehint, tokens);
     catalog->registerPlugin(fname, plugin);
@@ -158,7 +159,7 @@ TEST_F(JSONTest, String) {
 
   int linehint = 3;
   auto pg = openJSON(&ctx, fname, &documentType, linehint);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * SELECT
@@ -173,14 +174,14 @@ TEST_F(JSONTest, String) {
   expressions::InputArgument lhsArg{&rec, 0};
   auto predicate = eq(lhsArg[field1], "Harry");
 
-  Select sel(predicate, &scan);
-  scan.setParent(&sel);
+  auto sel = std::make_shared<Select>(predicate, scan);
+  scan->setParent(sel.get());
 
   /**
    * PRINT
    */
-  Flush printOp({lhsArg[field2]}, &sel, testLabel);
-  sel.setParent(&printOp);
+  Flush printOp({lhsArg[field2]}, sel, testLabel);
+  sel->setParent(&printOp);
   printOp.produce(&ctx);
 
   EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
@@ -202,13 +203,13 @@ TEST_F(JSONTest, ScanJSON) {
   ListType documentType = ListType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  Scan scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /* Reduce */
   expressions::InputArgument lhsArg(&inner, 0);
 
-  Flush flush{{lhsArg[attr]}, &scan, testLabel};
-  scan.setParent(&flush);
+  Flush flush{{lhsArg[attr]}, scan, testLabel};
+  scan->setParent(&flush);
   flush.produce(&ctx);
 
   EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
@@ -228,7 +229,7 @@ TEST_F(JSONTest, SelectJSON) {
   ListType documentType = ListType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * SELECT
@@ -236,12 +237,12 @@ TEST_F(JSONTest, SelectJSON) {
   RecordAttribute projTuple(fname, activeLoop, pg->getOIDType());
 
   expressions::InputArgument lhsArg(&inner, 0);
-  Select sel{gt(lhsArg[attr2], 5), &scan};
-  scan.setParent(&sel);
+  auto sel = std::make_shared<Select>(gt(lhsArg[attr2], 5), scan);
+  scan->setParent(sel.get());
 
   /* Reduce */
-  Flush flush{{lhsArg[attr]}, &sel, testLabel};
-  sel.setParent(&flush);
+  Flush flush{{lhsArg[attr]}, sel, testLabel};
+  sel->setParent(&flush);
   flush.produce(&ctx);
 
   EXPECT_TRUE(executePlan(ctx, testLabel, {pg.get()}));
@@ -283,15 +284,15 @@ TEST_F(JSONTest, unnestJSON) {
   ListType documentType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  Scan scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   expressions::InputArgument inputArg(&inner, 0);
   string nestedName = "c";
   auto proj = inputArg[emp3];
   Path path(nestedName, &proj);
 
-  Unnest unnestOp(true, path, &scan);
-  scan.setParent(&unnestOp);
+  auto unnestOp = std::make_shared<Unnest>(true, path, scan);
+  scan->setParent(unnestOp.get());
 
   // New record type:
   string originalRecordName = "e";
@@ -304,8 +305,8 @@ TEST_F(JSONTest, unnestJSON) {
 
   RecordAttribute toPrint(-1, fname + "." + empChildren, childAge, &intType);
 
-  Flush flush({nestedArg[toPrint]}, &unnestOp, testLabel);
-  unnestOp.setParent(&flush);
+  Flush flush({nestedArg[toPrint]}, unnestOp, testLabel);
+  unnestOp->setParent(&flush);
 
   flush.produce(&ctx);
 
@@ -345,15 +346,15 @@ TEST_F(JSONTest, reduceListObjectFlat) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, linehint);
-  Scan scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   expressions::InputArgument arg{&inner, 0};
 
-  Select sel{gt(arg[attr2], 43), &scan};
-  scan.setParent(&sel);
+  auto sel = std::make_shared<Select>(gt(arg[attr2], 43), scan);
+  scan->setParent(sel.get());
 
-  Flush flush{{arg[attr3]}, &sel, testLabel};
-  sel.setParent(&flush);
+  Flush flush{{arg[attr3]}, sel, testLabel};
+  sel->setParent(&flush);
 
   flush.produce(&ctx);
 
@@ -428,7 +429,7 @@ TEST_F(JSONTest, reduceMax) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, lineHint);
-  Scan scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * REDUCE
@@ -437,13 +438,14 @@ TEST_F(JSONTest, reduceMax) {
 
   RecordAttribute recOut{1, outRel, "b", &intType};
   std::vector<agg_t> aggregate = {max({arg[attr2].as(&recOut)})};
-  opt::Reduce reduce{aggregate, gt(arg[attr2], 43), &scan};
-  scan.setParent(&reduce);
+  auto reduce =
+      std::make_shared<opt::Reduce>(aggregate, gt(arg[attr2], 43), scan);
+  scan->setParent(reduce.get());
 
   RecordType outRec{list<RecordAttribute *>{&recOut}};
   expressions::InputArgument argout{&outRec, 0};
-  Flush flush{{argout[recOut]}, &reduce, testLabel};
-  reduce.setParent(&flush);
+  Flush flush{{argout[recOut]}, reduce, testLabel};
+  reduce->setParent(&flush);
   flush.produce(&ctx);
 
   EXPECT_TRUE(executePlan(ctx, testLabel, {}));
@@ -465,7 +467,7 @@ TEST_F(JSONTest, reduceMax) {
      */
     auto pgCached =
         openJSON(&ctx, fname, &documentType, lineHint, pg->getTokens());
-    Scan scan(*pgCached);
+    auto scan = std::make_shared<Scan>(*pgCached);
 
     /**
      * REDUCE
@@ -474,14 +476,15 @@ TEST_F(JSONTest, reduceMax) {
 
     RecordAttribute recOut{1, outRel, "b", &intType};
     std::vector<agg_t> aggregate2 = {max({arg[attr2].as(&recOut)})};
-    opt::Reduce reduce{aggregate2, gt(arg[attr2], 43), &scan};
-    scan.setParent(&reduce);
+    auto reduce =
+        std::make_shared<opt::Reduce>(aggregate2, gt(arg[attr2], 43), scan);
+    scan->setParent(reduce.get());
 
     RecordType outRec{list<RecordAttribute *>{&recOut}};
     expressions::InputArgument argout{&outRec, 0};
-    Flush flush{{argout[recOut]}, &reduce, testLabel};
+    Flush flush{{argout[recOut]}, reduce, testLabel};
 
-    reduce.setParent(&flush);
+    reduce->setParent(&flush);
     flush.produce(&ctx);
 
     EXPECT_TRUE(executePlan(ctx, testLabel, {pgCached.get()}));
@@ -548,7 +551,7 @@ TEST_F(JSONTest, reduceDeeperMax) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, lineHint);
-  Scan scan = Scan(*pg);
+  auto scan = std::make_shared<Scan>(*pg);
 
   /**
    * REDUCE
@@ -561,13 +564,14 @@ TEST_F(JSONTest, reduceDeeperMax) {
   expressions::InputArgument arg(&inner, 0);
   auto outputExpr_ = arg[attr3];
   std::vector<agg_t> aggregate = {max(expression_t{outputExpr_}[c2])};
-  opt::Reduce reduce{aggregate, gt(arg[attr2], 43), &scan};
-  scan.setParent(&reduce);
+  auto reduce =
+      std::make_shared<opt::Reduce>(aggregate, gt(arg[attr2], 43), scan);
+  scan->setParent(reduce.get());
 
   RecordType outRec{list<RecordAttribute *>{&recOut}};
   expressions::InputArgument argout{&outRec, 0};
-  Flush flush{{argout[recOut]}, &reduce, testLabel};
-  reduce.setParent(&flush);
+  Flush flush{{argout[recOut]}, reduce, testLabel};
+  reduce->setParent(&flush);
 
   flush.produce(&ctx);
 

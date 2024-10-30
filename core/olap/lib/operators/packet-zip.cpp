@@ -32,7 +32,8 @@ using namespace llvm;
 #define CACHE_SIZE 1024 * 1024
 
 ZipInitiate::ZipInitiate(RecordAttribute *ptrAttr, RecordAttribute *splitter,
-                         RecordAttribute *targetAttr, Operator *const child,
+                         RecordAttribute *targetAttr,
+                         std::shared_ptr<Operator> const child,
                          OlapParallelContext *const context, int numOfBuckets,
                          ZipState &state1, ZipState &state2, string opLabel)
     : ptrAttr(ptrAttr),
@@ -280,8 +281,9 @@ void ZipInitiate::open_cache(Pipeline *pip) {
 
 ZipCollect::ZipCollect(RecordAttribute *ptrAttr, RecordAttribute *splitter,
                        RecordAttribute *targetAttr, RecordAttribute *inputLeft,
-                       RecordAttribute *inputRight, Operator *const leftChild,
-                       Operator *const rightChild,
+                       RecordAttribute *inputRight,
+                       std::shared_ptr<Operator> leftChild,
+                       std::shared_ptr<Operator> rightChild,
                        OlapParallelContext *const context, int numOfBuckets,
                        RecordAttribute *hash_key_left,
                        const std::vector<expression_t> &wantedFieldsLeft,
@@ -958,7 +960,8 @@ void ZipCollect::close_pipe(Pipeline *pip) {
   std::cout << "close pipe left" << std::endl;
 }
 
-ZipForward::ZipForward(RecordAttribute *targetAttr, Operator *const child,
+ZipForward::ZipForward(RecordAttribute *targetAttr,
+                       std::shared_ptr<Operator> child,
                        OlapParallelContext *const context,
                        const std::vector<expression_t> &wantedFields,
                        string opLabel, ZipState &state)

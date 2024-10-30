@@ -31,7 +31,8 @@ using namespace llvm;
 using std::vector;
 
 RadixJoin::RadixJoin(const expressions::BinaryExpression &predicate,
-                     Operator *leftChild, Operator *rightChild,
+                     std::shared_ptr<Operator> leftChild,
+                     std::shared_ptr<Operator> rightChild,
                      Context *const context, const char *opLabel,
                      Materializer &matLeft, Materializer &matRight)
     : BinaryOperator(leftChild, rightChild),
@@ -93,13 +94,13 @@ RadixJoin::RadixJoin(const expressions::BinaryExpression &predicate,
   size_t kvSizeR = sizeR;  // * htEntrySize;
   size_t kvSizeS = sizeS;  // * htEntrySize;
 
-  buildR =
-      new RadixJoinBuild(predicate.getLeftOperand(), leftChild, this->context,
-                         htLabel, matLeft, htEntryType, sizeR, kvSizeR);
+  buildR = std::make_shared<RadixJoinBuild>(
+      predicate.getLeftOperand(), leftChild, this->context, htLabel, matLeft,
+      htEntryType, sizeR, kvSizeR);
 
-  buildS =
-      new RadixJoinBuild(predicate.getRightOperand(), rightChild, this->context,
-                         htLabel, matRight, htEntryType, sizeS, kvSizeS);
+  buildS = std::make_shared<RadixJoinBuild>(
+      predicate.getRightOperand(), rightChild, this->context, htLabel, matRight,
+      htEntryType, sizeS, kvSizeS);
 }
 
 RadixJoin::~RadixJoin() {
@@ -183,8 +184,8 @@ void RadixJoin::produce_(OlapParallelContext *context) {
 
   context->pushPipeline();
 
-  Operator *leftChild = getLeftChild();
-  leftChild->setParent(buildR);
+  std::shared_ptr<Operator> leftChild = getLeftChild();
+  leftChild->setParent(buildR.get());
   buildR->setParent(this);
   setLeftChild(buildR);
 
@@ -206,8 +207,8 @@ void RadixJoin::produce_(OlapParallelContext *context) {
   // auto radix_pip = context->getCurrentPipeline();
   context->pushPipeline();
 
-  Operator *rightChild = getRightChild();
-  rightChild->setParent(buildS);
+  std::shared_ptr<Operator> rightChild = getRightChild();
+  rightChild->setParent(buildS.get());
   buildS->setParent(this);
   setRightChild(buildS);
 
@@ -260,10 +261,10 @@ void RadixJoin::runRadix() const {
   auto clusterCountR_id = context->appendStateVar(
       PointerType::getUnqual(int32_type),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
-
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildR);
+        // assumption that `this->buildR.get()` will be a valid pointer at query
+        // runtime
+        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildR.get());
         Function *clusterCnts = context->getFunction("getClusterCounts");
         return Builder->CreateCall(clusterCnts, vector<Value *>{pip, build});
       },
@@ -278,12 +279,14 @@ void RadixJoin::runRadix() const {
   auto clusterCountS_id = context->appendStateVar(
       PointerType::getUnqual(int32_type),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
-
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildS);
+        // assumption that `this->buildS.get()` will be a valid pointer at query
+        // runtime
+        Value *buildS_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, buildS.get());
         Function *clusterCnts = context->getFunction("getClusterCounts");
-        return Builder->CreateCall(clusterCnts, vector<Value *>{pip, build});
+        return Builder->CreateCall(clusterCnts,
+                                   vector<Value *>{pip, buildS_ptr});
       },
       [=](llvm::Value *, llvm::Value *s) {
         Function *f = context->getFunction("free");
@@ -297,13 +300,13 @@ void RadixJoin::runRadix() const {
   auto htR_mem_kv_id = context->appendStateVar(
       PointerType::getUnqual(htEntryType),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
 
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildR);
+        Value *buildR_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, buildR.get());
         Function *ht_mem_kv = context->getFunction("getHTMemKV");
         Value *char_ht_mem =
-            Builder->CreateCall(ht_mem_kv, vector<Value *>{pip, build});
+            Builder->CreateCall(ht_mem_kv, vector<Value *>{pip, buildR_ptr});
         return Builder->CreateBitCast(char_ht_mem,
                                       PointerType::getUnqual(htEntryType));
       },
@@ -319,13 +322,13 @@ void RadixJoin::runRadix() const {
   auto htS_mem_kv_id = context->appendStateVar(
       PointerType::getUnqual(htEntryType),
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
 
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildS);
+        Value *buildS_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, buildS.get());
         Function *ht_mem_kv = context->getFunction("getHTMemKV");
         Value *char_ht_mem =
-            Builder->CreateCall(ht_mem_kv, vector<Value *>{pip, build});
+            Builder->CreateCall(ht_mem_kv, vector<Value *>{pip, buildS_ptr});
         return Builder->CreateBitCast(char_ht_mem,
                                       PointerType::getUnqual(htEntryType));
       },
@@ -341,12 +344,12 @@ void RadixJoin::runRadix() const {
   auto relR_mem_relation_id = context->appendStateVar(
       char_ptr_type,
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
 
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildR);
+        Value *buildR_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, buildR.get());
         Function *rel_mem = context->getFunction("getRelationMem");
-        return Builder->CreateCall(rel_mem, vector<Value *>{pip, build});
+        return Builder->CreateCall(rel_mem, vector<Value *>{pip, buildR_ptr});
       },
       [=](llvm::Value *, llvm::Value *s) {
         Function *f = context->getFunction("releaseMemoryChunk");
@@ -360,12 +363,12 @@ void RadixJoin::runRadix() const {
   auto relS_mem_relation_id = context->appendStateVar(
       char_ptr_type,
       [=](llvm::Value *pip) {
-        LLVMContext &llvmContext = context->getLLVMContext();
         IRBuilder<> *Builder = context->getBuilder();
 
-        Value *build = context->CastPtrToLlvmPtr(char_ptr_type, buildS);
+        Value *buildS_ptr =
+            context->CastPtrToLlvmPtr(char_ptr_type, buildS.get());
         Function *rel_mem = context->getFunction("getRelationMem");
-        return Builder->CreateCall(rel_mem, vector<Value *>{pip, build});
+        return Builder->CreateCall(rel_mem, vector<Value *>{pip, buildS_ptr});
       },
       [=](llvm::Value *, llvm::Value *s) {
         Function *f = context->getFunction("releaseMemoryChunk");

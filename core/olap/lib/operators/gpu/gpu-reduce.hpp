@@ -34,7 +34,8 @@
 namespace opt {
 class GpuReduce : public Reduce {
  public:
-  GpuReduce(std::vector<agg_t> accs, expression_t pred, Operator *child);
+  GpuReduce(std::vector<agg_t> accs, expression_t pred,
+            std::shared_ptr<Operator> child);
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
 

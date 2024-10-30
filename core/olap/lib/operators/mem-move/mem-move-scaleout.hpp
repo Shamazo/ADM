@@ -45,7 +45,7 @@ class MemMoveScaleOut : public MemMoveDevice {
     bool getPropagated(MemMoveDevice::workunit **ret) override;
   };
 
-  MemMoveScaleOut(Operator *const child,
+  MemMoveScaleOut(std::shared_ptr<Operator> child,
                   const std::vector<RecordAttribute *> &wantedFields,
                   size_t slack);
 

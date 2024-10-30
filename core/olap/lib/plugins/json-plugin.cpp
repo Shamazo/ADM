@@ -1002,7 +1002,7 @@ void JSONPlugin::scanObjects(const ::Operator &producer, Function *debug) {
 #ifdef DEBUGJSON
   context->log(Builder->getInt64(6666));
 #endif
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, {producer, variableBindings});
 #ifdef DEBUGJSON
   context->log(Builder->getInt64(7777));

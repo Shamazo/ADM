@@ -43,7 +43,7 @@ class DictScan : public UnaryOperator {
     CHECK(this->_context) << "Only OlapParallelContext supported";
   }
   ~DictScan() override { LOG(INFO) << "Collapsing dictscan operator"; }
-  [[nodiscard]] Operator *getChild() const final {
+  [[nodiscard]] std::shared_ptr<Operator> getChild() const final {
     throw runtime_error(string("Dictscan operator has no children"));
   }
 

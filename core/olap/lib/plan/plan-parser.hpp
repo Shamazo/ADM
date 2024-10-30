@@ -76,7 +76,7 @@ class PlanExecutor {
   const char *moduleName;
   CatalogParser &catalogParser;
   std::vector<Plugin *> activePlugins;
-  std::map<size_t, Operator *> splitOps;
+  std::map<size_t, std::shared_ptr<Operator>> splitOps;
   RelBuilderFactory factory;
   std::unique_ptr<ParserAffinitizationFactory> parFactory;
   //    std::unique_ptr<ParserAffinitizationFactory> parFactory;

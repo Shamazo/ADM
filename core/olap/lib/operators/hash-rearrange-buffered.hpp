@@ -31,7 +31,7 @@
 class HashRearrangeBuffered : public UnaryOperator {
  public:
   HashRearrangeBuffered(
-      Operator *const child, OlapParallelContext *const context,
+      std::shared_ptr<Operator> const child, OlapParallelContext *const context,
       int numOfBuckets,
       const std::vector<expressions::Expression *> &wantedFields,
       expression_t hashExpr, RecordAttribute *hashProject = nullptr)

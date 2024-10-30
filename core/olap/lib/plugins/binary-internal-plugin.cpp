@@ -220,7 +220,7 @@ void BinaryInternalPlugin::scanStruct(const ::Operator &producer) {
 
   // Triggering parent
   ::OperatorState *state = new ::OperatorState(producer, *variableBindings);
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, *state);
 
   Builder->CreateBr(CondBB);
@@ -419,7 +419,7 @@ void BinaryInternalPlugin::scan(const ::Operator &producer) {
 
   // Triggering parent
   ::OperatorState *state = new ::OperatorState(producer, *variableBindings);
-  ::Operator *const opParent = producer.getParent();
+  auto opParent = producer.getParent();
   opParent->consume(context, *state);
 
   Builder->CreateBr(CondBB);
