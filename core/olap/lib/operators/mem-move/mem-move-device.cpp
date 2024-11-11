@@ -890,6 +890,8 @@ void MemMoveDevice::catcher(MemMoveConf *mmc, int group_id,
                             exec_location target_dev, const void *session) {
   set_exec_location_on_scope d(target_dev);
   std::this_thread::yield();
+  event_range<range_log_op::MEMMOVE_CATCHER> er2{m_id, catch_pip->getUUID(),
+                                                 group_id};
 
   nvtxRangePushA("memmove::catch");
 
@@ -908,8 +910,8 @@ void MemMoveDevice::catcher(MemMoveConf *mmc, int group_id,
             mmc->pull(std::move(((proteus::managed_ptr *)(p->data))[i * 2]));
       }
       {
-        event_range<range_log_op::MEMMOVE_CONSUME> er{id, catch_pip->getUUID(),
-                                                      pip->getGroup()};
+        event_range<range_log_op::MEMMOVE_CONSUME> er{
+            m_id, catch_pip->getUUID(), pip->getGroup()};
         nvtxRangePushA("memmove::catch_cons");
         pip->consume(p->data);
         nvtxRangePop();
@@ -919,11 +921,10 @@ void MemMoveDevice::catcher(MemMoveConf *mmc, int group_id,
     } while (true);
   }
 
-  event_range<range_log_op::MEMMOVE_CLOSE> er{id, catch_pip->getUUID(),
+  event_range<range_log_op::MEMMOVE_CLOSE> er{m_id, catch_pip->getUUID(),
                                               pip->getGroup()};
   nvtxRangePushA("memmove::catch_close");
   pip->close();
   nvtxRangePop();
-
   nvtxRangePop();
 }

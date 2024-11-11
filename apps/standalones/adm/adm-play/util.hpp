@@ -109,13 +109,17 @@ std::string duration_to_string(const Duration& duration) {
 }
 class LogTimeRange {
  public:
-  LogTimeRange(std::string label, TimeStampLogger* logger);
+  LogTimeRange(std::string label, TimeStampLogger* logger,
+               std::string extra = "");
 
   ~LogTimeRange();
 
  private:
-  std::string m_label;
+  const std::string m_label;
+  const std::string m_extra;
   TimeStampLogger* m_logger;
+  const std::chrono::time_point<std::chrono::high_resolution_clock>
+      m_start_time;
 };
 
 class TimeStampLogger {
@@ -132,29 +136,24 @@ class TimeStampLogger {
         std::fstream(output_file_path, std::ios::out | std::ios::trunc);
     LOG(INFO) << "opening output file " << output_file_path;
     PCHECK(output_file.is_open()) << "Could not open" << output_file_path;
-    output_file << "point_type,label,time" << std::endl;
-    output_file << "start,TimeStampLogger_start,"
-                << timepoint_to_string(start_time) << std::endl;
+    output_file << "name,timestamp_start,timestamp_end,extra" << std::endl;
   }
 
-  LogTimeRange log_time_range(const std::string& label) {
-    return {label, this};
+  LogTimeRange log_time_range(const std::string& label,
+                              const std::string& extra = "") {
+    return {label, this, extra};
   }
 
-  void log_start(const std::string& label) {
-    auto now = std::chrono::high_resolution_clock::now();
-    auto start_relative =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-    output_file << "start," << label << ","
-                << duration_to_string(start_relative) << std::endl;
-  }
-
-  void log_end(const std::string& label) {
-    auto now = std::chrono::high_resolution_clock::now();
+  void log_end(
+      std::chrono::time_point<std::chrono::high_resolution_clock> start,
+      const std::string& label, const std::string& extra) {
+    auto end = std::chrono::high_resolution_clock::now();
+    auto start_relative = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        start - start_time);
     auto end_relative =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time);
-    output_file << "end," << label << "," << duration_to_string(end_relative)
-                << std::endl;
+        std::chrono::duration_cast<std::chrono::nanoseconds>(end - start_time);
+    output_file << label << "," << start_relative.count() << ","
+                << end_relative.count() << "," << extra << std::endl;
   }
 
  private:

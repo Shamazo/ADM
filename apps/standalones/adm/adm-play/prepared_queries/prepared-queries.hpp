@@ -25,8 +25,8 @@
 #define PROTEUS_ADM_PREPARED_QUERIES_HPP
 
 #include <olap/plan/prepared-statement.hpp>
-#include <query-shaping/query-shaper.hpp>
 #include <query-shaping/nvme-shapers.hpp>
+#include <query-shaping/query-shaper.hpp>
 
 PreparedStatement small_scan(proteus::QueryShaper &morph,
                              const std::string &lo_column);
@@ -42,6 +42,19 @@ PreparedStatement small_scan(proteus::QueryShaper &morph,
 PreparedStatement scan_sum_micro_pushdown(proteus::QueryShaper &morph,
                                           double selectivity,
                                           bool move_after_pushdown = false);
+
+/**
+ *
+ * @param morph Is only used for morph.scan to handle metadata stuff
+ * @param selectivity selectivity of the filter, value in [0, 1]
+ */
+PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
+                                          double selectivity,
+                                          DegreeOfParallelism pushdown_dop);
+
+PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
+                                            double selectivity,
+                                            DegreeOfParallelism pushdown_dop);
 
 /**
  * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter

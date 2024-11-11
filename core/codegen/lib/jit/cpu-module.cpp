@@ -268,6 +268,9 @@ class SectionMemoryManager : public llvm::SectionMemoryManager {
 };
 }  // namespace proteus
 
+static const std::vector<std::string> extra_features = {
+    "-avx2", "-avx", "-sse", "-sse2", "-sse3", "-ssse3", "-sse4.1", "-sse4.2"};
+// static const std::vector<std::string> extra_features = {};
 class JITer_impl {
  public:
   ::ThreadPool pool;

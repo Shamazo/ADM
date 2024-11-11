@@ -27,3 +27,28 @@ target_link_libraries(${PROJECT_NAME}
   )
 
 configure_proteus_experiment(${PROJECT_NAME})
+
+add_executable(selectivity-micros
+  selectivity-micros-main.cpp
+  prepared_queries/prepared-scans.cpp
+  prepared_queries/q1_1_pushdown.cpp
+  prepared_queries/q1_2_pushdown.cpp
+  prepared_queries/q1_3_pushdown.cpp
+  prepared_queries/q1_1_adaptive.cpp
+  util.cpp
+  prepared_queries/prepared-scan-sum-micro.cpp
+)
+
+# Depending on the olap libraries
+target_link_libraries(selectivity-micros
+  jemalloc
+  codegen::olap_flags
+  proteus::olap
+  proteus::storage
+  proteus::platform
+  queries::ssb
+  magic_enum::magic_enum
+  ${CMAKE_DL_LIBS}
+)
+
+configure_proteus_experiment(selectivity-micros)

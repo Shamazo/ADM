@@ -33,6 +33,7 @@
 #include <ssb/query.hpp>
 #include <vector>
 
+#include "common-flags.hpp"
 #include "microbenchmarks.hpp"
 #include "prepared_queries/prepared-queries.hpp"
 #include "selectivity-micros.hpp"
@@ -150,22 +151,7 @@ DEFINE_int32(
 DECLARE_int32(scale_factor);
 DEFINE_int32(scale_factor, 100, "SSB scale factor");
 
-DECLARE_int32(server_number);
-DEFINE_int32(server_number, 46, "server number (DIAS internal)");
 
-DECLARE_int32(num_iterations);
-DEFINE_int32(num_iterations, 5, "Number of types to run each query");
-
-DECLARE_string(result_file);
-DEFINE_string(result_file, "",
-              "[optional] output file for results [default: stdout]");
-
-DECLARE_string(timestamp_file);
-DEFINE_string(timestamp_file, "adm-play-timestamps.csv",
-              "[optional] output file for TimeStampLogger logs  [default: "
-              "adm-play-timestamps.csv]");
-DECLARE_double(selectivity);
-DEFINE_double(selectivity, 0.000001, "selectivity for the micro filter");
 
 TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
@@ -320,71 +306,6 @@ int main(int argc, char* argv[]) {
         FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, false, pushdown_dop);
     ss << res;
     ss << std::endl;
-    if (out.has_value()) {
-      *out << res << std::endl;
-    }
-  }
-
-  /**
-   * Selectivity microbenchmarks
-   * ##############################
-   */
-
-  if (FLAGS_bench_micro_cpu_socket_pushdown_baseline) {
-    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_baseline";
-    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, true}, false, FLAGS_selectivity);
-    ss << res;
-    if (out.has_value()) {
-      *out << res << std::endl;
-    }
-  }
-
-  if (FLAGS_bench_micro_cpu_socket_stage_both) {
-    LOG(INFO) << "running bench_micro_cpu_socket_stage_both";
-    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {false, false}, false, FLAGS_selectivity);
-    ss << res;
-    if (out.has_value()) {
-      *out << res << std::endl;
-    }
-  }
-
-  if (FLAGS_bench_micro_cpu_socket_stage_one) {
-    LOG(INFO) << "running bench_micro_cpu_socket_stage_one";
-    auto res = bench_micro_cpu_socket_pushdown_baseline_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, {true, false}, false, FLAGS_selectivity);
-    ss << res;
-    if (out.has_value()) {
-      *out << res << std::endl;
-    }
-  }
-
-  if (FLAGS_bench_micro_cpu_socket_pushdown_filter) {
-    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_filter";
-    DCHECK_NE(FLAGS_pushdown_dop, 0) << "cannot have a pushdown DOP of 0. This "
-                                        "is not the equivalent of no pushdown";
-    std::optional<size_t> pushdown_dop =
-        (FLAGS_pushdown_dop == -1) ? std::nullopt
-                                   : std::make_optional(FLAGS_pushdown_dop);
-    auto res = bench_micro_cpu_socket_pushdown_filter_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop, FLAGS_selectivity);
-    ss << res;
-    if (out.has_value()) {
-      *out << res << std::endl;
-    }
-  }
-
-  if (FLAGS_bench_micro_cpu_socket_pushdown_filter_memmove) {
-    LOG(INFO) << "running bench_micro_cpu_socket_pushdown_filter_memmove";
-    DCHECK_NE(FLAGS_pushdown_dop, 0) << "cannot have a pushdown DOP of 0. This "
-                                        "is not the equivalent of no pushdown";
-    std::optional<size_t> pushdown_dop =
-        (FLAGS_pushdown_dop == -1) ? std::nullopt
-                                   : std::make_optional(FLAGS_pushdown_dop);
-    auto res = bench_micro_cpu_socket_pushdown_filter_memmove_vary_sel(
-        FLAGS_server_number, FLAGS_num_iterations, 4, 8, false, pushdown_dop, FLAGS_selectivity);
-    ss << res;
     if (out.has_value()) {
       *out << res << std::endl;
     }

@@ -36,12 +36,16 @@ std::string get_current_date_str() {
   return {buffer};
 }
 
-LogTimeRange::LogTimeRange(std::string label, TimeStampLogger* logger)
-    : m_label(std::move(label)), m_logger(logger) {
-  m_logger->log_start(m_label);
-}
+LogTimeRange::LogTimeRange(std::string label, TimeStampLogger* logger,
+                           std::string extra)
+    : m_label(std::move(label)),
+      m_logger(logger),
+      m_extra(std::move(extra)),
+      m_start_time(std::chrono::high_resolution_clock::now()) {}
 
-LogTimeRange::~LogTimeRange() { m_logger->log_end(m_label); }
+LogTimeRange::~LogTimeRange() {
+  m_logger->log_end(m_start_time, m_label, m_extra);
+}
 
 std::string timepoint_to_string(
     const std::chrono::high_resolution_clock::time_point& tp) {
@@ -78,20 +82,24 @@ QueryBenchResult benchmark_query(const std::string& label,
   std::string warmup_query_output;
   {
     LOG(INFO) << "warmup_begin";
-    auto ts = global_timestamp_logger->log_time_range("query_warmup");
+    auto ts = global_timestamp_logger->log_time_range(
+        "query_warmup", R"({""query"": "")" + label + "\"\"}");
     auto res = statement.execute();
     LOG(INFO) << "warmup_end";
     std::stringstream ss;
     ss << res;
     warmup_query_output = ss.str();
   }
+  std::this_thread::sleep_for(std::chrono::seconds(10));
   profiling::ProfileRegionType pr_type = profiling::ProfileRegionType(label);
   for (int i = 0; i < num_iterations; i++) {
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
               << label;
-    auto ts = global_timestamp_logger->log_time_range("query_iter_" +
-                                                      std::to_string(i));
-    profiling::resume();
+    auto ts = global_timestamp_logger->log_time_range(
+        "query_execute", R"("{""query"": )" + label + R"(, ""iteration"": )" +
+                             std::to_string(i) + "}");
+
     profiling::ProfileRegion pr(pr_type);
 
     auto res = statement.execute(pipeline_times[i]);
@@ -101,7 +109,6 @@ QueryBenchResult benchmark_query(const std::string& label,
     ss << res;
     CHECK_EQ(ss.str(), warmup_query_output);
   }
-  profiling::pause();
 
   const size_t num_pipelines = pipeline_times[0].size();
   std::vector<std::chrono::milliseconds> sum_of_pipeline_times(num_pipelines);
@@ -342,8 +349,8 @@ std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
         "/nvme6/nicholso/data/random_ints_4_12",   // node 1
         "/nvme9/nicholso/data/random_ints_5_12",   // node 3
         "/nvme3/nicholso/data/random_ints_6_12",   // node 0
-        "/nvme11/nicholso/data/random_ints_7_12",  // node 3
-        "/nvme5/nicholso/data/random_ints_8_12",   // node 1
+        "/nvme8/nicholso/data/random_ints_7_12",   // node 3
+        "/nvme12/nicholso/data/random_ints_8_12",  // node 2
         "/nvme10/nicholso/data/random_ints_9_12",  // node 3
         "/nvme2/nicholso/data/random_ints_10_12",  // node 0
         "/nvme15/nicholso/data/random_ints_11_12"  // node 2
