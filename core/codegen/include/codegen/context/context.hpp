@@ -129,9 +129,8 @@ template <typename T>
 concept aggregate = std::is_aggregate_v<T>;
 
 template <typename T, typename... Args>
-concept aggregate_initializable = aggregate<T> && requires {
-  T{std::declval<Args>()...};
-};
+concept aggregate_initializable =
+    aggregate<T> && requires { T{std::declval<Args>()...}; };
 
 namespace detail {
 struct any {
@@ -156,7 +155,7 @@ struct aggregate_initializable_from_indices<T, std::index_sequence<Indices...>>
 template <typename T, std::size_t N>
 concept aggregate_initializable_with_n_args =
     aggregate<T> && detail::aggregate_initializable_from_indices<
-        T, std::make_index_sequence<N>>::value;
+                        T, std::make_index_sequence<N>>::value;
 
 namespace detail {
 template <aggregate T, std::size_t N, bool CanInitialize>
@@ -483,6 +482,14 @@ class Context {
 
   virtual llvm::Value *gen_call(llvm::Function *func,
                                 const std::vector<llvm::Value *> &args);
+
+  /**
+   * Insert a breakpoint in the generated code to allow debugging
+   * If a debugger is not attached when the breakpoint is hit, the process will
+   * terminate.
+   * TODO: consider adding a CLI flag to conditionally add breakpoints
+   */
+  llvm::CallInst *createBreakpoint();
 
   /**
    * Not sure the HT methods belong here

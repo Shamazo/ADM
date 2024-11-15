@@ -712,3 +712,9 @@ void Context::linkExternModule(std::unique_ptr<llvm::Module> module) {
 
   assert(!err && "Linking failed");
 }
+
+llvm::CallInst *Context::createBreakpoint() {
+  llvm::Function *debugtrapIntrinsic =
+      llvm::Intrinsic::getDeclaration(getModule(), llvm::Intrinsic::debugtrap);
+  return getBuilder()->CreateCall(debugtrapIntrinsic);
+}
