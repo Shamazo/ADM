@@ -268,6 +268,22 @@ class SectionMemoryManager : public llvm::SectionMemoryManager {
 };
 }  // namespace proteus
 
+/**
+ * Name any unnamed instructions in the function.
+ * This is useful for debugging, so GDB can show the instruction names/values
+ */
+void nameInstructions(Function &F) {
+  for (auto &Arg : F.args()) {
+    if (!Arg.hasName()) Arg.setName("arg");
+  }
+  for (BasicBlock &BB : F) {
+    if (!BB.hasName()) BB.setName("bb");
+    for (Instruction &I : BB) {
+      if (!I.hasName() && !I.getType()->isVoidTy()) I.setName("i");
+    }
+  }
+}
+
 static const std::vector<std::string> extra_features = {
     "-avx2", "-avx", "-sse", "-sse2", "-sse3", "-ssse3", "-sse4.1", "-sse4.2"};
 // static const std::vector<std::string> extra_features = {};
@@ -294,6 +310,7 @@ class JITer_impl {
   llvm::orc::IRTransformLayer PrintOptimizedIRLayer;
   llvm::orc::IRTransformLayer TransformLayer;
   llvm::orc::IRTransformLayer PrintGeneratedIRLayer;
+  llvm::orc::IRTransformLayer InstRenameIRLayer;
 
   llvm::orc::JITDylib &MainJD;
 
@@ -379,6 +396,19 @@ class JITer_impl {
                      "symbols in the compiled generated code.";
               return std::move(TSM);
             }),
+        InstRenameIRLayer(ES, PrintGeneratedIRLayer,
+                          [](llvm::orc::ThreadSafeModule TSM,
+                             const llvm::orc::MaterializationResponsibility &R)
+                              -> Expected<llvm::orc::ThreadSafeModule> {
+                            if (print_generated_code) {
+                              TSM.withModuleDo([](Module &M) {
+                                for (auto &f : M.functions()) {
+                                  nameInstructions(f);
+                                }
+                              });
+                            }
+                            return std::move(TSM);
+                          }),
         MainJD(llvm::cantFail(ES.createJITDylib("main"))),
         vtuneProfiler(JITEventListener::createIntelJITEventListener()),
         PerfListener(JITEventListener::createPerfJITEventListener()),
@@ -436,7 +466,7 @@ class JITer_impl {
   LLVMContext &getContext() { return *Ctx.getContext(); }
 
   void addModule(llvm::orc::ThreadSafeModule M) {
-    llvm::cantFail(PrintGeneratedIRLayer.add(MainJD, std::move(M)));
+    llvm::cantFail(InstRenameIRLayer.add(MainJD, std::move(M)));
   }
 
   JITEvaluatedSymbol lookup(StringRef Name) {
