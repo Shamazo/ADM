@@ -75,6 +75,9 @@ DEFINE_bool(bench_micro_cpu_socket_grouter_pd, false, "");
 DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both);
 DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both, false, "");
 
+DECLARE_string(selectivities);
+DEFINE_string(selectivities, "", "Comma-separated list of doubles in [0,1]");
+
 DECLARE_bool(exit_loop);
 DEFINE_bool(exit_loop, false,
             "Enter an infinite loop after benchmarks have completed, awaiting "
@@ -85,6 +88,16 @@ DEFINE_int32(
     pushdown_dop, -1,
     "Number of threads to use for pushed-down operators. Default of -1 is a "
     "thread per core on the socket used for pushdown operators.");
+
+std::vector<double> parseDoubles(const std::string& str) {
+  std::vector<double> result;
+  std::stringstream ss(str);
+  std::string item;
+  while (std::getline(ss, item, ',')) {
+    result.push_back(std::stod(item));
+  }
+  return result;
+}
 
 TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
@@ -122,19 +135,22 @@ int main(int argc, char* argv[]) {
      */
     LOG(INFO) << "running bench_micro_cpu_socket_samesocket_baseline";
     CHECK_EQ(FLAGS_server_number, 49) << "only setup for dias49 at the moment";
-
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {scan_sum_micro,
-                                 "random_ints_scan_sum_same_socket"},
-         .shaper_type = Shaper::NVMECPU,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .compressed = false,
-         .compute_numa_nodes = {0, 1, 2, 3},
-         .pushdown_dop = std::nullopt,
-         .do_transfer = {true, true}});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {scan_sum_micro,
+                                "random_ints_scan_sum_same_socket"},
+        .shaper_type = Shaper::NVMECPU,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .compressed = false,
+        .compute_numa_nodes = {0, 1, 2, 3},
+        .pushdown_dop = std::nullopt,
+        .do_transfer = {true, true}};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
 
     ss << res;
     if (out_file.has_value()) {
@@ -150,16 +166,20 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "running bench_micro_cpu_socket_pushdown_baseline";
     CHECK_EQ(FLAGS_server_number, 49) << "only setup for dias49 at the moment";
 
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {scan_sum_micro, "random_ints_scan_sum_direct"},
-         .shaper_type = Shaper::NVMECPU,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .compressed = false,
-         .pushdown_dop = std::nullopt,
-         .do_transfer = {true, true}});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {scan_sum_micro, "random_ints_scan_sum_direct"},
+        .shaper_type = Shaper::NVMECPU,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .compressed = false,
+        .pushdown_dop = std::nullopt,
+        .do_transfer = {true, true}};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
 
     ss << res;
     if (out_file.has_value()) {
@@ -175,17 +195,21 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "running bench_micro_cpu_socket_stage_both";
     CHECK_EQ(FLAGS_server_number, 49) << "only setup for dias49 at the moment";
 
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {scan_sum_micro,
-                                 "random_ints_scan_sum_stage_both"},
-         .shaper_type = Shaper::NVMECPU,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .compressed = false,
-         .pushdown_dop = std::nullopt,
-         .do_transfer = {false, false}});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {scan_sum_micro,
+                                "random_ints_scan_sum_stage_both"},
+        .shaper_type = Shaper::NVMECPU,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .compressed = false,
+        .pushdown_dop = std::nullopt,
+        .do_transfer = {false, false}};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -199,17 +223,21 @@ int main(int argc, char* argv[]) {
      * 1 CPU. The first column is NVMe->socket1 directly.
      */
     LOG(INFO) << "running bench_micro_cpu_socket_stage_one";
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {scan_sum_micro,
-                                 "random_ints_scan_sum_stage_one"},
-         .shaper_type = Shaper::NVMECPU,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .compressed = false,
-         .pushdown_dop = std::nullopt,
-         .do_transfer = {true, false}});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {scan_sum_micro,
+                                "random_ints_scan_sum_stage_one"},
+        .shaper_type = Shaper::NVMECPU,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .compressed = false,
+        .pushdown_dop = std::nullopt,
+        .do_transfer = {true, false}};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
 
     ss << res;
     if (out_file.has_value()) {
@@ -233,20 +261,24 @@ int main(int argc, char* argv[]) {
                                    : std::make_optional(FLAGS_pushdown_dop);
     auto ts = global_timestamp_logger->log_time_range(
         "bench_pushdown_filter_" + std::to_string(pushdown_dop.value_or(0)));
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {[](proteus::QueryShaper& morph, double sel) {
-                                   return scan_sum_micro_pushdown(morph, sel,
-                                                                  false);
-                                 },
-                                 "random_ints_scan_sum_pushdown"},
-         .shaper_type = Shaper::NVMESOCKETPUSHDOWN,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .do_transfer = {false, false},
-         .compressed = false,
-         .pushdown_dop = pushdown_dop});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {[](proteus::QueryShaper& morph, double sel) {
+                                  return scan_sum_micro_pushdown(morph, sel,
+                                                                 false);
+                                },
+                                "random_ints_scan_sum_pushdown"},
+        .shaper_type = Shaper::NVMESOCKETPUSHDOWN,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .do_transfer = {false, false},
+        .compressed = false,
+        .pushdown_dop = pushdown_dop};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -265,20 +297,24 @@ int main(int argc, char* argv[]) {
     std::optional<size_t> pushdown_dop =
         (FLAGS_pushdown_dop == -1) ? std::nullopt
                                    : std::make_optional(FLAGS_pushdown_dop);
-    auto res = bench_nvme_vary_sel_micro(
-        {.server_number = FLAGS_server_number,
-         .prep_query_function = {[](proteus::QueryShaper& morph, double sel) {
-                                   return scan_sum_micro_pushdown(morph, sel,
-                                                                  false);
-                                 },
-                                 "random_ints_scan_sum_pushdown"},
-         .shaper_type = Shaper::NVMESOCKETPUSHDOWN,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_router_slack = 4,
-         .scan_memmove_slack = 8,
-         .do_transfer = {true, true},
-         .compressed = false,
-         .pushdown_dop = pushdown_dop});
+    VarySelMicroArgs args = {
+        .server_number = FLAGS_server_number,
+        .prep_query_function = {[](proteus::QueryShaper& morph, double sel) {
+                                  return scan_sum_micro_pushdown(morph, sel,
+                                                                 false);
+                                },
+                                "random_ints_scan_sum_pushdown"},
+        .shaper_type = Shaper::NVMESOCKETPUSHDOWN,
+        .num_iterations = FLAGS_num_iterations,
+        .scan_router_slack = 4,
+        .scan_memmove_slack = 8,
+        .do_transfer = {true, true},
+        .compressed = false,
+        .pushdown_dop = pushdown_dop};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_nvme_vary_sel_micro(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -287,11 +323,14 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_adaptive) {
     LOG(INFO) << "bench_micro_cpu_socket_adaptive";
-    auto res = bench_micro_cpu_adaptive_vary_sel(
-        {.server_number = FLAGS_server_number,
-         .num_iterations = FLAGS_num_iterations,
-         .pushdown_dop = FLAGS_pushdown_dop,
-         .scan_slack = 24});
+    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
+                                     .num_iterations = FLAGS_num_iterations,
+                                     .pushdown_dop = FLAGS_pushdown_dop,
+                                     .scan_slack = 24};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_micro_cpu_adaptive_vary_sel(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -300,11 +339,14 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_grouter_pd) {
     LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
-    auto res = bench_micro_cpu_grouter_pd_vary_sel(
-        {.server_number = FLAGS_server_number,
-         .num_iterations = FLAGS_num_iterations,
-         .pushdown_dop = FLAGS_pushdown_dop,
-         .scan_slack = 24});
+    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
+                                     .num_iterations = FLAGS_num_iterations,
+                                     .pushdown_dop = FLAGS_pushdown_dop,
+                                     .scan_slack = 24};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    auto res = bench_micro_cpu_grouter_pd_vary_sel(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -312,11 +354,15 @@ int main(int argc, char* argv[]) {
   }
 
   if (FLAGS_bench_micro_cpu_socket_grouter_stage_both) {
+    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
+                                     .num_iterations = FLAGS_num_iterations,
+                                     .pushdown_dop = FLAGS_pushdown_dop,
+                                     .scan_slack = 24};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
     LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
-    auto res = bench_micro_cpu_grouter_staging_vary_sel(
-        {.server_number = FLAGS_server_number,
-         .num_iterations = FLAGS_num_iterations,
-         .scan_slack = 24});
+    auto res = bench_micro_cpu_grouter_staging_vary_sel(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
