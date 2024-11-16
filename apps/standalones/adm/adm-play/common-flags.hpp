@@ -36,8 +36,8 @@ DEFINE_string(result_file, "",
               "[optional] output file for results [default: stdout]");
 
 DECLARE_string(timestamp_file);
-DEFINE_string(timestamp_file, "adm-play-timestamps.csv",
+DEFINE_string(timestamp_file, "adm-timestamps.csv",
               "[optional] output file for TimeStampLogger logs  [default: "
-              "adm-play-timestamps.csv]");
+              "adm-timestamps.csv]");
 
 #endif  // PROTEUS_COMMON_FLAGS_HPP

@@ -486,7 +486,7 @@ TEST_P(GRouterTestVaryNumConsumers, shared_local_policy) {
   }
 }
 
-TEST_P(GRouterTestVaryNumConsumers, random_consumer_data_local_policy) {
+TEST_P(GRouterTestVaryNumConsumers, random_consumer_force_data_local_policy) {
   const size_t num_splits = std::get<0>(GetParam());
   const DegreeOfParallelism split_path_dop =
       DegreeOfParallelism{std::get<1>(GetParam())};
@@ -525,8 +525,107 @@ TEST_P(GRouterTestVaryNumConsumers, random_consumer_data_local_policy) {
       rbf_split.getBuilder()
           .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
                 CatalogParser::getInstance(), pg{"block"})
-          .gsplit(gsplit_slack,
-                  GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL);
+          .gsplit(
+              gsplit_slack,
+              GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL);
+  std::vector<RelBuilder> splits;
+  for (size_t i = 0; i < num_splits; i++) {
+    splits.push_back(split_builder
+                         .path(DeviceType::CPU, split_path_dop,
+                               std::make_unique<CpuNumaNodeAffinitizer>())
+                         .unpack()
+                         .reduce(
+                             [&](const auto& arg) -> std::vector<expression_t> {
+                               std::vector<expression_t> ret;
+                               for (int j = 0; j < num_splits; j++) {
+                                 if (j == i) {
+                                   ret.push_back(expression_t{int64_t{1}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(arg["lo_suppkey"].as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 } else {
+                                   ret.push_back(expression_t{int64_t{0}}.as(
+                                       "tmp", "cnt" + std::to_string(j)));
+                                   ret.push_back(expression_t{int32_t{0}}.as(
+                                       "tmp", "sum" + std::to_string(j)));
+                                 }
+                               }
+                               return ret;
+                             },
+                             reduction_ops));
+  }
+
+  auto first_split = splits.front();
+  auto union_statement =
+      first_split.unionAll({splits.begin() + 1, splits.end()})
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                std::vector<expression_t> ret;
+                for (int j = 0; j < num_splits; j++) {
+                  ret.push_back(arg["cnt" + std::to_string(j)]);
+                  ret.push_back(arg["sum" + std::to_string(j)]);
+                }
+                return ret;
+              },
+              reduction_ops)
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto [counts, sums] =
+      parse_n_count_and_sum(union_statement.execute(), num_splits);
+  const size_t total_count = std::accumulate(counts.begin(), counts.end(), 0ul);
+  const size_t total_sum = std::accumulate(sums.begin(), sums.end(), 0);
+  EXPECT_EQ(baseline_count, total_count);
+  EXPECT_EQ(baseline_sum, total_sum);
+
+  std::vector<double> normalizedCounts = normalizeCounts(counts);
+  for (auto& split_percentage : normalizedCounts) {
+    LOG(INFO) << "Split percentage: " << split_percentage;
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.05)
+        << "expected a roughly equal distribution of work to splits";
+  }
+}
+
+TEST_P(GRouterTestVaryNumConsumers, random_consumer_prefer_data_local_policy) {
+  const size_t num_splits = std::get<0>(GetParam());
+  const DegreeOfParallelism split_path_dop =
+      DegreeOfParallelism{std::get<1>(GetParam())};
+  if (split_path_dop < topology::getInstance().getCpuNumaNodeCount()) {
+    GTEST_SKIP()
+        << "Skipping test with DOP smaller than the number of NUMA nodes";
+  }
+  auto rbf_baseline = getRelBuilderFactory();
+  auto baseline_statement =
+      rbf_baseline.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .unpack()
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                return {expression_t{int64_t{1}}.as("tmp", "cnt"),
+                        arg["lo_suppkey"].as("tmp", "sum")};
+              },
+              {SUM, SUM})
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto baseline_res = baseline_statement.execute();
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
+
+  // In the split case, the result is a num_splits*2 tuple
+  std::vector<Monoid> reduction_ops;
+  for (int i = 0; i < num_splits; i++) {
+    reduction_ops.push_back(SUM);
+    reduction_ops.push_back(SUM);
+  }
+
+  constexpr int gsplit_slack = 16;
+  auto rbf_split = getRelBuilderFactory();
+  auto split_builder =
+      rbf_split.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .gsplit(gsplit_slack, GeneralizedRoutingPolicy::
+                                    DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL);
   std::vector<RelBuilder> splits;
   for (size_t i = 0; i < num_splits; i++) {
     splits.push_back(split_builder
@@ -588,11 +687,13 @@ TEST_P(GRouterTestVaryNumConsumers, random_consumer_data_local_policy) {
  * Test the generalized router with a varying number of consumers (param 0),
  * a varying the dop of each consumer (param 1) and varying number of CPU NUMA
  * nodes to use for each consumer (param 2).
+ * Uses the DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL policy
  */
-class GRouterRandomLocalVaryNodes
+class GRouterRandomConsumerForceLocalVaryNodes
     : public GRouterTest,
       public ::testing::WithParamInterface<std::tuple<size_t, size_t, size_t>> {
 };
+// TODO add a test that loads all data to one numa node
 
 struct GRouterRandomLocalVaryNodesPrintToStringParamName {
   template <class ParamType>
@@ -607,14 +708,14 @@ struct GRouterRandomLocalVaryNodesPrintToStringParamName {
 };
 
 INSTANTIATE_TEST_SUITE_P(
-    GRouterRandomLocalVaryNodes, GRouterRandomLocalVaryNodes,
+    GRouterRandomLocalVaryNodes, GRouterRandomConsumerForceLocalVaryNodes,
     testing::Values(std::make_tuple(2, 1, 1), std::make_tuple(2, 4, 1),
                     std::make_tuple(2, 4, 2), std::make_tuple(2, 4, 4),
                     std::make_tuple(4, 4, 1)),
     GRouterRandomLocalVaryNodesPrintToStringParamName());
 
-TEST_P(GRouterRandomLocalVaryNodes,
-       random_consumer_data_local_policy_specific_numa_aff) {
+TEST_P(GRouterRandomConsumerForceLocalVaryNodes,
+       random_consumer_force_data_local_policy_specific_numa_aff) {
   const size_t num_splits = std::get<0>(GetParam());
   const DegreeOfParallelism split_path_dop =
       DegreeOfParallelism{std::get<1>(GetParam())};
@@ -660,8 +761,140 @@ TEST_P(GRouterRandomLocalVaryNodes,
       rbf_split.getBuilder()
           .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
                 CatalogParser::getInstance(), pg{"block"})
-          .gsplit(gsplit_slack,
-                  GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL);
+          .gsplit(
+              gsplit_slack,
+              GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL);
+  std::vector<RelBuilder> splits;
+  for (size_t i = 0; i < num_splits; i++) {
+    std::vector<uint32_t> numa_ids;
+    for (size_t k = 0; k < num_numa_per_consumer; k++) {
+      numa_ids.push_back(
+          topo.getCpuNumaNodes()[(k + 1) % topo.getCpuNumaNodeCount()]
+              .getLocalCpuId());
+    }
+    splits.push_back(
+        split_builder
+            .path(DeviceType::CPU, split_path_dop,
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(numa_ids))
+            .unpack()
+            .reduce(
+                [&](const auto& arg) -> std::vector<expression_t> {
+                  std::vector<expression_t> ret;
+                  for (int j = 0; j < num_splits; j++) {
+                    if (j == i) {
+                      ret.push_back(expression_t{int64_t{1}}.as(
+                          "tmp", "cnt" + std::to_string(j)));
+                      ret.push_back(arg["lo_suppkey"].as(
+                          "tmp", "sum" + std::to_string(j)));
+                    } else {
+                      ret.push_back(expression_t{int64_t{0}}.as(
+                          "tmp", "cnt" + std::to_string(j)));
+                      ret.push_back(expression_t{int32_t{0}}.as(
+                          "tmp", "sum" + std::to_string(j)));
+                    }
+                  }
+                  return ret;
+                },
+                reduction_ops));
+  }
+
+  auto first_split = splits.front();
+  auto union_statement =
+      first_split.unionAll({splits.begin() + 1, splits.end()})
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                std::vector<expression_t> ret;
+                for (int j = 0; j < num_splits; j++) {
+                  ret.push_back(arg["cnt" + std::to_string(j)]);
+                  ret.push_back(arg["sum" + std::to_string(j)]);
+                }
+                return ret;
+              },
+              reduction_ops)
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto [counts, sums] =
+      parse_n_count_and_sum(union_statement.execute(), num_splits);
+  const size_t total_count = std::accumulate(counts.begin(), counts.end(), 0ul);
+  const size_t total_sum = std::accumulate(sums.begin(), sums.end(), 0);
+  EXPECT_EQ(baseline_count, total_count);
+  EXPECT_EQ(baseline_sum, total_sum);
+
+  std::vector<double> normalizedCounts = normalizeCounts(counts);
+  for (auto& split_percentage : normalizedCounts) {
+    LOG(INFO) << "Split percentage: " << split_percentage;
+    EXPECT_NEAR(split_percentage, 1.0 / num_splits, 0.05)
+        << "expected a roughly equal distribution of work to splits";
+  }
+}
+
+/**
+ * Test the generalized router with a varying number of consumers (param 0),
+ * a varying the dop of each consumer (param 1) and varying number of CPU NUMA
+ * nodes to use for each consumer (param 2).
+ * Uses the DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL policy
+ */
+class GRouterRandomConsumerPreferLocalVaryNodes
+    : public GRouterTest,
+      public ::testing::WithParamInterface<std::tuple<size_t, size_t, size_t>> {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    GRouterRandomLocalVaryNodes, GRouterRandomConsumerPreferLocalVaryNodes,
+    testing::Values(std::make_tuple(2, 1, 1), std::make_tuple(2, 4, 1),
+                    std::make_tuple(2, 4, 2), std::make_tuple(2, 4, 4),
+                    std::make_tuple(4, 4, 1)),
+    GRouterRandomLocalVaryNodesPrintToStringParamName());
+
+TEST_P(GRouterRandomConsumerPreferLocalVaryNodes,
+       random_consumer_prefer_data_local_policy_specific_numa_aff) {
+  const size_t num_splits = std::get<0>(GetParam());
+  const DegreeOfParallelism split_path_dop =
+      DegreeOfParallelism{std::get<1>(GetParam())};
+  const size_t num_numa_per_consumer = std::get<2>(GetParam());
+
+  const auto& topo = topology::getInstance();
+
+  if (split_path_dop < num_numa_per_consumer) {
+    GTEST_SKIP()
+        << "Skipping test with DOP smaller than the number of NUMA nodes";
+  }
+  if (topo.getCpuNumaNodeCount() < 2) {
+    GTEST_SKIP() << "Skipping test with less than 2 NUMA nodes";
+  }
+  auto rbf_baseline = getRelBuilderFactory();
+  auto baseline_statement =
+      rbf_baseline.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .unpack()
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                return {expression_t{int64_t{1}}.as("tmp", "cnt"),
+                        arg["lo_suppkey"].as("tmp", "sum")};
+              },
+              {SUM, SUM})
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto baseline_res = baseline_statement.execute();
+  auto [baseline_count, baseline_sum] =
+      parse_single_count_and_sum(baseline_res);
+
+  // In the split case, the result is a num_splits*2 tuple
+  std::vector<Monoid> reduction_ops;
+  for (int i = 0; i < num_splits; i++) {
+    reduction_ops.push_back(SUM);
+    reduction_ops.push_back(SUM);
+  }
+
+  constexpr int gsplit_slack = 16;
+  auto rbf_split = getRelBuilderFactory();
+  auto split_builder =
+      rbf_split.getBuilder()
+          .scan("inputs/ssbm100/lineorder.csv", {"lo_suppkey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .gsplit(gsplit_slack, GeneralizedRoutingPolicy::
+                                    DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL);
   std::vector<RelBuilder> splits;
   for (size_t i = 0; i < num_splits; i++) {
     std::vector<uint32_t> numa_ids;

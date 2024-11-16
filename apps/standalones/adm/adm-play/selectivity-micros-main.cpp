@@ -69,6 +69,17 @@ DEFINE_bool(bench_micro_cpu_socket_adaptive, false, "");
 DECLARE_bool(bench_micro_cpu_socket_samesocket_baseline);
 DEFINE_bool(bench_micro_cpu_socket_samesocket_baseline, false, "");
 
+DECLARE_bool(bench_micro_cpu_socket_grouter_pd);
+DEFINE_bool(bench_micro_cpu_socket_grouter_pd, false, "");
+
+DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both);
+DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both, false, "");
+
+DECLARE_bool(exit_loop);
+DEFINE_bool(exit_loop, false,
+            "Enter an infinite loop after benchmarks have completed, awaiting "
+            "a SIGKILL");
+
 DECLARE_int32(pushdown_dop);
 DEFINE_int32(
     pushdown_dop, -1,
@@ -279,7 +290,33 @@ int main(int argc, char* argv[]) {
     auto res = bench_micro_cpu_adaptive_vary_sel(
         {.server_number = FLAGS_server_number,
          .num_iterations = FLAGS_num_iterations,
-         .pushdown_dop = FLAGS_pushdown_dop});
+         .pushdown_dop = FLAGS_pushdown_dop,
+         .scan_slack = 24});
+    ss << res;
+    if (out_file.has_value()) {
+      *out_file << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_grouter_pd) {
+    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
+    auto res = bench_micro_cpu_grouter_pd_vary_sel(
+        {.server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations,
+         .pushdown_dop = FLAGS_pushdown_dop,
+         .scan_slack = 24});
+    ss << res;
+    if (out_file.has_value()) {
+      *out_file << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_grouter_stage_both) {
+    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
+    auto res = bench_micro_cpu_grouter_staging_vary_sel(
+        {.server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations,
+         .scan_slack = 24});
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;
@@ -289,5 +326,11 @@ int main(int argc, char* argv[]) {
   std::cout << ss.str();
   auto& sm = StorageManager::getInstance();
   sm.unloadAll();
-  return 0;
+  if (FLAGS_exit_loop) {
+    LOG(INFO) << " benchmarks complete, entering do while loop";
+    while (true) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  }
+  //  return 0;
 }

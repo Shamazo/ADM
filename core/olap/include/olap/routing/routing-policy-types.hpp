@@ -30,17 +30,35 @@ enum class RoutingPolicy { RANDOM, LOCAL, FORCE_LOCAL, HASH_BASED };
  * @see GeneralizedRouter
  */
 enum class GeneralizedRoutingPolicy {
-  SHARED_RANDOM,  /// Random across all consumers and without regard for data
-                  /// locality
-  SHARED_LOCAL,   /// Random across all consumers but with regard for data
-                  /// locality
-  SHARED_FORCE_LOCAL,  /// For now the same as SHARED_LOCAL
-  SHARED_HASH_BASED,  /// Hash-based routing with consumers sharing queues. This
-                      /// is not implemented
-  DISTINCT_RANDOM_SPLIT_DATA_LOCAL  /// Random across consumers but with regard
-                                    /// for data locality. Unlike SHARED_LOCAL,
-                                    /// this policy uses separate queues per
-                                    /// consumer
+  /**
+   * Random across all consumers and without regard for data locality
+   */
+  SHARED_RANDOM,
+  /**
+   * Random across all consumers but with regard for data locality
+   */
+  SHARED_LOCAL,
+  /**
+   * For now the same as SHARED_LOCAL
+   */
+  SHARED_FORCE_LOCAL,
+  /**
+   * Hash-based routing with consumers sharing queues. This is not implemented
+   */
+  SHARED_HASH_BASED,
+  /**
+   * Random across consumers but force use of a data local queue. Unlike
+   * SHARED_LOCAL, this policy uses separate queues per consumer. This policy
+   * will retry across  consumers, but each retry will use a data local queue
+   */
+  DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL,
+  /**
+   * Random across consumers but prefer use of a data local queue. Unlike
+   * SHARED_LOCAL, this policy uses separate queues per consumer. This policy
+   * will retry across consumers and retries will then use a random queue of the
+   * consumer
+   */
+  DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL,
 };
 
 #endif  // PROTEUS_ROUTING_POLICY_TYPES_HPP

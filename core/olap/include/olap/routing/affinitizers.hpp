@@ -59,6 +59,13 @@ class Affinitizer {
   [[nodiscard]] virtual size_t countAffCUs() const = 0;
 
   /**
+   *
+   * @return A vector of indexes (in topology) of the compute units (CUs) that
+   * this affinitizer may return
+   */
+  [[nodiscard]] virtual std::vector<size_t> getCUIndexDomain() const = 0;
+
+  /**
    * The total number of compute units (CUs), of the type this Affinitizer
    * returns, in the system
    *
@@ -132,6 +139,12 @@ class CpuNumaNodeAffinitizer : public Affinitizer {
     return topology::getInstance().getCpuNumaNodeCount();
   }
 
+  [[nodiscard]] std::vector<size_t> getCUIndexDomain() const override {
+    std::vector<size_t> domain(topology::getInstance().getCpuNumaNodeCount());
+    std::iota(domain.begin(), domain.end(), 0);
+    return domain;
+  }
+
   [[nodiscard]] size_t countAllCUs() const override {
     return topology::getInstance().getCpuNumaNodeCount();
   }
@@ -198,6 +211,16 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
 
   [[nodiscard]] size_t countAffCUs() const override {
     return m_node_ids.size();
+  }
+
+  [[nodiscard]] std::vector<size_t> getCUIndexDomain() const override {
+    std::vector<size_t> domain;
+    domain.reserve(m_node_ids.size());
+    for (const auto &id : m_node_ids) {
+      domain.push_back(
+          topology::getInstance().getCpuNumaNodeById(id).index_in_topo);
+    }
+    return domain;
   }
 
   [[nodiscard]] size_t countAllCUs() const override {
@@ -306,6 +329,12 @@ class GPUAffinitizer : public Affinitizer {
 
   [[nodiscard]] size_t countAffCUs() const override {
     return topology::getInstance().getGpuCount();
+  }
+
+  [[nodiscard]] std::vector<size_t> getCUIndexDomain() const override {
+    std::vector<size_t> domain(topology::getInstance().getGpuCount());
+    std::iota(domain.begin(), domain.end(), 0);
+    return domain;
   }
 
   [[nodiscard]] size_t countAllCUs() const override {

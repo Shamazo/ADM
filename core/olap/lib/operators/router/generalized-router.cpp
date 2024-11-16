@@ -233,7 +233,7 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
       // TODO getPolicy isn't used for SHARED_RANDOM
       return std::make_unique<routing::Random>(dop);
     }
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL: {
       std::vector<Affinitizer *> affs;
       std::vector<DeviceType> device_types;
       for (auto &consumer : consumers) {
@@ -241,7 +241,18 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
         affs.emplace_back(c_ptr->aff.get());
         device_types.emplace_back(c_ptr->target_device);
       }
-      return std::make_unique<routing::RandomSplitDataLocal>(
+      return std::make_unique<routing::RandomSplitForceDataLocal>(
+          _wantedFields, affs, device_types);
+    }
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
+      std::vector<Affinitizer *> affs;
+      std::vector<DeviceType> device_types;
+      for (auto &consumer : consumers) {
+        auto c_ptr = consumer.lock();
+        affs.emplace_back(c_ptr->aff.get());
+        device_types.emplace_back(c_ptr->target_device);
+      }
+      return std::make_unique<routing::RandomSplitPreferDataLocal>(
           _wantedFields, affs, device_types);
     }
     default: {
@@ -560,7 +571,8 @@ size_t GeneralizedRouter::getNumberOfQueues() const {
       }
       return consumer_dop;
     }
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
+    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
       auto &topo = topology::getInstance();
       return consumers.size() *
              (topo.getCpuNumaNodeCount() + topo.getGpuCount());
@@ -637,7 +649,9 @@ void GeneralizedRouter::open(Pipeline *pip) {
         case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
           return 0;
         }
-        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
+        case GeneralizedRoutingPolicy::
+            DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
           return consumer_index * num_numa_nodes;
         }
         default: {
@@ -893,7 +907,9 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
             return false;
           }
         }
-        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_DATA_LOCAL: {
+        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
+        case GeneralizedRoutingPolicy::
+            DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
           return i < local_targets.size();
         }
         default:

@@ -96,16 +96,40 @@ class Local : public RoutingPolicy {
  * Each consumer supplies their own Affinitizer, that returns an index of
  * the target node/GPU in the topology, and target device.
  */
-class RandomSplitDataLocal : public RoutingPolicy {
+class RandomSplitForceDataLocal : public RoutingPolicy {
   const RecordAttribute wantedField;
   std::vector<Affinitizer *>
       consumer_affs;  // use pointer to satisfy lifetime requirements
   std::vector<size_t> consumer_offsets;
 
  public:
-  RandomSplitDataLocal(const std::vector<RecordAttribute *> &wantedFields,
-                       std::vector<Affinitizer *> consumer_affs,
-                       const std::vector<DeviceType> &consumer_device_types);
+  RandomSplitForceDataLocal(
+      const std::vector<RecordAttribute *> &wantedFields,
+      std::vector<Affinitizer *> consumer_affs,
+      const std::vector<DeviceType> &consumer_device_types);
+  routing_target evaluate(OlapParallelContext *context,
+                          const OperatorState &childState,
+                          ProteusValueMemory retrycnt) override;
+};
+
+/**
+ * This is nearly the same as RandomSplitForceDataLocal. On the first attempt,
+ * it will select a random consumer and then force a data local queue. On
+ * retries it will select a random consumer and a random queue ignoring data
+ * locality
+ */
+class RandomSplitPreferDataLocal : public RoutingPolicy {
+  const RecordAttribute wantedField;
+  std::vector<Affinitizer *>
+      consumer_affs;  // use pointer to satisfy lifetime requirements
+  std::vector<size_t> consumer_offsets;
+  std::vector<DeviceType> device_types;
+
+ public:
+  RandomSplitPreferDataLocal(
+      const std::vector<RecordAttribute *> &wantedFields,
+      std::vector<Affinitizer *> consumer_affs,
+      const std::vector<DeviceType> &consumer_device_types);
   routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
