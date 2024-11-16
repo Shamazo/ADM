@@ -1,6 +1,7 @@
 import logging
 import functools
 import pandas as pd
+import json
 
 from .trace_generator import TraceGenerator, Group, NormalTrack, CounterTrack
 from pathlib import Path
@@ -10,9 +11,35 @@ from typing import Dict
 def parse_timeline(input_path: Path, output_path: Path):
     logging.info(f"Parsing trace logs in `{input_path}` and writing Perfetto trace to `{output_path}`")
     tgen = TraceGenerator(str(output_path))
+    parse_adm_timestamps(input_path, tgen)
     min_raw_time_stamp = parse_timeline_ranges(input_path, tgen)
     parse_counters(input_path, tgen, min_raw_time_stamp)
     # TODO parse events if we start using them in proteus
+
+
+def parse_adm_timestamps(input_path: Path, tgen: TraceGenerator):
+    group = tgen.create_group("global_times")
+    adm_stamps_path = input_path / "adm-timestamps.csv"
+    if not adm_stamps_path.exists():
+        logging.warning(f"adm timestamps not found at {adm_stamps_path}")
+        return
+    try:
+        timestamps = pd.read_csv(adm_stamps_path, quotechar='"')
+    except Exception as E:
+        logging.warning(f"Failed to parse adm timestamps from {adm_stamps_path} with {E}")
+        return
+    # all timestamps are relative for this one
+    timestamps['timestamp_start'] = timestamps['timestamp_start'].astype(int)
+    timestamps['timestamp_end'] = timestamps['timestamp_end'].astype(int)
+
+    for row in timestamps.itertuples():
+        try:
+            group.open(row.timestamp_start, row.name, json.loads(row.extra))
+        except:
+            logging.warning(f"failed to parse extra {row.extra}")
+            group.open(row.timestamp_start, row.name)
+
+        group.close(row.timestamp_end)
 
 
 def parse_counters(input_path: Path, tgen: TraceGenerator, min_raw_time_stamp: int):
@@ -23,23 +50,27 @@ def parse_counters(input_path: Path, tgen: TraceGenerator, min_raw_time_stamp: i
     timeline_counters_path = input_path / "timeline-counters.csv"
     if not timeline_counters_path.exists():
         logging.fatal(f"timelime counters not found at {timeline_counters_path}")
-
+    logging.info(f"parsing counters from {timeline_counters_path}")
     rdtsc_freq = get_rdtsc_frequency(input_path)
     timeline_counters = pd.read_csv(timeline_counters_path)
     unique_operators = timeline_counters['operator'].unique()
     counter_id_to_str = parse_counter_legend(input_path)
 
     for operator in unique_operators:
-        group = tgen.create_group(operator)
+        group = tgen.create_group(operator, None, 1)
         operator_c_tracks: Dict[(str, int), CounterTrack] = dict()
         operator_counters = timeline_counters[timeline_counters['operator'] == operator]
-        for row in operator_counters.itertuples():
-            if (row.counter, row.counter_index) not in operator_c_tracks:
-                operator_c_tracks[(row.counter, row.counter_index)] = group.create_counter_track(
-                    f"{counter_id_to_str[row.counter]}-{row.counter_index}")
-            track: CounterTrack = operator_c_tracks[(row.counter, row.counter_index)]
-            # convert to ns
-            track.count(round((row.timestamp - min_raw_time_stamp) * rdtsc_freq), row.value)
+        unique_idxs = operator_counters['counter_index'].unique()
+        unique_idxs.sort()
+        for idx in unique_idxs:
+            operator_id_rows = operator_counters[operator_counters['counter_index'] == idx]
+            for row in operator_id_rows.itertuples():
+                if (row.counter, row.counter_index) not in operator_c_tracks:
+                    operator_c_tracks[(row.counter, row.counter_index)] = group.create_counter_track(
+                        f"{counter_id_to_str[row.counter]}-{row.counter_index:02}")
+                track: CounterTrack = operator_c_tracks[(row.counter, row.counter_index)]
+                # convert to ns
+                track.count(round((row.timestamp - min_raw_time_stamp) * rdtsc_freq), row.value)
 
 
 def parse_counter_legend(input_path: Path) -> dict[int, str]:

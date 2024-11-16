@@ -249,6 +249,10 @@ std::string bench_micro_cpu_adaptive_vary_sel(VarySelMicroAdaptiveArgs args) {
     auto query = scan_sum_micro_adaptive(
         *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
         args.scan_slack, args.policy);
+    auto ts = global_timestamp_logger->log_time_range(
+        "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
+                         R"(, ""query"": "")" +
+                         args.prep_query_function.second + "\"\"}\"");
 
     auto bench_res = benchmark_query("adaptive", query, args.num_iterations);
 
@@ -292,6 +296,10 @@ std::string bench_micro_cpu_grouter_pd_vary_sel(VarySelMicroAdaptiveArgs args) {
     auto query = scan_sum_micro_grouter_pushdown(
         *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
         args.scan_slack, args.policy);
+    auto ts = global_timestamp_logger->log_time_range(
+        "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
+                         R"(, ""query"": "")" +
+                         args.prep_query_function.second + "\"\"}\"");
 
     auto bench_res = benchmark_query("grouter_pd", query, args.num_iterations);
 
@@ -336,6 +344,10 @@ std::string bench_micro_cpu_grouter_staging_vary_sel(
     auto query = scan_sum_micro_grouter_staging(
         *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
         args.scan_slack, args.policy);
+    auto ts = global_timestamp_logger->log_time_range(
+        "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
+                         R"(, ""query"": "")" +
+                         args.prep_query_function.second + "\"\"}\"");
 
     auto bench_res =
         benchmark_query("grouter_staging", query, args.num_iterations);

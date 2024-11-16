@@ -83,7 +83,7 @@ QueryBenchResult benchmark_query(const std::string& label,
   {
     LOG(INFO) << "warmup_begin";
     auto ts = global_timestamp_logger->log_time_range(
-        "query_warmup", R"({""query"": "")" + label + "\"\"}");
+        "query_warmup", R"("{""query"": "")" + label + "\"\"}\"");
     auto res = statement.execute();
     LOG(INFO) << "warmup_end";
     std::stringstream ss;
@@ -97,8 +97,9 @@ QueryBenchResult benchmark_query(const std::string& label,
     LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
               << label;
     auto ts = global_timestamp_logger->log_time_range(
-        "query_execute", R"("{""query"": )" + label + R"(, ""iteration"": )" +
-                             std::to_string(i) + "}");
+        "bench_query_execute", R"("{""query"": "")" + label +
+                             R"("", ""iteration"": )" + std::to_string(i) +
+                             "}\"");
 
     profiling::ProfileRegion pr(pr_type);
 
