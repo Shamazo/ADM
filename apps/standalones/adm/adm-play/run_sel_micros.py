@@ -39,6 +39,19 @@ class BenchmarkRunner:
         """Construct full argument string for a benchmark."""
         return f"{self.common_args} {benchmark.args}".replace("{output_dir}", str(output_dir))
 
+    def start_iostat_collection(self) -> subprocess.Popen:
+        """Start iostat collection process."""
+        # run iostat once to clear any previous data
+        os.environ["S_TIME_FORMAT"] = "ISO"
+        subprocess.run(['iostat'], check=True)
+        iostat_output = "iostat_output.json"
+        return subprocess.Popen(
+            ['iostat', '-xm', '1', '-o', 'JSON', '-t'],
+            stdout=open(iostat_output, 'w'),
+            stderr=subprocess.PIPE,
+            env=os.environ
+        )
+
     def create_trace(self, outdir: Path, trace_name: str = "out.trace") -> None:
         """Create a trace file using conda."""
         try:
@@ -202,6 +215,7 @@ class BenchmarkRunner:
                           "./selectivity-micros"
                       ] + benchmark_args.split()
 
+                iostat_process = self.start_iostat_collection()
                 logging.debug(f"Running command: {' '.join(cmd)}")
                 subprocess.run(
                     cmd,
@@ -210,6 +224,9 @@ class BenchmarkRunner:
                     stderr=subprocess.STDOUT,
                     check=True,
                     env=os.environ)
+                iostat_process.send_signal(subprocess.signal.SIGINT)
+                time.sleep(1)
+                iostat_process.terminate()
 
                 # Process perf data and generate flame graph
                 subprocess.run(["perf", "inject", "-j", "-i", "/tmp/perf.data", "-o", "perf.data.jit"], check=True)
@@ -334,15 +351,17 @@ class BenchmarkRunner:
             logging.debug(f"Command: ./selectivity-micros {benchmark_args}")
 
             try:
+                iostat_process = self.start_iostat_collection()
                 subprocess.run(
                     ["./selectivity-micros"] + benchmark_args.split(),
                     stdout=open(log_file, "a"),
                     stderr=subprocess.STDOUT,
                     check=True
                 )
-
+                iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
-                subprocess.run(f"cp -r ./generated_code {output_dir}", shell=True, check=True)
+                iostat_process.terminate()
+                subprocess.run(f"mv -r ./generated_code {output_dir}", shell=True, check=True)
                 self.create_trace(output_dir,
                                   f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
                 subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
