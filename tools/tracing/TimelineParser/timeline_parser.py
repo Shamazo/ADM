@@ -2,19 +2,63 @@ import logging
 import functools
 import pandas as pd
 import json
+from datetime import datetime
 
 from .trace_generator import TraceGenerator, Group, NormalTrack, CounterTrack
 from pathlib import Path
 from typing import Dict
+import pytz
 
 
 def parse_timeline(input_path: Path, output_path: Path):
     logging.info(f"Parsing trace logs in `{input_path}` and writing Perfetto trace to `{output_path}`")
     tgen = TraceGenerator(str(output_path))
     parse_adm_timestamps(input_path, tgen)
-    min_raw_time_stamp = parse_timeline_ranges(input_path, tgen)
+    min_raw_time_stamp, start_dt = parse_timeline_ranges(input_path, tgen)
+    parse_iostat(input_path, tgen, start_dt)
     parse_counters(input_path, tgen, min_raw_time_stamp)
     # TODO parse events if we start using them in proteus
+
+
+def parse_iostat(input_path: Path, tgen: TraceGenerator, start_dt: datetime):
+    """Parse iostat data. iostat must be recorded with the '-o JSON'  and '-t' flags]"""
+
+    io_stat_path = input_path / "iostat_output.json"
+    logging.info(f"parsing counters from {io_stat_path}")
+
+    if not io_stat_path.exists():
+        logging.warning(f"iostat output not found at {io_stat_path}")
+        return
+    bw_group = tgen.create_group("nvme_read_bw")
+    lat_group = tgen.create_group("nvme_read_lat")
+    with open(io_stat_path, 'r') as f:
+        try:
+            iostat_data = json.load(f)
+        except Exception as E:
+            logging.warning(f"Failed to parse io stat json from {io_stat_path} with {E}")
+            return
+        # Extract all timestamps and sysstat data
+        nvme_bw_tracks: Dict[str, CounterTrack] = dict()
+        nvme_lat_tracks: Dict[str, CounterTrack] = dict()
+
+        for entry in iostat_data['sysstat']['hosts'][0]['statistics']:
+            # we replace the TZ infor because you cannot diff a DT without a timezone from a DT with a timezone
+            ts = datetime.fromisoformat(entry['timestamp']).astimezone(pytz.utc)
+            time_since_start_ns = (ts - start_dt).total_seconds() * 1e9
+            if (time_since_start_ns < 0):
+                # proteus hasn't started yet
+                continue
+            time_since_start_ns = int(time_since_start_ns)
+            for disk in entry['disk']:
+                if disk['disk_device'] not in nvme_bw_tracks:
+                    nvme_bw_tracks[disk['disk_device']] = bw_group.create_counter_track(
+                        f"{disk['disk_device']} - R MB/s")
+                    nvme_lat_tracks[disk['disk_device']] = lat_group.create_counter_track(
+                        f"{disk['disk_device']} - r_await")
+                bw_track = nvme_bw_tracks[disk['disk_device']]
+                bw_track.count(time_since_start_ns, round(float(disk['rMB/s'])))
+                lat_track = nvme_lat_tracks[disk['disk_device']]
+                lat_track.count(time_since_start_ns, round(float(disk['r_await'])))
 
 
 def parse_adm_timestamps(input_path: Path, tgen: TraceGenerator):
@@ -115,7 +159,7 @@ def get_rdtsc_frequency(input_path: Path) -> float:
     return ns_per_tick
 
 
-def parse_timeline_ranges(input_path: Path, tgen: TraceGenerator) -> int:
+def parse_timeline_ranges(input_path: Path, tgen: TraceGenerator) -> (int, datetime):
     """
     :return: minimum raw rdtsc timestamp in timeline-ranges.csv
     """
@@ -138,6 +182,12 @@ def parse_timeline_ranges(input_path: Path, tgen: TraceGenerator) -> int:
     start_rdtsc_tick = min(timeline_ranges['timestamp_start'])
 
     opcode_dict = parse_timeline_ranges_op_legend(input_path)
+    logger_timestamp_op_code = list(opcode_dict.keys())[list(opcode_dict.values()).index("LOGGER_TIMESTAMP")]
+    # see tracing.cpp
+    first_row = timeline_ranges[timeline_ranges['op'] == logger_timestamp_op_code].sort_values('timestamp_start').iloc[
+        0]
+    start_nanos_since_epoch = first_row['instance_id']
+    dt = datetime.fromtimestamp(start_nanos_since_epoch / 1e9, tz=pytz.utc)
 
     for row in timeline_ranges.itertuples():
         if row.thread_id not in thread_mapping:
@@ -154,7 +204,7 @@ def parse_timeline_ranges(input_path: Path, tgen: TraceGenerator) -> int:
                    {"pipeline": row.pipeline_id, "instance": row.instance_id, "uuid": row.operator})
         track.close(round((row.timestamp_end - start_rdtsc_tick) * rdtsc_freq))
 
-    return start_rdtsc_tick
+    return start_rdtsc_tick, dt
 
 
 def parse_timeline_ranges_op_legend(input_path: Path) -> Dict[int, str]:
