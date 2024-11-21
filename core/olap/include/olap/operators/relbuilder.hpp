@@ -434,12 +434,13 @@ class RelBuilder {
    * @param     fanout  degree of parallelism for the pipeline after the union
    * @param     aff affinitizer to use for the pipeline instances after the
    * union
+   * @param     slack unionAll queue slack
    */
   [[nodiscard]] RelBuilder unionAll(
       const std::vector<RelBuilder>& others,
       DegreeOfParallelism fanout = DegreeOfParallelism{1},
-      std::unique_ptr<Affinitizer> aff =
-          getDefaultAffinitizer(DeviceType::CPU)) const;
+      std::unique_ptr<Affinitizer> aff = getDefaultAffinitizer(DeviceType::CPU),
+      size_t slack = 128) const;
 
   [[nodiscard]] RelBuilder to_gpu() const;
 
@@ -677,7 +678,8 @@ class RelBuilder {
   [[nodiscard]] RelBuilder unionAll(
       const std::vector<RelBuilder>& children,
       const std::vector<RecordAttribute*>& wantedFields,
-      DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff) const;
+      DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff,
+      size_t slack) const;
 
   [[nodiscard]] RelBuilder membrdcst(
       const std::vector<RecordAttribute*>& wantedFields,

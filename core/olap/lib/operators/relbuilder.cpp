@@ -1029,19 +1029,21 @@ SplitRelBuilder RelBuilder::gsplit(size_t slack,
 
 RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,
                                 DegreeOfParallelism fanout,
-                                std::unique_ptr<Affinitizer> aff) const {
+                                std::unique_ptr<Affinitizer> aff,
+                                size_t slack) const {
   std::vector<RecordAttribute *> projections;
   for (const auto &attr : getOutputArg().getProjections()) {
     projections.emplace_back(new RecordAttribute{attr});
   }
 
-  return unionAll(children, projections, fanout, std::move(aff));
+  return unionAll(children, projections, fanout, std::move(aff), slack);
 }
 
 RelBuilder RelBuilder::unionAll(
     const std::vector<RelBuilder> &children,
     const std::vector<RecordAttribute *> &wantedFields,
-    DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff) const {
+    DegreeOfParallelism fanout, std::unique_ptr<Affinitizer> aff,
+    size_t slack) const {
   std::vector<std::shared_ptr<Operator>> c2{root};
   c2.reserve(children.size() + 1);
   for (const auto &c : children) c2.emplace_back(c.root);
@@ -1049,7 +1051,8 @@ RelBuilder RelBuilder::unionAll(
       std::make_shared<UnionAll>(UnionAll::Args{.children = std::move(c2),
                                                 .wantedFields = wantedFields,
                                                 .fanout = fanout,
-                                                .affinitizer = std::move(aff)});
+                                                .affinitizer = std::move(aff),
+                                                .slack = slack});
   for (const auto &c : children) c.apply(op);
   return apply(op);
 }
