@@ -75,8 +75,15 @@ DEFINE_bool(bench_micro_cpu_socket_grouter_pd, false, "");
 DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both);
 DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both, false, "");
 
+DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both_partial_sum);
+DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both_partial_sum, false, "");
+
 DECLARE_string(selectivities);
 DEFINE_string(selectivities, "", "Comma-separated list of doubles in [0,1]");
+
+DECLARE_string(grouter_policy);
+DEFINE_string(grouter_policy, "DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+              "Comma-separated list of doubles in [0,1]");
 
 DECLARE_bool(exit_loop);
 DEFINE_bool(exit_loop, false,
@@ -323,10 +330,16 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_adaptive) {
     LOG(INFO) << "bench_micro_cpu_socket_adaptive";
-    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
-                                     .num_iterations = FLAGS_num_iterations,
-                                     .pushdown_dop = FLAGS_pushdown_dop,
-                                     .scan_slack = 24};
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+
+    VarySelMicroAdaptiveArgs args = {
+        .server_number = FLAGS_server_number,
+        .num_iterations = FLAGS_num_iterations,
+        .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
+        .scan_slack = 24,
+        .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
     }
@@ -339,10 +352,15 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_grouter_pd) {
     LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
-    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
-                                     .num_iterations = FLAGS_num_iterations,
-                                     .pushdown_dop = FLAGS_pushdown_dop,
-                                     .scan_slack = 24};
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+    VarySelMicroAdaptiveArgs args = {
+        .server_number = FLAGS_server_number,
+        .num_iterations = FLAGS_num_iterations,
+        .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
+        .scan_slack = 24,
+        .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
     }
@@ -354,15 +372,43 @@ int main(int argc, char* argv[]) {
   }
 
   if (FLAGS_bench_micro_cpu_socket_grouter_stage_both) {
-    VarySelMicroAdaptiveArgs args = {.server_number = FLAGS_server_number,
-                                     .num_iterations = FLAGS_num_iterations,
-                                     .pushdown_dop = FLAGS_pushdown_dop,
-                                     .scan_slack = 24};
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+
+    VarySelMicroAdaptiveArgs args = {
+        .server_number = FLAGS_server_number,
+        .num_iterations = FLAGS_num_iterations,
+        .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
+        .scan_slack = 24,
+        .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
     }
-    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
+    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_stage_both";
     auto res = bench_micro_cpu_grouter_staging_vary_sel(args);
+    ss << res;
+    if (out_file.has_value()) {
+      *out_file << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_micro_cpu_socket_grouter_stage_both_partial_sum) {
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+
+    VarySelMicroAdaptiveArgs args = {
+        .server_number = FLAGS_server_number,
+        .num_iterations = FLAGS_num_iterations,
+        .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
+        .scan_slack = 24,
+        .policy = policy};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_stage_both";
+    auto res = bench_micro_cpu_grouter_staging_partial_sum_vary_sel(args);
     ss << res;
     if (out_file.has_value()) {
       *out_file << res << std::endl;

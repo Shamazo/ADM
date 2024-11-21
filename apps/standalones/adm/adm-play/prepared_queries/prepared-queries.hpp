@@ -59,14 +59,24 @@ PreparedStatement scan_sum_micro_grouter_staging(
     DegreeOfParallelism pushdown_dop, int scan_slack,
     GeneralizedRoutingPolicy policy);
 
+/**
+ * Partial reduction before the union all in the same compiled pipeline as the filter
+ */
+PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
+        proteus::QueryShaper &morph, double selectivity,
+        DegreeOfParallelism pushdown_dop, int scan_slack,
+        GeneralizedRoutingPolicy policy);
+
 PreparedStatement scan_sum_micro_grouter_pushdown(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
     GeneralizedRoutingPolicy policy);
 
 PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
-                                            double selectivity,
-                                            DegreeOfParallelism pushdown_dop);
+                                          double selectivity,
+                                          DegreeOfParallelism pushdown_dop,
+                                          int scan_slack,
+                                          GeneralizedRoutingPolicy policy);
 
 /**
  * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter

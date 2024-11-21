@@ -361,4 +361,53 @@ std::string bench_micro_cpu_grouter_staging_vary_sel(
   return result_string.str();
 }
 
+std::string bench_micro_cpu_grouter_staging_partial_sum_vary_sel(
+    VarySelMicroAdaptiveArgs args) {
+  CHECK(args.server_number == 49)
+      << "not set up for this server: " << args.server_number;
+
+  std::stringstream result_string;
+
+  result_string << "query,"
+                << "num_drives,"
+                << "time_ms,"
+                << "date,"
+                << "query_output,"
+                << "selectivity," << args.header() << std::endl;
+
+  const auto md_dirs =
+      get_ran_ints_input_dirs_socket_zero_12_drives(args.server_number);
+
+  // row count. This is currently hardcoded to the row count of 100GiB of ints
+  // and also is not currently used in mem-move for selectivity estimates
+  std::map<std::string, std::function<double(proteus::InputPrefixQueryShaper&)>>
+      sel_micro_stats = {
+          {"random_ints_100GB_10000", [](auto&) { return 26843545600.0; }}};
+
+  // arguments apart from MD_dirs, input prefix, and stats are not used
+  std::unique_ptr<proteus::QueryShaper> shaper =
+      std::make_unique<proteus::CPUOnlyNVMeMorsel>(
+          md_dirs, "inputs/random_ints", sel_micro_stats, true, 0, 0, 16);
+
+  for (const double& sel : args.selectivities) {
+    auto query = scan_sum_micro_grouter_staging_partial_reduction(
+        *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
+        args.scan_slack, args.policy);
+    auto ts = global_timestamp_logger->log_time_range(
+        "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
+                         R"(, ""query"": "")" +
+                         args.prep_query_function.second + "\"\"}\"");
+
+    auto bench_res = benchmark_query("grouter_staging_partial_sums", query,
+                                     args.num_iterations);
+
+    result_string << bench_res.label << "," << md_dirs.size() << ","
+                  << bench_res.average_query_time.count() << ","
+                  << get_current_date_str() << "," << bench_res.query_result
+                  << "," << sel << "," << args << std::endl;
+  }
+
+  return result_string.str();
+}
+
 #endif  // PROTEUS_SELECTIVITY_MICROS_HPP
