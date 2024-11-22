@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Optional
+import json
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+import traceback
 
 
 @dataclass
@@ -17,6 +21,67 @@ class BenchmarkConfig:
     shortname: str
     args: str
     shortname_with_args: Optional[str] = None
+
+
+class SlackThread:
+    def __init__(self, initial_message: str):
+        self.slack_client = None
+        self.slack_thread_ts = None
+        self.channel_id = None
+        if os.environ.get('SLACK_TOKEN'):
+            self.slack_client = WebClient(token=os.environ['SLACK_TOKEN'])
+            self.channel_id = self.get_channel_id("adm-reports")
+            thread_parent = self.slack_client.chat_postMessage(
+                channel=self.channel_id,
+                text=f"{initial_message}"
+            )
+            self.slack_thread_ts = thread_parent['ts']
+
+    def get_channel_id(self, channel_name: str):
+        """
+        Get channel ID from channel name
+
+        Args:
+            channel_name (str): Channel name without # (e.g. 'general')
+        Returns:
+            str: Channel ID
+        """
+        # List all channels
+        result = self.slack_client.conversations_list(types='private_channel')
+        for channel in result["channels"]:
+            if channel["name"] == channel_name:
+                return channel["id"]
+
+        raise ValueError(f"Channel {channel_name} not found")
+
+    def send_slack_message(self, message: str, to_channel: bool = False):
+        """Send a message to the existing slack thread."""
+        if self.slack_client is not None:
+            try:
+                self.slack_client.chat_postMessage(
+                    channel=self.channel_id,
+                    text=message,
+                    thread_ts=self.slack_thread_ts,
+                    reply_broadcast=to_channel
+                )
+            except SlackApiError as e:
+                print(f"Error sending message to slack: {e}")
+
+    def send_file(self, message: str, file_path: str):
+        """Send a file to the existing slack thread."""
+        if self.slack_client is not None:
+            try:
+                response = self.slack_client.files_upload_v2(
+                    channel=self.channel_id,
+                    file=file_path,
+                    title=Path(file_path).name,
+                    thread_ts=self.slack_thread_ts,
+                    initial_comment=f"f{file_path}"
+                )
+                permalink = response['files'][0]['permalink']
+                self.send_slack_message(f"{message} \n {permalink}")
+            except SlackApiError as e:
+                print(f"Error uploading file to slack: {e}")
 
 
 class BenchmarkRunner:
@@ -30,14 +95,21 @@ class BenchmarkRunner:
         # Set base output directory
         timestamp = datetime.now().strftime("%Y-%m-%d-%H%M")
         self.base_output = self.args.output_dir / self.result_subdir / timestamp
+        os.makedirs(self.base_output, exist_ok=True)
+        self.slack_thread = SlackThread(
+            f":weight_lifter: running selectivity micros :weight_lifter: \n Result directory will be {self.base_output}")
 
     def get_benchmark_output_dir(self, benchmark: BenchmarkConfig) -> Path:
         """Construct full output path for a benchmark."""
         return self.base_output / benchmark.shortname
 
+    def get_benchmark_result_filepath(self, benchmark: BenchmarkConfig, output_dir: Path) -> str:
+        file_name = (benchmark.shortname_with_args if benchmark.shortname_with_args else benchmark.shortname) + ".csv"
+        return f"{output_dir}/{file_name}"
+
     def get_benchmark_args(self, benchmark: BenchmarkConfig, output_dir: Path) -> str:
         """Construct full argument string for a benchmark."""
-        return f"{self.common_args} {benchmark.args}".replace("{output_dir}", str(output_dir))
+        return f"{self.common_args} {benchmark.args} --result_file={self.get_benchmark_result_filepath(benchmark, output_dir)}"
 
     def start_iostat_collection(self) -> subprocess.Popen:
         """Start iostat collection process."""
@@ -52,13 +124,33 @@ class BenchmarkRunner:
             env=os.environ
         )
 
+    def parse_iostat_and_check_health(self, iostat_output: Path = "iostat_output.json") -> None:
+        with open(iostat_output, 'r') as f:
+            try:
+                iostat_data = json.load(f)
+            except Exception as E:
+                logging.warning(f"Failed to parse io stat json from {iostat_output} with {E}")
+                return
+
+        have_logged_already = set()
+        for entry in iostat_data['sysstat']['hosts'][0]['statistics']:
+            ts = datetime.fromisoformat(entry['timestamp'])
+            for disk in entry['disk']:
+                if float(disk['r_await']) > 60.0 and disk['disk_device'] not in have_logged_already:
+                    have_logged_already.add(disk['disk_device'])
+                    logging.error("=" * 80)
+                    logging.error(f"Disk {disk['disk_device']} read await time is high at {disk['r_await']} ms at {ts}")
+                    logging.error("=" * 80)
+                    self.slack_thread.send_slack_message(
+                        f" {':warning:' * 10} \n Disk {disk['disk_device']} read await time is high at {disk['r_await']} ms at {ts} \n {':warning:' * 10}",
+                        to_channel=True)
+
     def create_trace(self, outdir: Path, trace_name: str = "out.trace") -> None:
         """Create a trace file using conda."""
         try:
             logging.info(f"Creating trace: {trace_name}")
             subprocess.run(
-                ["conda", "run", "-n", "profiling", "--live-stream",
-                 "python3", "/tmp/tmp.YD2SgUVlV5/tools/tracing/cli.py", ".", f"{trace_name}"],
+                ["python3", "/tmp/tmp.YD2SgUVlV5/tools/tracing/cli.py", ".", f"{trace_name}"],
                 check=True,
                 capture_output=True,
                 text=True
@@ -227,6 +319,7 @@ class BenchmarkRunner:
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
                 iostat_process.terminate()
+                self.parse_iostat_and_check_health()
 
                 # Process perf data and generate flame graph
                 subprocess.run(["perf", "inject", "-j", "-i", "/tmp/perf.data", "-o", "perf.data.jit"], check=True)
@@ -244,7 +337,12 @@ class BenchmarkRunner:
                     flamegraph.wait()
 
                 time.sleep(1)
+                self.slack_thread.send_file(
+                    f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname} (flame graph) results",
+                    self.get_benchmark_result_filepath(bench, output_dir))
+
                 for file in Path().glob("*.svg"):
+                    self.slack_thread.send_file(f"Flame graph for {bench.shortname} ({benchmark_args}) ", str(file))
                     subprocess.run(["mv", str(file), str(output_dir)], check=True)
 
                 self.create_trace(output_dir,
@@ -272,6 +370,7 @@ class BenchmarkRunner:
                 Path(fifo).unlink()
             except OSError as e:
                 logging.error(f"Error removing FIFO {fifo}: {e}")
+
 
     def run_off_cpu_flame_graph(self):
         """Run benchmarks and generate off-CPU flame graphs."""
@@ -336,6 +435,7 @@ class BenchmarkRunner:
                 logging.error(f"Unexpected error during off-CPU profiling: {e}")
                 continue
 
+
     def run_standard_benchmark(self):
         """Run benchmarks without profiling."""
         for bench in self.benchmarks:
@@ -361,7 +461,11 @@ class BenchmarkRunner:
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
                 iostat_process.terminate()
-                subprocess.run(f"mv -r ./generated_code {output_dir}", shell=True, check=True)
+                self.parse_iostat_and_check_health()
+                self.slack_thread.send_file(
+                    f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname} results",
+                    self.get_benchmark_result_filepath(bench, output_dir))
+                subprocess.run(f"cp -r ./generated_code {output_dir}", shell=True, check=True)
                 self.create_trace(output_dir,
                                   f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
                 subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
@@ -393,27 +497,53 @@ def setup_benchmarks() -> List[BenchmarkConfig]:
         #     shortname="sel_cpu_stage_one",
         #     args="--bench_micro_cpu_socket_stage_one --result_file={output_dir}/sel_cpu_stage_one.csv"
         # ),
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_stage_both",
-        #     args="--bench_micro_cpu_socket_stage_both --result_file={output_dir}/sel_cpu_stage_both.csv"
-        # ),
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_adaptive",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --result_file={output_dir}/sel_cpu_adaptive_pd_dop_4.csv",
-        #     shortname_with_args="sel_cpu_adaptive_pd_dop_4"
-        # ),
+
         BenchmarkConfig(
-            shortname="sel_cpu_adaptive",
-            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --result_file={output_dir}/sel_cpu_adaptive_pd_dop_16.csv",
-            shortname_with_args="sel_cpu_adaptive_pd_dop_16"
+            shortname="sel_cpu_stage_both",
+            args="--bench_micro_cpu_socket_stage_both"
+        ),
+        BenchmarkConfig(
+            shortname="sel_cpu_grouter_staging",
+            args="--bench_micro_cpu_socket_grouter_stage_both --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        ),
+        BenchmarkConfig(
+            shortname="sel_cpu_grouter_staging_partial_sum",
+            args="--bench_micro_cpu_socket_grouter_stage_both_partial_sum --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        ),
+        BenchmarkConfig(
+            # currently this relies on hard coding the routing policy
+            shortname="sel_cpu_grouter_adaptive_force_staging",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
         ),
         # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_staging",
-        #     args="--bench_micro_cpu_socket_grouter_stage_both --result_file={output_dir}/sel_cpu_grouter_pd.csv"
+        #     shortname="sel_cpu_grouter_adaptive_force_staging_partial",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_force_staging_partial.csv"
         # ),
         # BenchmarkConfig(
+        #     shortname="sel_cpu_grouter_adaptive_throughput",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive_force_staging.csv",
+        #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_4"
+        # ),
+        # BenchmarkConfig(
+        #     shortname="sel_cpu_grouter_adaptive_backpressure",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive.csv",
+        #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_4"
+        # ),
+        # BenchmarkConfig(
+        #     shortname="sel_cpu_grouter_adaptive_throughput",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive_force_staging.csv",
+        #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_16"
+        # ),
+        # BenchmarkConfig(
+        #     shortname="sel_cpu_grouter_adaptive_backpressure",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive.csv",
+        #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_16"
+        # ),
+
+        # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_pd",
-        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1 --result_file={output_dir}/sel_cpu_grouter_pd.csv"
+        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1 --result_file={output_dir}/sel_cpu_grouter_pd_dop1.csv",
+        #     shortname_with_args="sel_cpu_grouter_pd_dop_1"
         # ),
         # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_pd",
@@ -444,31 +574,48 @@ def main():
                         help="Output directory path")
     parser.add_argument("--selectivities", type=str, default=None,
                         help="Selectivities to run. Comma seperated list of doubles. ")
-    parser.add_argument("--num-iterations", type=int, default=3, help="Number of iterations to run each benchmark")
-
-    # Setup logging
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(levelname)-8s | %(asctime)s | %(filename)s.py:%(lineno)d | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    parser.add_argument("--num-iterations", type=int, default=5, help="Number of iterations to run each benchmark")
 
     args = parser.parse_args()
-    os.chdir(args.bin_dir)
     benchmarks = setup_benchmarks()
-
     runner = BenchmarkRunner(args, benchmarks)
+    os.chdir(args.bin_dir)
 
-    if args.profile_amd:
-        runner.run_amd_profile()
-    elif args.profile_perf:
-        runner.run_perf_profile()
-    elif args.flame_graph:
-        runner.run_flame_graph()
-    elif args.off_cpu_flame_graph:
-        runner.run_off_cpu_flame_graph()
-    else:
-        runner.run_standard_benchmark()
+    # Setup logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    # Create formatters
+    formatter = logging.Formatter('%(levelname)-8s | %(asctime)s | %(filename)s.py:%(lineno)d | %(message)s',
+                                  datefmt='%Y-%m-%d %H:%M:%S')
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+    # Create file handler
+    file_handler = logging.FileHandler(runner.base_output / 'run_sel_micros.log')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.INFO)
+    # Add handlers to logger
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    try:
+        if args.profile_amd:
+            runner.run_amd_profile()
+        elif args.profile_perf:
+            runner.run_perf_profile()
+        elif args.flame_graph:
+            runner.run_flame_graph()
+        elif args.off_cpu_flame_graph:
+            runner.run_off_cpu_flame_graph()
+        else:
+            runner.run_standard_benchmark()
+    except Exception as e:
+        logging.error(f"Error running benchmarks: {e}")
+        runner.slack_thread.send_slack_message(
+            f"Error running benchmarks: \n ```{"".join(traceback.format_exception(e))}```")
+    runner.slack_thread.send_slack_message("Benchmark run complete <@U02D23JN031>")
 
 
 if __name__ == "__main__":

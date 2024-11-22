@@ -255,6 +255,18 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
       return std::make_unique<routing::RandomSplitPreferDataLocal>(
           _wantedFields, affs, device_types);
     }
+    case GeneralizedRoutingPolicy::
+        DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL: {
+      std::vector<Affinitizer *> affs;
+      std::vector<DeviceType> device_types;
+      for (auto &consumer : consumers) {
+        auto c_ptr = consumer.lock();
+        affs.emplace_back(c_ptr->aff.get());
+        device_types.emplace_back(c_ptr->target_device);
+      }
+      return std::make_unique<routing::ThroughputSplitPreferDataLocal>(
+          _wantedFields, affs, device_types);
+    }
     default: {
       CHECK(false) << "Unimplemented";  // FIXME: rest of the policies
     }
@@ -277,6 +289,24 @@ void GeneralizedRouter::produce_(OlapParallelContext *context) {
 
   context->registerOpen(this, [this](Pipeline *pip) { this->open(pip); });
   context->registerClose(this, [this](Pipeline *pip) { this->close(pip); });
+  /*
+   * At this point we are compiling, so no more GeneralizedRouterConsumers
+   * should be added. This means we know how many pipelines we are splitting
+   * into. So we construct the routing policy here to enable policies that wish
+   * to use that the number of split pipelines.
+   */
+  DCHECK_EQ(routing, nullptr);
+  routing = getPolicy(
+      policy_type,
+      DegreeOfParallelism{topology::getInstance().getCpuNumaNodes().size()},
+      wantedFields);
+
+  routing::ThroughputSplitPreferDataLocal *stateful_policy =
+      dynamic_cast<routing::ThroughputSplitPreferDataLocal *>(routing.get());
+
+  if (stateful_policy != nullptr) {
+    stateful_policy->generateStateInit(context);
+  }
 
   groupVar = context->appendStateVar(
       llvm::IntegerType::getIntNTy(context->getLLVMContext(),
@@ -389,18 +419,6 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
 
 void GeneralizedRouter::consume(OlapParallelContext *context,
                                 const OperatorState &childState) {
-  /*
-   * At this point we are compiling, so no more GeneralizedRouterConsumers
-   * should be added. This means we know how many pipelines we are splitting
-   * into. So we construct the routing policy here to enable policies that wish
-   * to use that the number of split pipelines.
-   */
-  DCHECK_EQ(routing, nullptr);
-  routing = getPolicy(
-      policy_type,
-      DegreeOfParallelism{topology::getInstance().getCpuNumaNodes().size()},
-      wantedFields);
-
   // Warmup threads to avoid thread creation overhead
   for (const auto &cons : consumers) {
     auto c_ptr = cons.lock();
@@ -571,6 +589,7 @@ size_t GeneralizedRouter::getNumberOfQueues() const {
       }
       return consumer_dop;
     }
+    case GeneralizedRoutingPolicy::DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
     case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
     case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
       auto &topo = topology::getInstance();
@@ -649,6 +668,8 @@ void GeneralizedRouter::open(Pipeline *pip) {
         case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
           return 0;
         }
+        case GeneralizedRoutingPolicy::
+            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
         case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
         case GeneralizedRoutingPolicy::
             DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
@@ -907,6 +928,8 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
             return false;
           }
         }
+        case GeneralizedRoutingPolicy::
+            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
         case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
         case GeneralizedRoutingPolicy::
             DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {

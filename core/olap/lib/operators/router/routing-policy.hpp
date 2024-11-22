@@ -31,6 +31,7 @@
 #include <olap/util/parallel-context.hpp>
 #include <platform/topology/device-types.hpp>
 #include <platform/topology/topology.hpp>
+#include <platform/util/rdtsc.hpp>
 #include <utility>
 
 struct routing_target {
@@ -135,6 +136,126 @@ class RandomSplitPreferDataLocal : public RoutingPolicy {
                           ProteusValueMemory retrycnt) override;
 };
 
+class ThroughputTracker {
+ private:
+  uint64_t completed_events;
+  uint64_t total_time;
+  // Current event being tracked and its start time
+  void *current_event;
+  uint64_t current_start_time;
+  // Flag to handle first event
+  bool first_event;
+
+ public:
+  ThroughputTracker() { reset(); }
+
+  void reset() {
+    completed_events = 0;
+    total_time = 0;
+    current_event = nullptr;
+    current_start_time = 0;
+    first_event = true;
+  }
+
+  uint64_t get_completed_events() const { return completed_events; }
+
+  void notify_event(void *event, uint64_t timestamp) {
+    if (first_event) {
+      current_event = event;
+      current_start_time = timestamp;
+      first_event = false;
+      return;
+    }
+
+    // If we see a different event, complete the current one
+    if (event != current_event) {
+      uint64_t duration = timestamp - current_start_time;
+      completed_events++;
+      if (completed_events > 100) {
+        total_time += duration;
+      }
+
+      current_event = event;
+      current_start_time = timestamp;
+    }
+  }
+
+  double get_current_throughput() const {
+    if (total_time == 0 || completed_events == 0) {
+      return 0.0;
+    }
+    // Return events per unit time
+    return static_cast<double>(completed_events - 100) / total_time;
+  }
+};
+
+/**
+ * WIP
+ */
+class ThroughputSplitPreferDataLocal : public RoutingPolicy {
+  const RecordAttribute wantedField;
+  std::vector<Affinitizer *>
+      consumer_affs;  // use pointer to satisfy lifetime requirements
+  std::vector<size_t> consumer_offsets;
+  std::vector<DeviceType> device_types;
+  StateVar routing_state_var;
+
+ public:
+  class RoutingState {
+   public:
+    const uint64_t num_consumers;
+    ThroughputTracker tracker;
+    uint64_t curr_target;
+    std::vector<double> throughputs;
+    bool exploit;
+    RoutingState(uint64_t _num_consumers)
+        : num_consumers(_num_consumers),
+          tracker(),
+          curr_target(0),
+          throughputs(),
+          exploit(false) {
+      throughputs.resize(num_consumers, 0.0);
+    }
+    uint64_t get_target() {
+      if (num_consumers == 1) {
+        return 0;
+      } else {
+        return 1;
+      }
+
+      //      if (exploit) {
+      //        return curr_target;
+      //      }
+      //      if (tracker.get_completed_events() > 1000) {
+      //        throughputs[curr_target] = tracker.get_current_throughput();
+      //        LOG(INFO)<< " previous throughput of " << curr_target << " is "
+      //                  << tracker.get_current_throughput();
+      //        curr_target = (curr_target + 1) % num_consumers;
+      //        LOG(INFO) << "switching to " << curr_target;
+      //        tracker.reset();
+      //        if (curr_target == 0) {
+      //          curr_target = std::distance(
+      //              throughputs.begin(),
+      //              std::max_element(throughputs.begin(), throughputs.end()));
+      //          LOG(INFO) << "exploit time: " << curr_target;
+      //          exploit = true;
+      //        }
+      //      }
+      //      return curr_target;
+    }
+  };
+
+ public:
+  ThroughputSplitPreferDataLocal(
+      const std::vector<RecordAttribute *> &wantedFields,
+      std::vector<Affinitizer *> consumer_affs,
+      const std::vector<DeviceType> &consumer_device_types);
+  routing_target evaluate(OlapParallelContext *context,
+                          const OperatorState &childState,
+                          ProteusValueMemory retrycnt) override;
+  void generateStateInit(OlapParallelContext *context);
+};
+
 class LocalServer : public HashBased {
  public:
   LocalServer(size_t fanout);
@@ -151,6 +272,13 @@ class PreferLocal : public RoutingPolicy {
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
 };
+
+extern "C" {
+[[maybe_unused]] void record_event(void *state, void *event);
+[[maybe_unused]] void *createRoutingState(uint64_t num_consumers);
+[[maybe_unused]] void destroyRoutingState(void *state);
+[[maybe_unused]] uint64_t get_target(void *state);
+}
 
 class PreferLocalServer : public RoutingPolicy {
   LocalServer priority;

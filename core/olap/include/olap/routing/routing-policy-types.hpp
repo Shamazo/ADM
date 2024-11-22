@@ -59,6 +59,7 @@ enum class GeneralizedRoutingPolicy {
    * consumer
    */
   DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL,
+  DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
 };
 
 #endif  // PROTEUS_ROUTING_POLICY_TYPES_HPP
