@@ -10,6 +10,10 @@ import numpy as np
 from typing import List, Dict
 import argparse
 from collections import namedtuple
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+
+
 
 
 class NVMeHealthMonitor:
@@ -29,6 +33,46 @@ class NVMeHealthMonitor:
         # Get number of NUMA nodes in system
         self.numa_nodes = self._get_numa_node_count()
         self.fio_bin = fio_bin
+
+        self.slack_client = None
+        self.slack_thread_ts = None
+        self.channel_id = None
+        if os.environ.get('SLACK_TOKEN'):
+            self.slack_client = WebClient(token=os.environ['SLACK_TOKEN'])
+            self.channel_id = self.get_channel_id("adm-reports")
+            thread_parent = self.slack_client.chat_postMessage(
+                channel=self.channel_id,
+                text=f"Starting NVMe health check - {self.timestamp} - {"alll drives " if paths is None else paths}"
+            )
+            self.slack_thread_ts = thread_parent['ts']
+
+    def get_channel_id(self, channel_name):
+        """
+        Get channel ID from channel name
+
+        Args:
+            channel_name (str): Channel name without # (e.g. 'general')
+        Returns:
+            str: Channel ID
+        """
+        # List all channels
+        result = self.slack_client.conversations_list(types='private_channel')
+        for channel in result["channels"]:
+            if channel["name"] == channel_name:
+                return channel["id"]
+
+        raise ValueError(f"Channel {channel_name} not found")
+
+    def send_slack_message(self, message):
+        if self.slack_client is not None:
+            try:
+                self.slack_client.chat_postMessage(
+                    channel=self.channel_id,
+                    text=message,
+                    thread_ts=self.slack_thread_ts
+                )
+            except SlackApiError as e:
+                print(f"Error sending message to slack: {e}")
 
     def _get_numa_node_count(self) -> int:
         """Get the number of NUMA nodes in the system."""
@@ -127,6 +171,7 @@ class NVMeHealthMonitor:
         fio_config += "ioengine=io_uring\n"
         fio_config += "fixedbufs=1\n"  # Use fixed buffers for io_uring
         fio_config += "registerfiles=1\n"
+        fio_config += "numa_mem_policy=local\n"
 
         numa_devices = {}
         for device, info in self.nvme_info.items():
@@ -240,8 +285,9 @@ class NVMeHealthMonitor:
 
             # Check for consistently high latency
             mean_latency = device_stats.loc[device, ('r_await', 'mean')]
-            if mean_latency > global_mean_latency + 2 * global_std_latency:
+            if mean_latency > global_mean_latency + 1.75 * global_std_latency:
                 anomalies['high_latency'].append(device)
+                self.send_slack_message(f"High latency detected on {device}, mounted at {self.nvme_info[device]['mount_point']} on numa node {self.nvme_info[device]['numa_node']} with mean latency of {mean_latency} ms")
 
             # Check for increasing latency trend
             if len(device_data) > 10:
@@ -257,6 +303,8 @@ class NVMeHealthMonitor:
                 anomalies['low_bandwidth'].append(device)
 
         return anomalies
+
+
 
     def _generate_plots(self, df: pd.DataFrame):
         """Generate performance plots with enhanced metrics."""
@@ -355,6 +403,19 @@ class NVMeHealthMonitor:
                         facecolor='white',
                         edgecolor='none')
             plt.close()
+            if self.slack_client is not None:
+                try:
+                    response = self.slack_client.files_upload_v2(
+                        channel=self.channel_id,
+                        file=str(self.output_dir / filename),
+                        title=filename,
+                        thread_ts=self.slack_thread_ts,
+                        initial_comment=f"f{filename}"
+                    )
+                    permalink = response['files'][0]['permalink']
+                    self.send_slack_message(permalink)
+                except SlackApiError as e:
+                    print(f"Error uploading file to slack: {e}")
 
         # Generate all plots
         create_plot('r_await',
@@ -440,6 +501,17 @@ class NVMeHealthMonitor:
 
             if not any(anomalies.values()):
                 f.write("No anomalies detected. All drives are performing normally.\n")
+        if self.slack_client is not None:
+            try:
+                response = self.slack_client.files_upload_v2(
+                    channel=self.channel_id,
+                    file=str(report_path),
+                    thread_ts=self.slack_thread_ts
+                )
+                permalink = response['files'][0]['permalink']
+                self.send_slack_message(permalink)
+            except SlackApiError as e:
+                print(f"Error uploading file to slack: {e}")
 
     def run_health_check(self):
         """Run the complete health check process."""
@@ -476,7 +548,7 @@ def main():
         description='NVMe Health Check. Evaluates if NVMe performance is stable. Requires iostat to be installed. Depends on pandas, matplotlib and numpy python packages.')
     parser.add_argument('--paths', type=str, default=None,
                         help='Comma-separated list of NVMe mount points to test (e.g., /nvme1,/nvme13,/nvme14)')
-    parser.add_argument('--output-dir', type=str, default="nvme_health_reports",
+    parser.add_argument('--output-dir', type=str, default="/home/nicholso/nvme_health_reports",
                         help='Directory to store test results')
     parser.add_argument('--fio-bin', type=str, default="/home/nicholso/fio/fio", help='Path to a fio binary')
 
