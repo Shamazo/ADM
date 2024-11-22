@@ -489,7 +489,18 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
-          .pack();
+          .pack()
+          .router(DegreeOfParallelism{count_per_numa_cores *
+                                      socket_1_node_ids.size()},
+                  8, RoutingPolicy::LOCAL, DeviceType::CPU,
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                      socket_1_node_ids))
+          .unpack()
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg["col2"]};
+              },
+              {SUM});
 
   auto staging_path = split.path(
       DeviceType::CPU,
@@ -529,7 +540,7 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
       .unionAll(
           {staging_path, standard_path}, DegreeOfParallelism{1},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          4)
+          64)
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {arg["col2"]};
