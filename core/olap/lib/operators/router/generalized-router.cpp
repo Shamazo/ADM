@@ -39,6 +39,8 @@ int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
 
 [[nodiscard]] void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
                                              int64_t groupId) {
+  //  event_range<range_log_op::GROUTER_ACQUIRE_BUFF> er{{}, {},
+  //                                             groupId};
   return xch->acquireBufferGeneralized(target, false, groupId).release();
 }
 
@@ -46,6 +48,9 @@ int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
                                                  GeneralizedRouter *xch,
 
                                                  int64_t groupId) {
+  // can generate a lot of trace events
+  //  event_range<range_log_op::GROUTER_ACQUIRE_BUFF> er{{}, {},
+  //                                             groupId};
   return xch->acquireBufferGeneralized(target, true, groupId).release();
 }
 
@@ -285,7 +290,7 @@ void GeneralizedRouter::produce_(OlapParallelContext *context) {
   context->popPipeline();
 
   // push new pipeline for the throw part
-  context->pushPipeline();
+  context->pushPipeline(nullptr, "grouter_");
 
   context->registerOpen(this, [this](Pipeline *pip) { this->open(pip); });
   context->registerClose(this, [this](Pipeline *pip) { this->close(pip); });
@@ -780,7 +785,7 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
                                 counter_type::ROUTER_FREE_POOL_SIZE, free_size,
                                 target_queue);
             }
-            return event_range<range_log_op::ROUTER_WAITING_FOR_TASK>{
+            return event_range<range_log_op::GROUTER_WAITING_FOR_TASK>{
                 m_id, pipGen->getUUID(), pip->getGroup()};
           },
           [&](void *ptr) {
@@ -828,6 +833,8 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
   pip->open(session);
   {
     foreachTaskDo(target_queue, pip.get(), pipGen, [&](void *ptr) {
+      event_range<range_log_op::GROUTER_CONSUME> er2{
+          m_id, pip->getGeneratorUUID(), pip->getGroup()};
       pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
     });
   }

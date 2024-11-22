@@ -153,6 +153,7 @@ IoUringThreadUnsafe::~IoUringThreadUnsafe() {
   io_uring_queue_exit(&m_ring);
 }
 void IoUringThreadUnsafe::flush() {
+  event_range<range_log_op::IOURING_FLUSH> er{{}};
   submit();
   while (m_IoInfo_free_set.size_unsafe() < m_max_inflight_requests) {
     poll();

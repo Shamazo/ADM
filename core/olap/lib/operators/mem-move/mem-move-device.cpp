@@ -404,8 +404,8 @@ void MemMoveDevice::produce_(OlapParallelContext *context) {
 
     genReleaseOldBuffer(context, src);
 
-    variableBindings[*(wantedFields[i])] =
-        context->toMem(param, context->createFalse());
+    variableBindings[*(wantedFields[i])] = context->toMem(
+        param, context->createFalse(), wantedFields[i]->getName() + "-ptr-");
   }
 
   auto cnt = Builder->CreateExtractValue(params, 2 * wantedFields.size());
@@ -695,6 +695,7 @@ void MemMoveDevice::open(Pipeline *pip) {
   //  }
 
   MemMoveConf *mmc = createMoveConf();
+  mmc->id = m_id;
 
 #ifndef NCUDA
   mmc->strm = strm;
@@ -830,6 +831,7 @@ void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
   if (!is_noop) {
     gpu_run(cudaEventRecord(buff->event, strm));
   }
+  event_range<range_log_op::MEMMOVE_PROPAGATE> er{id, {}, 0};
   tran.push(buff);
 
   if (io_uring != nullptr) {
@@ -859,13 +861,18 @@ MemMoveDevice::workunit *MemMoveDevice::MemMoveConf::acquire() {
 }
 
 bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
-  if (!tran.pop(*ret)) {
-    return false;
+  {
+    event_range<range_log_op::MEMMOVE_WAITING_FOR_TRANSFER> er{id, {}, 0};
+    if (!tran.pop(*ret)) {
+      //    LOG(INFO) << "get prop false. ";
+      return false;
+    }
   }
 
   if (nvme_plugin != nullptr) {
     const static auto prt = profiling::ProfileRegionType("memmove:::get_prop");
     auto prof_reg = profiling::ProfileRegion(prt);
+    event_range<range_log_op::MEMMOVE_GET_PROPAGATED> er{id, {}, 0};
     // wait for GPU decompression if any
     cudaStreamSynchronize((*ret)->cufile_strm);
     //    cudaStreamSynchronize(strm);

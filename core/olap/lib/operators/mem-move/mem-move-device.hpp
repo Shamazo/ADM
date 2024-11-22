@@ -85,6 +85,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
     std::unique_ptr<proteus::storage::IoUringThreadUnsafe> io_uring;
     NvmePlugin *nvme_plugin;  // TODO something neater
     std::vector<bool> do_transfer;
+    uuids::uuid id;
 
    public:
     virtual ~MemMoveConf() = default;

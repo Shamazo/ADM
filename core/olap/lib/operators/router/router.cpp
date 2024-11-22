@@ -275,9 +275,15 @@ void Router::fire(int target, PipelineGen *pipGen, const void *session) {
   {
     // time_block t("Texchange consume (target=" + std::to_string(target) + "):
     // ");
+    event_range<range_log_op::ROUTER_CONS_FIRE> er{
+        m_id, pip->getGeneratorUUID(), pip->getGroup()};
     do {
       proteus::managed_ptr p = nullptr;
-      if (!get_ready(target, p)) break;
+      {
+        event_range<range_log_op::ROUTER_WAITING_FOR_TASK> er2{
+            m_id, pipGen->getUUID(), pip->getGroup()};
+        if (!get_ready(target, p)) break;
+      }
       // ++packets;
       nvtxRangePushA((pipGen->getName() + ":cons").c_str());
 
@@ -293,6 +299,8 @@ void Router::fire(int target, PipelineGen *pipGen, const void *session) {
       try {
         //          time_block t{"Tfire_" + std::to_string(pip->getGroup()) +
         //          "_" + std::to_string((uintptr_t) this) + ": "};
+        event_range<range_log_op::ROUTER_CONSUME> er2{m_id, pipGen->getUUID(),
+                                                      pip->getGroup()};
         pip->consume((void *)(((uintptr_t)p.get()) & ~uintptr_t(1)));
       } catch (std::exception &e) {
         // FIXME: to whom should we throw it?
