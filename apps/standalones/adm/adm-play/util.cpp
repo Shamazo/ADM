@@ -93,7 +93,7 @@ QueryBenchResult benchmark_query(const std::string& label,
   std::this_thread::sleep_for(std::chrono::seconds(10));
   profiling::ProfileRegionType pr_type = profiling::ProfileRegionType(label);
   for (int i = 0; i < num_iterations; i++) {
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::this_thread::sleep_for(std::chrono::seconds(4));
     LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
               << label;
     auto ts = global_timestamp_logger->log_time_range(
@@ -346,11 +346,13 @@ std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
         "/nvme1/nicholso/data/random_ints_0_12",   // node 0
         "/nvme7/nicholso/data/random_ints_1_12",   // node 1
         "/nvme13/nicholso/data/random_ints_2_12",  // node 2
-        "/nvme14/nicholso/data/random_ints_3_12",  // node 2
+//        "/nvme14/nicholso/data/random_ints_3_12",  // node 2,  problem child
+//        "/nvme5/nicholso/data/random_ints_3_12",  // node 1
+        "/nvme8/nicholso/data/random_ints_3_12",  // node 3
         "/nvme6/nicholso/data/random_ints_4_12",   // node 1
         "/nvme9/nicholso/data/random_ints_5_12",   // node 3
         "/nvme3/nicholso/data/random_ints_6_12",   // node 0
-        "/nvme8/nicholso/data/random_ints_7_12",   // node 3
+        "/nvme4/nicholso/data/random_ints_7_12",   // node 1
         "/nvme12/nicholso/data/random_ints_8_12",  // node 2
         "/nvme10/nicholso/data/random_ints_9_12",  // node 3
         "/nvme2/nicholso/data/random_ints_10_12",  // node 0
