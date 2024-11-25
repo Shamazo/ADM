@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Optional
+from collections import defaultdict
 import json
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -132,18 +133,21 @@ class BenchmarkRunner:
                 logging.warning(f"Failed to parse io stat json from {iostat_output} with {E}")
                 return
 
-        have_logged_already = set()
+        high_latencies = defaultdict(list)
+        num_entries = 0
         for entry in iostat_data['sysstat']['hosts'][0]['statistics']:
+            num_entries += 1
             ts = datetime.fromisoformat(entry['timestamp'])
             for disk in entry['disk']:
-                if float(disk['r_await']) > 60.0 and disk['disk_device'] not in have_logged_already:
-                    have_logged_already.add(disk['disk_device'])
+                if float(disk['r_await']) > 60.0:
+                    high_latencies[disk['disk_device']] = high_latencies[disk['disk_device']] + [float(disk['r_await'])]
                     logging.error("=" * 80)
                     logging.error(f"Disk {disk['disk_device']} read await time is high at {disk['r_await']} ms at {ts}")
                     logging.error("=" * 80)
-                    self.slack_thread.send_slack_message(
-                        f" {':warning:' * 10} \n Disk {disk['disk_device']} read await time is high at {disk['r_await']} ms at {ts} \n {':warning:' * 10}",
-                        to_channel=True)
+        for device, latencies in high_latencies.items():
+            self.slack_thread.send_slack_message(
+                f" {':warning:' * 10} \n Disk {device} read await time is high, upto {max(latencies)} ms. Latency > 60ms observed in {len(latencies)}/{num_entries} iostat samples \n {':warning:' * 10}",
+                to_channel=True)
 
     def create_trace(self, outdir: Path, trace_name: str = "out.trace") -> None:
         """Create a trace file using conda."""
@@ -308,7 +312,7 @@ class BenchmarkRunner:
                       ] + benchmark_args.split()
 
                 iostat_process = self.start_iostat_collection()
-                logging.debug(f"Running command: {' '.join(cmd)}")
+                logging.info(f"Running command: {' '.join(cmd)}")
                 subprocess.run(
                     cmd,
                     stdout=open(log_file, "w"),
@@ -319,6 +323,7 @@ class BenchmarkRunner:
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
                 iostat_process.terminate()
+                iostat_process.wait(2)
                 self.parse_iostat_and_check_health()
 
                 # Process perf data and generate flame graph
@@ -448,7 +453,7 @@ class BenchmarkRunner:
 
             benchmark_args = self.get_benchmark_args(bench, output_dir)
             logging.info(f"Running benchmark: {bench.shortname}")
-            logging.debug(f"Command: ./selectivity-micros {benchmark_args}")
+            logging.info(f"Command: ./selectivity-micros {benchmark_args}")
 
             try:
                 iostat_process = self.start_iostat_collection()
@@ -461,6 +466,7 @@ class BenchmarkRunner:
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
                 iostat_process.terminate()
+                iostat_process.wait(2)
                 self.parse_iostat_and_check_health()
                 self.slack_thread.send_file(
                     f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname} results",
