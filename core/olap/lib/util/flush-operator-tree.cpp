@@ -45,7 +45,9 @@ class [[nodiscard]] spacer {
 std::ostream &operator<<(std::ostream &out, const spacer &s) {
   for (size_t i = 0; i < s.space; ++i) out << ' ';
   out << demangle(typeid(s.op).name());
-  out << '(' << s.op.getRowType() << ") [" << s.op.getUUID() << "]\n";
+  out << '(' << s.op.getRowType() << ") [" << s.op.getUUID() << "]"
+      << " dop: " << s.op.getDOP() << std::endl;
+
   if (auto u = dynamic_cast<const UnionAll *>(&s.op)) {
     for (const auto &c : u->getChildren()) out << s.step(*c);
   } else if (dynamic_cast<const Scan *>(&s.op)) {
