@@ -486,5 +486,72 @@ TEST_P(BloomFilterTest, EmptyFilterPackRepack) {
   EXPECT_EQ(build_count, 0);
 }
 
+TEST_P(BloomFilterTest, SingleThreadPartialFilterSingleNumaBuild) {
+  auto& topo = topology::getInstance();
+  if (topo.getCpuNumaNodeCount() < 2) {
+    GTEST_SKIP() << "Need at least 2 NUMA nodes";
+  }
+
+  std::vector<uint32_t> build_nodes = {topo.getCpuNumaNodes().at(0).id};
+  std::vector<uint32_t> probe_nodes = {topo.getCpuNumaNodes().at(1).id};
+
+  constexpr int filter_id = 7;
+  auto rbf_build = getRelBuilderFactoryBuild();
+  auto build_statement =
+      rbf_build.getBuilder()
+          .scan("inputs/ssbm100/date.csv", {"d_datekey", "d_year"},
+                CatalogParser::getInstance(), pg{"block"})
+          .router(DegreeOfParallelism{1}, 1, RoutingPolicy::FORCE_LOCAL,
+                  DeviceType::CPU,
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(build_nodes))
+          .unpack()
+          .filter([&](const auto& arg) -> expression_t {
+            return (ge(arg["d_year"], 1994) & le(arg["d_year"], 1997));
+          })
+          .bloomfilter_build(
+              [&](const auto& arg) -> expression_t { return arg["d_datekey"]; },
+              bloom_filter_size, filter_id, probe_nodes)
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                return {expression_t{int64_t{1}}.as("tmp", "cnt")};
+              },
+              {SUM})
+          .print(pg{"pm-csv"})
+          .prepare();
+  auto build_res = build_statement.execute();
+  size_t build_count = parse_count(build_res);
+
+  auto probe_statement =
+      getRelBuilderFactoryProbe()
+          .getBuilder()
+          .scan("inputs/ssbm100/date.csv", {"d_datekey"},
+                CatalogParser::getInstance(), pg{"block"})
+          .router(DegreeOfParallelism{1}, 1, RoutingPolicy::FORCE_LOCAL,
+                  DeviceType::CPU,
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(probe_nodes))
+          .unpack()
+          .bloomfilter_probe(
+              [&](const auto& arg) -> expression_t { return arg["d_datekey"]; },
+              bloom_filter_size, filter_id)
+          .reduce(
+              [&](const auto& arg) -> std::vector<expression_t> {
+                return {expression_t{int64_t{1}}.as("tmp", "cnt")};
+              },
+              {SUM})
+          .print(pg{"pm-csv"})
+          .prepare();
+
+  auto probe_res = probe_statement.execute();
+  size_t probe_count = parse_count(probe_res);
+
+  EXPECT_GT(probe_count, 0);
+  EXPECT_GT(build_count, 0);
+  ASSERT_GE(probe_count, build_count);
+  LOG(INFO) << "False positive rate: "
+            << (static_cast<double>(probe_count - build_count) /
+                static_cast<double>(probe_count))
+            << " with bloom filter size " << bloom_filter_size;
+}
+
 INSTANTIATE_TEST_SUITE_P(BloomFilterTest, BloomFilterTest,
                          testing::Values(4_K, 4_M, 512_M));

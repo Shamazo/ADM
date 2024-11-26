@@ -41,8 +41,28 @@ void BloomFilterBuild::produce_(OlapParallelContext *context) {
         return mem;
       },
       [=](llvm::Value *pip, llvm::Value *s) {
+        auto tarr = t->getPointerElementType();
+        // note this overestimates by a factor of 8, as even for a single bit
+        // the store size will still be a byte.
+        // This is fine as it just means we end up overallocating when we copy
+        // the filter to other nodes.
+        const auto bloom_filter_size_bits =
+            ((context->getModule()->getDataLayout().getTypeStoreSizeInBits(
+                  tarr->getArrayElementType()))
+                 .getFixedSize() *
+             tarr->getArrayNumElements());
+        CHECK_EQ(bloom_filter_size_bits % 8, 0);
+        LOG(INFO) << "bf calculated size" << bloom_filter_size_bits / 8;
+
         context->gen_call("setBloomFilter",
                           {pip, s, context->createInt64(bloomId)}, t);
+        for (const auto &target_node_id : copyToNumaNodes) {
+          context->gen_call("copyBloomFilterToNode",
+                            {pip, s, context->createInt64(bloomId),
+                             context->createInt32(target_node_id),
+                             context->createInt64(bloom_filter_size_bits / 8)},
+                            t);
+        }
       });
 
   getChild()->produce(context);

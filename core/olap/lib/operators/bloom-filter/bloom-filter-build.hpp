@@ -28,14 +28,19 @@
 
 class BloomFilterBuild : public BloomFilter {
  public:
-  using BloomFilter::BloomFilter;
-
+  //  using BloomFilter::BloomFilter;
+  BloomFilterBuild(std::shared_ptr<Operator> child, expression_t e,
+                   size_t filterSize, uint64_t bloomId,
+                   std::vector<uint32_t> copyToNumaNodes)
+      : BloomFilter(child, e, filterSize, bloomId),
+        copyToNumaNodes(std::move(copyToNumaNodes)) {}
   void produce_(OlapParallelContext *context) override;
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
 
   [[nodiscard]] bool isFiltering() const override { return false; }
+  const std::vector<uint32_t> copyToNumaNodes;
 };
 
 /**

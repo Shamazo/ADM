@@ -48,6 +48,9 @@ class Pipeline;
 
 extern "C" void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId);
 extern "C" void *getBloomFilter(Pipeline *pip, uint64_t bloomId);
+extern "C" void copyBloomFilterToNode(Pipeline *pip, void *s, uint64_t bloomId,
+                                      uint32_t target_numa_id,
+                                      size_t bloom_filter_size);
 
 class affinity {
  public:
@@ -69,6 +72,9 @@ class affinity {
   friend class buffer_manager<int32_t>;
   friend void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId);
   friend void *getBloomFilter(Pipeline *pip, uint64_t bloomId);
+  friend void copyBloomFilterToNode(Pipeline *pip, void *s, uint64_t bloomId,
+                                    uint32_t target_numa_id,
+                                    size_t bloom_filter_size);
 };
 
 class exec_location {

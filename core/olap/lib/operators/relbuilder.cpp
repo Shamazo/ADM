@@ -1064,10 +1064,11 @@ RelBuilder RelBuilder::bloomfilter_probe(expression_t pred, size_t filterSize,
   return apply(op);
 }
 
-RelBuilder RelBuilder::bloomfilter_build(expression_t pred, size_t filterSize,
-                                         uint64_t bloomId) const {
-  auto op = std::make_shared<BloomFilterBuild>(root, std::move(pred),
-                                               filterSize, bloomId);
+RelBuilder RelBuilder::bloomfilter_build(
+    expression_t pred, size_t filterSize, uint64_t bloomId,
+    const std::vector<uint32_t> &copyToNumaNodes) const {
+  auto op = std::make_shared<BloomFilterBuild>(
+      root, std::move(pred), filterSize, bloomId, copyToNumaNodes);
   return apply(op);
 }
 

@@ -487,8 +487,10 @@ class RelBuilder {
 
   RelBuilder bloomfilter_build(
       std::function<expression_t(expressions::InputArgument)> pred,
-      size_t filterSize, uint64_t bloomId) const {
-    return bloomfilter_build(pred(getOutputArg()), filterSize, bloomId);
+      size_t filterSize, uint64_t bloomId,
+      const std::vector<uint32_t>& copyToNumaNodes = {}) const {
+    return bloomfilter_build(pred(getOutputArg()), filterSize, bloomId,
+                             copyToNumaNodes);
   }
 
   template <typename Tbk, typename Tbe, typename Tpk, typename Tpe>
@@ -625,9 +627,9 @@ class RelBuilder {
   [[nodiscard]] RelBuilder bloomfilter_probe(expression_t pred,
                                              size_t filterSize,
                                              uint64_t bloomId) const;
-  [[nodiscard]] RelBuilder bloomfilter_build(expression_t pred,
-                                             size_t filterSize,
-                                             uint64_t bloomId) const;
+  [[nodiscard]] RelBuilder bloomfilter_build(
+      expression_t pred, size_t filterSize, uint64_t bloomId,
+      const std::vector<uint32_t>& copyToNumaNodes) const;
 
   [[nodiscard]] RelBuilder bloomfilter_repack(expression_t pred,
                                               std::vector<expression_t> attr,

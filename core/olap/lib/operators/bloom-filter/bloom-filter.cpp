@@ -29,10 +29,10 @@
 #include <platform/memory/memory-manager.hpp>
 #include <platform/topology/affinity_manager.hpp>
 #include <platform/topology/topology.hpp>
-static std::mutex bloom_filter_registry_lock;
+static std::mutex bloom_filter_registry_lock{};
 static std::map<std::pair<uint64_t, decltype(topology::cpunumanode::id)>,
                 void *>
-    bloom_filter_registry;
+    bloom_filter_registry{};
 
 extern "C" void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId) {
   const auto &cpu = affinity::get();
@@ -48,13 +48,35 @@ extern "C" void setBloomFilter(Pipeline *pip, void *s, uint64_t bloomId) {
   bloom_filter_registry[k] = s;
 }
 
+extern "C" void copyBloomFilterToNode(Pipeline *pip, void *s, uint64_t bloomId,
+                                      uint32_t target_numa_id,
+                                      size_t bloom_filter_size) {
+  const auto &this_cpu = affinity::get();
+  const auto this_key = std::make_pair(bloomId, this_cpu.id);
+  const auto target_key = std::make_pair(bloomId, target_numa_id);
+  std::lock_guard<std::mutex> lock(bloom_filter_registry_lock);
+  if (bloom_filter_registry.count(target_key)) {
+    LOG(WARNING) << "target numa already has bloom filter " << target_numa_id;
+    return;
+  }
+  CHECK(bloom_filter_registry.count(this_key));
+  auto &topo = topology::getInstance();
+  const uint32_t target_numa_index =
+      topo.getCpuNumaNodeById(target_numa_id).index_in_topo;
+  char *bloom_filter_copy = static_cast<char *>(
+      MemoryManager::mallocPinnedOnNode(bloom_filter_size, target_numa_index));
+  memcpy(bloom_filter_copy, s, bloom_filter_size);
+  bloom_filter_registry[target_key] = bloom_filter_copy;
+}
+
 extern "C" void *getBloomFilter(Pipeline *pip, uint64_t bloomId) {
   const auto &cpu = affinity::get();
   auto k = std::make_pair(bloomId, cpu.id);
   // FIXME: how often is this called?
   DCHECK_GE(bloom_filter_registry.count(k), 0)
       << "no bloom filter with id: " << bloomId << " on node: " << cpu.id;
-  assert(bloom_filter_registry[k]);
+  CHECK(bloom_filter_registry[k])
+      << "no bloom filter found. id: " << bloomId << " numa id: " << cpu.id;
   return bloom_filter_registry[k];
 }
 
