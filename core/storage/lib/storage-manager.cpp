@@ -296,8 +296,8 @@ std::future<std::vector<mem_file>> StorageManager::getFile(std::string name) {
 std::future<std::vector<mem_file>> StorageManager::getOrLoadFile(
     std::string name, size_t type_size, data_loc loc) {
   if (files.count(name) == 0) {
-    LOG(INFO) << "File " << name << " not loaded, loading it to "
-              << magic_enum::enum_name(loc);
+    DLOG(INFO) << "File " << name << " not loaded, loading it to "
+               << magic_enum::enum_name(loc);
     load(name, type_size, loc);
   }
   return getFile(name);

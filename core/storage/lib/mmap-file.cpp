@@ -38,7 +38,7 @@
 static bool allow_readwrite = false;
 
 size_t getFileSize(const char *filename) {
-  struct stat st {};
+  struct stat st{};
   try {
     linux_run(stat(filename, &st));
   } catch (const std::runtime_error &e) {
@@ -88,7 +88,7 @@ mmap_file::mmap_file(std::string name, data_loc loc, size_t bytes,
   if ((fd == -1) && (loc != VIRTUAL)) {
     fd = open(name.c_str(), O_RDONLY, 0);
     readonly = true;
-    if (fd != -1) LOG(INFO) << "Opening file " << name << " as read-only";
+    if (fd != -1) DLOG(INFO) << "Opening file " << name << " as read-only";
   }
 
   if ((fd == -1) && (loc != VIRTUAL)) {
