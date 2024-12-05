@@ -222,6 +222,7 @@ class Context {
   llvm::ConstantInt *createInt64(size_t val);
   llvm::ConstantInt *createInt64(int64_t val);
   llvm::ConstantInt *createSizeT(size_t val);
+  llvm::IntegerType *createBoolType();
   llvm::ConstantInt *createTrue();
   llvm::ConstantInt *createFalse();
 

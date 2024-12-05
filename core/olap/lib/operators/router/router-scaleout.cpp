@@ -120,7 +120,7 @@ void RouterScaleOut::open(Pipeline *pip) {
   std::lock_guard<std::mutex> guard(init_mutex);
 
   if (firers.empty()) {
-    free_pool = new threadsafe_set<void *>[fanout];
+    free_pool = new AsyncQueueMPMCWithSleep<void *>[fanout];
     ready_fifo = new AsyncQueueMPSC<void *>[fanout];
     assert(free_pool);
 

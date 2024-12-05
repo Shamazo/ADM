@@ -198,6 +198,10 @@ IntegerType *Context::createSizeType() {
   return Type::getIntNTy(getLLVMContext(), sizeof(size_t) * 8);
 }
 
+IntegerType *Context::createBoolType() {
+  return Type::getIntNTy(getLLVMContext(), 1);
+}
+
 ConstantInt *Context::createTrue() {
   return ConstantInt::get(getLLVMContext(), APInt(1, 1));
 }

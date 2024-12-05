@@ -139,7 +139,7 @@ class Router : public experimental::UnaryOperator {
  protected:
   AsyncQueueMPSC<void *> *ready_fifo;
 
-  threadsafe_set<void *> *free_pool;
+  AsyncQueueMPMCWithSleep<void *> *free_pool;
 
   const RoutingPolicy policy_type;
 

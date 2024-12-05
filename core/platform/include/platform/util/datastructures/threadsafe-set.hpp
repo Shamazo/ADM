@@ -24,6 +24,8 @@
 #ifndef PROTEUS_THREADSAFE_SET_HPP
 #define PROTEUS_THREADSAFE_SET_HPP
 
+#include <immintrin.h>
+
 #include "platform/memory/allocator.hpp"
 #include "platform/util/tracing.hpp"
 /**
@@ -200,6 +202,165 @@ class alignas(2 * 1024 * 1024)
       } else {
         std::this_thread::yield();
       }
+    } while (!terminating || occ > reserve);
+    assert(terminating);
+    return {};
+  }
+
+  bool pop(T &res) noexcept {
+    auto tmp = pop();
+    if (tmp) res = std::move(tmp.value());
+    return tmp.has_value();
+  }
+
+  bool pop2(T &res) noexcept { return pop(res); }
+};
+
+/**
+ * A variant that first spins then waits on a condition variable in pop.
+ * @tparam T element type
+ */
+template <typename T>
+class alignas(2 * 1024 * 1024)
+    /* TODO: also consider 2M, as it gives better perf for some queries */
+    AsyncQueueMPMCWithSleep { /* SPMC */
+ private:
+  std::atomic<size_t> occ{0};
+  size_t k4[15];
+  std::atomic<size_t> occrev{0};
+  size_t k[5];
+  std::vector<
+      EntryAQMPMC<T> /*,
+      proteus::memory::ExplicitSocketPinnedMemoryAllocator<EntryAQMPMC<T>>*/>
+      data;
+  size_t k2[5];
+  //  std::stack<
+  //      T, std::deque<T,
+  //      proteus::memory::ExplicitSocketPinnedMemoryAllocator<T>>> data;
+  std::atomic<bool> terminating = false;
+  size_t k3[19];
+  std::mutex m;
+  std::condition_variable cv;
+
+ public:
+  static constexpr size_t N = 2 * 1024;
+  std::atomic<size_t> cnt;
+  /**
+   * @note Careful if intending to have more than 2k items in the queue. You may
+   * need to adjust N and the data size.
+   */
+  AsyncQueueMPMCWithSleep()
+      : data(2 * 1024 /*, proteus::memory::ExplicitSocketPinnedMemoryAllocator<T>{socket_id}*/),
+        cnt(0) {
+    for (size_t i = 0; i < N; ++i) {
+      data[i].second = -1;
+    }
+  }
+
+  [[nodiscard]] bool empty_unsafe() const noexcept { return occ == occrev; }
+  [[nodiscard]] auto size_unsafe() const noexcept {
+    size_t size = occ - occrev;
+    return size > 2 * data.size() ? /* producers wait for jobs */ 0 : size;
+  }
+
+  [[nodiscard]] bool empty() noexcept {
+    std::lock_guard<std::mutex> lock{m};
+    return empty_unsafe();
+  }
+
+  template <typename... Args>
+  void emplace(Args &&...args) noexcept {
+    {
+      //      std::lock_guard<std::mutex> lock{m};
+      auto locc = occ++;
+      while (occrev + N <= locc) std::this_thread::yield();
+      //      while (data.at(locc % N).second == locc - N);
+      data.at(locc % N).first = T{std::forward<Args>(args)...};
+      data.at(locc % N).second = locc;
+      //      data.push(std::forward<Args>(args)...);
+      //      ++occ;
+    }
+    //    ++occ;
+    cv.notify_all();
+    ++cnt;
+  }
+
+  void push(T t) noexcept { emplace(std::move(t)); }
+
+  void reset() noexcept {
+    assert(terminating);
+    T x;
+    while (pop(x))
+      ;
+    terminating = false;
+    //    occ = 0;
+    //    occrev = 0;
+    occrev = occ.load();
+    cnt = occ.load();
+  }
+
+  void close() noexcept {
+    std::unique_lock<std::mutex> lock(m);
+    terminating = true;
+    cv.notify_all();
+  }
+
+  bool withPoppedItemDo(const std::function<void(T)> &f) {
+    auto tmp = pop();
+    if (!tmp.has_value()) return false;
+    f(std::move(tmp.value()));
+    return true;
+  }
+
+  void foreachItemDo(const std::function<void(T)> &f) {
+    while (withPoppedItemDo(f))
+      ;
+  }
+
+  template <typename F, range_log_op = std::invoke_result_t<F>::event_type>
+  bool withPoppedItemDo(const F &efactory, const std::function<void(T)> &f) {
+    auto tmp = [&]() {
+      auto event = efactory();
+      return pop();
+    }();
+    if (!tmp.has_value()) return false;
+    f(std::move(tmp.value()));
+    return true;
+  }
+
+  template <typename F, range_log_op = std::invoke_result_t<F>::event_type>
+  void foreachItemDo(const F &efactory, const std::function<void(T)> &f) {
+    while (withPoppedItemDo<F>(efactory, f))
+      ;
+  }
+
+  std::optional<T> pop() noexcept {
+    const auto reserve = occrev++;
+    auto &ref = data.at(reserve % N);
+    do {
+      for (int i = 0; i < 10; i++) {
+        if (ref.second == reserve) {
+          return {std::move(ref.first)};
+        }
+        _mm_pause();
+      }
+
+      for (int i = 0; i < 100; i++) {
+        if (ref.second == reserve) {
+          return {std::move(ref.first)};
+        }
+        std::this_thread::yield();
+      }
+
+      std::unique_lock<std::mutex> lock(m);
+      cv.wait_for(lock, std::chrono::milliseconds{20},
+                  [this, &ref, &reserve]() {
+                    return (ref.second == reserve) || terminating;
+                  });
+      if (ref.second == reserve) {
+        return {std::move(ref.first)};
+      }
+
     } while (!terminating || occ > reserve);
     assert(terminating);
     return {};

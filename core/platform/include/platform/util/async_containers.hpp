@@ -209,7 +209,7 @@ class AsyncQueueSPSC {
     data.pop();
     return x;
   }
-
+  bool is_terminating() { return terminating; }
   bool empty_unsafe() const { return (cache_size == 0) && data.empty(); }
   size_t size_unsafe() const { return cache_size + data.size(); }
 };

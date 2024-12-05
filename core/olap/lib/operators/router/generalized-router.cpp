@@ -537,10 +537,10 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
             //                   "Unimplemented, needs to take another path
             //                   above due to the " "mismatch of the two
             //                   may_retry paths");
+
+            // currently always retry, ignore the routing policy
             param_ptr = context->gen_call(
-                (r.may_retry)
-                    ? (proteus::try_acquireBufferGeneralized /* FIXME */)
-                    : (proteus::acquireBufferGeneralized),
+                proteus::try_acquireBufferGeneralized /* FIXME */,
                 {target, exchange, groupId});
 
             break;
@@ -640,7 +640,7 @@ void GeneralizedRouter::create_queues() {
     for (size_t i = 0; i < queueCnt; ++i) {
       // note, queues currently don't use numa affinity for memory allocation
       free_pool.emplace_back(1);
-      ready_fifo.emplace_back(1);
+      ready_fifo.emplace_back();
     }
   } else {
     for (auto &f2 : free_pool) f2.reset();

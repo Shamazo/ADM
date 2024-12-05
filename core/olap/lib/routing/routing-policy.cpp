@@ -47,7 +47,7 @@ namespace routing {
 ::routing_target Random::evaluate(OlapParallelContext *const context,
                                   const OperatorState &childState,
                                   ProteusValueMemory retrycnt) {
-  if (fanout == 1) return {context->createInt64(0), false};
+  if (fanout == 1) return {context->createInt64(0), context->createFalse()};
   auto *Builder = context->getBuilder();
 
   // state is initialized with a random number in the entry block
@@ -75,7 +75,7 @@ namespace routing {
 
   auto fanoutV =
       llvm::ConstantInt::get((llvm::IntegerType *)target->getType(), fanout);
-  return {Builder->CreateURem(target, fanoutV), true};
+  return {Builder->CreateURem(target, fanoutV), context->createTrue()};
 }
 
 ::routing_target HashBased::evaluate(OlapParallelContext *const context,
@@ -87,13 +87,13 @@ namespace routing {
   auto target = e.accept(exprGenerator).value;
   auto fanoutV =
       llvm::ConstantInt::get((llvm::IntegerType *)target->getType(), fanout);
-  return {Builder->CreateURem(target, fanoutV), false};
+  return {Builder->CreateURem(target, fanoutV), context->createFalse()};
 }
 
 ::routing_target Local::evaluate(OlapParallelContext *const context,
                                  const OperatorState &childState,
                                  ProteusValueMemory retrycnt) {
-  if (fanout == 1) return {context->createInt64(0), false};
+  if (fanout == 1) return {context->createInt64(0), context->createFalse()};
 
   auto *Builder = context->getBuilder();
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
@@ -108,7 +108,7 @@ namespace routing {
 
   auto target = context->gen_call(random_local_cu_index, {ptr8, this_ptr});
 
-  return {target, true};
+  return {target, context->createTrue()};
 }
 
 Local::Local(size_t fanout, const std::vector<RecordAttribute *> &wantedFields,
@@ -235,7 +235,7 @@ RandomSplitForceDataLocal::RandomSplitForceDataLocal(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa, queue_offset_for_consumer);
-  return {target_queue, true};
+  return {target_queue, context->createTrue()};
 }
 
 RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
@@ -482,7 +482,7 @@ RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa_phi, queue_offset_for_consumer);
-  return {target_queue, true};
+  return {target_queue, context->createTrue()};
 }
 
 ThroughputSplitPreferDataLocal::ThroughputSplitPreferDataLocal(
@@ -769,7 +769,7 @@ void ThroughputSplitPreferDataLocal::generateStateInit(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa_phi, queue_offset_for_consumer);
-  return {target_queue, true};
+  return {target_queue, context->createTrue()};
 }
 
 LocalServer::LocalServer(size_t fanout)
@@ -785,11 +785,12 @@ routing_target PreferLocal::evaluate(OlapParallelContext *context,
                                      ProteusValueMemory retrycnt) {
   auto *Builder = context->getBuilder();
 
-  llvm::BasicBlock *b1;
-  llvm::BasicBlock *b2;
-  llvm::Value *p1;
-  llvm::Value *p2;
-  auto phi_type = llvm::IntegerType::getInt64Ty(context->getLLVMContext());
+  llvm::BasicBlock *target_b1;
+  llvm::BasicBlock *target_b2;
+  llvm::Value *target_p1;
+  llvm::Value *target_p2;
+  auto target_phi_type =
+      llvm::IntegerType::getInt64Ty(context->getLLVMContext());
 
   gen_if(lt(
              expressions::ProteusValueExpression{
@@ -800,20 +801,50 @@ routing_target PreferLocal::evaluate(OlapParallelContext *context,
                   retrycnt.isNull}},
              1),
          childState, context)([&]() {
-    p1 = Builder->CreateZExt(
-        priority.evaluate(context, childState, retrycnt).target, phi_type);
-    b1 = Builder->GetInsertBlock();
+    target_p1 = Builder->CreateZExt(
+        priority.evaluate(context, childState, retrycnt).target,
+        target_phi_type);
+    target_b1 = Builder->GetInsertBlock();
   }).gen_else([&]() {
-    p2 = Builder->CreateZExt(
-        alternative.evaluate(context, childState, retrycnt).target, phi_type);
-    b2 = Builder->GetInsertBlock();
+    target_p2 = Builder->CreateZExt(
+        alternative.evaluate(context, childState, retrycnt).target,
+        target_phi_type);
+    target_b2 = Builder->GetInsertBlock();
   });
 
-  auto phi = Builder->CreatePHI(phi_type, 2);
-  phi->addIncoming(p1, b1);
-  phi->addIncoming(p2, b2);
+  auto target_phi = Builder->CreatePHI(target_phi_type, 2);
+  target_phi->addIncoming(target_p1, target_b1);
+  target_phi->addIncoming(target_p2, target_b2);
 
-  return {phi, true};
+  llvm::BasicBlock *retry_b1;
+  llvm::BasicBlock *retry_b2;
+  llvm::Value *retry_p1;
+  llvm::Value *retry_p2;
+
+  auto retry_phi_type = context->createBoolType();
+
+  // retrycnt < 3 then force
+  gen_if(lt(
+             expressions::ProteusValueExpression{
+                 new IntType(),
+                 {Builder->CreateLoad(
+                      retrycnt.mem->getType()->getPointerElementType(),
+                      retrycnt.mem),
+                  retrycnt.isNull}},
+             3),
+         childState, context)([&]() {
+    retry_p1 = context->createTrue();
+    retry_b1 = Builder->GetInsertBlock();
+  }).gen_else([&]() {
+    retry_p2 = context->createFalse();
+    retry_b2 = Builder->GetInsertBlock();
+  });
+
+  auto retry_phi = Builder->CreatePHI(retry_phi_type, 2);
+  retry_phi->addIncoming(retry_p1, retry_b1);
+  retry_phi->addIncoming(retry_p2, retry_b2);
+
+  return {target_phi, retry_phi};
 }
 
 PreferLocalServer::PreferLocalServer(size_t fanout)
@@ -852,7 +883,7 @@ routing_target PreferLocalServer::evaluate(OlapParallelContext *context,
   phi->addIncoming(p1, b1);
   phi->addIncoming(p2, b2);
 
-  return {phi, true};
+  return {phi, context->createTrue()};
 }
 
 }  // namespace routing

@@ -25,6 +25,8 @@
 
 #include <codegen/jit/pipeline.hpp>
 #include <cstring>
+#include <magic_enum.hpp>
+#include <olap/util/jit/control-flow/if-statement.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
 #include <platform/util/demangle.hpp>
@@ -189,7 +191,7 @@ proteus::managed_ptr Router::acquireBuffer(int target, bool polling) {
 
   auto buff = free_pool[target].pop();
 
-  return proteus::managed_ptr{buff};
+  return proteus::managed_ptr{buff.value_or(nullptr)};
 }
 
 void Router::releaseBuffer(int target, proteus::managed_ptr buff) {
@@ -380,8 +382,10 @@ std::unique_ptr<routing::RoutingPolicy> Router::getPolicy() const {
     case RoutingPolicy::RANDOM: {
       return std::make_unique<routing::Random>(fanout);
     }
+    default:
+      LOG(FATAL) << "Unsupported routing policy: "
+                 << magic_enum::enum_name(policy_type);
   }
-  assert(false);
 }
 
 void Router::consume(OlapParallelContext *const context,
@@ -488,19 +492,37 @@ void Router::consume(OlapParallelContext *const context,
   auto retry_cnt =
       context->toMem(context->createInt32(0), context->createFalse());
 
-  Value *param_ptr;
   Value *target;
+  llvm::Value *param_ptr_p1;
+  llvm::Value *param_ptr_p2;
+  llvm::BasicBlock *b1;
+  llvm::BasicBlock *b2;
+  auto phi_type = context->toLLVM<std::remove_cv_t<void *>>();
+
+  PHINode *param_ptr_phi;
+
   context
       ->gen_do([&]() {
         auto r = getPolicy()->evaluate(context, childState, retry_cnt);
 
         r.target->setName("target");
+        r.may_retry->setName("may_retry");
         target = Builder->CreateTruncOrBitCast(r.target,
                                                Type::getInt32Ty(llvmContext));
 
-        param_ptr = context->gen_call(
-            (r.may_retry) ? (::try_acquireBuffer) : (::acquireBuffer),
-            {target, exchange});
+        // routing policy determines at runtime if we may retry
+        gen_if(Builder->CreateICmpEQ(r.may_retry, context->createTrue()),
+               childState, context)([&]() {
+          param_ptr_p1 =
+              context->gen_call(::try_acquireBuffer, {target, exchange});
+          b1 = Builder->GetInsertBlock();
+        }).gen_else([&]() {
+          param_ptr_p2 = context->gen_call(::acquireBuffer, {target, exchange});
+          b2 = Builder->GetInsertBlock();
+        });
+        param_ptr_phi = Builder->CreatePHI(phi_type, 2);
+        param_ptr_phi->addIncoming(param_ptr_p1, b1);
+        param_ptr_phi->addIncoming(param_ptr_p2, b2);
 
         Builder->CreateStore(
             Builder->CreateAdd(
@@ -512,14 +534,14 @@ void Router::consume(OlapParallelContext *const context,
       })
       .gen_while([&]() {
         Value *null_ptr =
-            ConstantPointerNull::get(((PointerType *)param_ptr->getType()));
-        Value *is_null = Builder->CreateICmpEQ(param_ptr, null_ptr);
+            ConstantPointerNull::get(((PointerType *)param_ptr_phi->getType()));
+        Value *is_null = Builder->CreateICmpEQ(param_ptr_phi, null_ptr);
 
         return ProteusValue{is_null, context->createFalse()};
       });
 
-  param_ptr = Builder->CreateBitCast(param_ptr,
-                                     PointerType::getUnqual(params->getType()));
+  auto param_ptr = Builder->CreateBitCast(
+      param_ptr_phi, PointerType::getUnqual(params->getType()));
 
   Builder->CreateStore(params, param_ptr);
 
@@ -537,7 +559,7 @@ void Router::open(Pipeline *pip) {
   event_range<range_log_op::ROUTER_OPEN> er{m_id, pip->getGeneratorUUID(),
                                             pip->getGroup()};
   if (firers.empty()) {
-    free_pool = new threadsafe_set<void *>[fanout];
+    free_pool = new AsyncQueueMPMCWithSleep<void *>[fanout];
     ready_fifo = new AsyncQueueMPSC<void *>[fanout];
     assert(free_pool);
 

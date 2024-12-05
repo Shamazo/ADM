@@ -36,7 +36,7 @@
 
 struct routing_target {
   llvm::Value *target;
-  bool may_retry;
+  llvm::Value *may_retry;
 };
 
 namespace routing {

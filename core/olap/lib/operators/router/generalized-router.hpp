@@ -117,7 +117,7 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   //  *>>>
   //  ready_fifo{proteus::memory::ExplicitSocketPinnedMemoryAllocator<AsyncQueueMPMC<void
   //  *>>{1}};
-  std::deque<AsyncQueueMPMC<void *>> ready_fifo{};
+  std::deque<AsyncQueueMPMCWithSleep<void *>> ready_fifo{};
 
   //  std::deque<AsyncQueueMPMC<void *>,
   //  proteus::memory::ExplicitSocketPinnedMemoryAllocator<AsyncQueueMPMC<void
