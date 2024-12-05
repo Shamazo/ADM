@@ -25,8 +25,11 @@
 #define PROTEUS_ADM_PREPARED_QUERIES_HPP
 
 #include <olap/plan/prepared-statement.hpp>
+#include <olap/routing/routing-policy-types.hpp>
 #include <query-shaping/nvme-shapers.hpp>
 #include <query-shaping/query-shaper.hpp>
+
+#include "../util.hpp"
 
 PreparedStatement small_scan(proteus::QueryShaper &morph,
                              const std::string &lo_column);
@@ -60,12 +63,13 @@ PreparedStatement scan_sum_micro_grouter_staging(
     GeneralizedRoutingPolicy policy);
 
 /**
- * Partial reduction before the union all in the same compiled pipeline as the filter
+ * Partial reduction before the union all in the same compiled pipeline as the
+ * filter
  */
 PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
-        proteus::QueryShaper &morph, double selectivity,
-        DegreeOfParallelism pushdown_dop, int scan_slack,
-        GeneralizedRoutingPolicy policy);
+    proteus::QueryShaper &morph, double selectivity,
+    DegreeOfParallelism pushdown_dop, int scan_slack,
+    GeneralizedRoutingPolicy policy);
 
 PreparedStatement scan_sum_micro_grouter_pushdown(
     proteus::QueryShaper &morph, double selectivity,
@@ -73,10 +77,10 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
     GeneralizedRoutingPolicy policy);
 
 PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
-                                          double selectivity,
-                                          DegreeOfParallelism pushdown_dop,
-                                          int scan_slack,
-                                          GeneralizedRoutingPolicy policy);
+                                            double selectivity,
+                                            DegreeOfParallelism pushdown_dop,
+                                            int scan_slack,
+                                            GeneralizedRoutingPolicy policy);
 
 /**
  * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter
@@ -110,6 +114,37 @@ PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
 PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph,
                                      bool move_after_pushdown = false);
 
-PreparedStatement prepare11_adaptive(proteus::CPUOnlyNvmeProbeFilterPushdown &morph);
+struct SSBArgs {
+  std::shared_ptr<proteus::CPUOnlyNVMeMorsel> morph = nullptr;
+  DegreeOfParallelism pushdown_dop = DegreeOfParallelism{4};
+  int scan_slack = 24;
+  GeneralizedRoutingPolicy policy =
+      GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL;
+  std::vector<uint32_t> pushdown_numa_nodes = {};
+  std::vector<uint32_t> compute_numa_nodes = {};
+  bool do_direct = true;
+  bool do_staging = true;
+  bool do_filter_pushdown = false;
+  bool do_bloom_filter_build = false;
+  bool do_bloom_filter_pushdown = false;
+  size_t bloom_filter_size = 1_M; // in bits
+  inline void check() {
+    CHECK_NE(morph, nullptr);
+    if (do_filter_pushdown) {
+      CHECK_GE(pushdown_dop, 0);
+      CHECK_GE(pushdown_numa_nodes.size(), 0);
+    }
+    CHECK_GE(compute_numa_nodes.size(), 0);
+    CHECK_EQ(do_bloom_filter_pushdown, do_bloom_filter_build);
+  }
+};
+
+PreparedStatement prepare11_adaptive(SSBArgs);
+PreparedStatement prepare12_adaptive(SSBArgs);
+PreparedStatement prepare13_adaptive(SSBArgs);
+PreparedStatement prepare21_adaptive(SSBArgs);
+PreparedStatement prepare22_adaptive(SSBArgs);
+PreparedStatement prepare23_adaptive(SSBArgs);
+PreparedStatement prepare31_adaptive(SSBArgs);
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

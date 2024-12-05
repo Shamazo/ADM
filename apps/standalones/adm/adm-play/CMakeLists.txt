@@ -10,6 +10,19 @@ add_executable(${PROJECT_NAME}
   prepared_queries/q1_1_pushdown.cpp
   prepared_queries/q1_2_pushdown.cpp
   prepared_queries/q1_3_pushdown.cpp
+  prepared_queries/q1_1_adaptive.cpp
+  prepared_queries/q1_2_adaptive.cpp
+  prepared_queries/q1_3_adaptive.cpp
+  prepared_queries/q2_1_adaptive.cpp
+  prepared_queries/q2_2_adaptive.cpp
+  prepared_queries/q2_3_adaptive.cpp
+  prepared_queries/q3_1_adaptive.cpp
+  prepared_queries/q3_2_adaptive.cpp
+  prepared_queries/q3_3_adaptive.cpp
+  prepared_queries/q3_4_adaptive.cpp
+  prepared_queries/q4_1_adaptive.cpp
+  prepared_queries/q4_2_adaptive.cpp
+  prepared_queries/q4_3_adaptive.cpp
   util.cpp
   prepared_queries/prepared-scan-sum-micro.cpp
   )

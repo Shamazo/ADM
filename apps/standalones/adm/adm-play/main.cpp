@@ -35,8 +35,7 @@
 
 #include "common-flags.hpp"
 #include "microbenchmarks.hpp"
-#include "prepared_queries/prepared-queries.hpp"
-#include "selectivity-micros.hpp"
+#include "ssb-adaptive-benchmarks.hpp"
 #include "ssb-benchmarks.hpp"
 #include "util.hpp"
 
@@ -106,41 +105,29 @@ DEFINE_bool(bench_ssb_cpu_socket_pushdown_baseline, false,
             "CPU only vary number of NVMes used for SSB Q1.x using the CPU "
             "NUMA nodes of socket 1 and data on NVMe drives on socket 0.");
 
-DECLARE_bool(bench_micro_cpu_socket_pushdown_baseline);
-DEFINE_bool(
-    bench_micro_cpu_socket_pushdown_baseline, false,
-    "CPU only vary the selectivity of a 2 col scan->filter->sum query."
-    "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
-    "drives on socket 0. Data is moved directly from NVMes to socket 1.");
+DECLARE_bool(bench_adaptive_ssb);
+DEFINE_bool(bench_adaptive_ssb, false,
+            "SSB using adaptive data movement. Using the CPU NUMA nodes of "
+            "socket 1 and data on NVMe drives on socket 0.");
 
-DECLARE_bool(bench_micro_cpu_socket_stage_both);
-DEFINE_bool(bench_micro_cpu_socket_stage_both, false,
-            "CPU only vary the selectivity of a 2 col scan->filter->sum query."
-            "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
-            "drives on socket 0. Data is moved from NVMes to socket 0 then "
-            "accessed over the interconnect.");
+DECLARE_bool(bench_grouter_direct_ssb);
+DEFINE_bool(bench_grouter_direct_ssb, false,
+            "SSB with direct data movement. Using the CPU NUMA nodes of socket "
+            "1 and data on NVMe drives on socket 0.");
 
-DECLARE_bool(bench_micro_cpu_socket_stage_one);
-DEFINE_bool(bench_micro_cpu_socket_stage_one, false,
-            "CPU only vary the selectivity of a 2 col scan->filter->sum query."
-            "Compute uses the NUMA nodes of socket 1 and the data is on NVMe "
-            "drives on socket 0. Data for the first column is moved directly "
-            "from NVMes to socket 1. Data for the second column is moved from "
-            "NVMes to socket 0 then accessed over the interconnect.");
+DECLARE_bool(bench_grouter_staging_ssb);
+DEFINE_bool(bench_grouter_staging_ssb, false,
+            "SSB with staged data movement. using the CPU NUMA nodes of socket "
+            "1 and data on NVMe drives on socket 0.");
 
-DECLARE_bool(bench_micro_cpu_socket_pushdown_filter);
-DEFINE_bool(bench_micro_cpu_socket_pushdown_filter, false,
-            "CPU only vary the selectivity of a 2 col scan->filter->sum query "
-            "with filter pushdown. Compute (the sum) uses the NUMA nodes of "
-            "socket 1. The data is on NVMe drives on socket 0. The filter runs "
-            "on socket 0, the filtered values are written to memory on socket "
-            "1 and accessed over the interconnect by the sum operator. The "
-            "filter parallelism of the filter is set by --pushdown_dop");
+DECLARE_bool(bench_grouter_pushdown_ssb);
+DEFINE_bool(bench_grouter_pushdown_ssb, false,
+            "SSB with pushdown. Using the CPU NUMA nodes of socket 1 and data "
+            "on NVMe drives on socket 0.");
 
-DECLARE_bool(bench_micro_cpu_socket_pushdown_filter_memmove);
-DEFINE_bool(bench_micro_cpu_socket_pushdown_filter_memmove, false,
-            "Identical to bench_micro_cpu_socket_pushdown_filter, but the "
-            "filtered data is explicitly mem-moved to socket 1");
+DECLARE_string(grouter_policy);
+DEFINE_string(grouter_policy, "DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+              "grouter policy to use.");
 
 DECLARE_int32(pushdown_dop);
 DEFINE_int32(
@@ -304,6 +291,122 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "running bench_ssb_cpu_socket_pushdown";
     auto res = bench_ssb_q1_cpu_socket_pushdown_vary_bw(
         FLAGS_scale_factor, FLAGS_server_number, 2, 4, 4, false, pushdown_dop);
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_adaptive_ssb) {
+    LOG(INFO) << " running bench_adaptive_ssb";
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb(
+        {.ssb_query_args =
+             SSBArgs{.do_staging = true,
+                     .do_bloom_filter_build = true,
+                     .do_bloom_filter_pushdown = true,
+                     .do_filter_pushdown = true,
+                     .do_direct = true,
+                     .policy = policy,
+                     .scan_slack = 24,
+                     .pushdown_numa_nodes =
+                         get_default_pushdown_numa_nodes(FLAGS_server_number),
+                     .compute_numa_nodes =
+                         get_default_compute_numa_nodes(FLAGS_server_number),
+                     .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                         FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_grouter_direct_ssb) {
+    LOG(INFO) << " running bench_grouter_direct_ssb";
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb(
+        {.ssb_query_args =
+             SSBArgs{.do_staging = false,
+                     .do_bloom_filter_build = false,
+                     .do_bloom_filter_pushdown = false,
+                     .do_filter_pushdown = false,
+                     .do_direct = true,
+                     .policy = policy,
+                     .scan_slack = 24,
+                     .pushdown_numa_nodes =
+                         get_default_pushdown_numa_nodes(FLAGS_server_number),
+                     .compute_numa_nodes =
+                         get_default_compute_numa_nodes(FLAGS_server_number),
+                     .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                         FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_grouter_pushdown_ssb) {
+    LOG(INFO) << " running bench_grouter_pushdown_ssb";
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb(
+        {.ssb_query_args =
+             SSBArgs{.do_staging = false,
+                     .do_bloom_filter_build = true,
+                     .do_bloom_filter_pushdown = true,
+                     .do_filter_pushdown = true,
+                     .do_direct = false,
+                     .policy = policy,
+                     .scan_slack = 24,
+                     .pushdown_numa_nodes =
+                         get_default_pushdown_numa_nodes(FLAGS_server_number),
+                     .compute_numa_nodes =
+                         get_default_compute_numa_nodes(FLAGS_server_number),
+                     .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                         FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_grouter_staging_ssb) {
+    LOG(INFO) << " running bench_grouter_staging_ssb";
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb(
+        {.ssb_query_args =
+             SSBArgs{.do_staging = true,
+                     .do_bloom_filter_build = false,
+                     .do_bloom_filter_pushdown = false,
+                     .do_filter_pushdown = false,
+                     .do_direct = false,
+                     .policy = policy,
+                     .scan_slack = 24,
+                     .pushdown_numa_nodes =
+                         get_default_pushdown_numa_nodes(FLAGS_server_number),
+                     .compute_numa_nodes =
+                         get_default_compute_numa_nodes(FLAGS_server_number),
+                     .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                         FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
     ss << res;
     ss << std::endl;
     if (out.has_value()) {

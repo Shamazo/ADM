@@ -31,27 +31,6 @@
 #include "prepared_queries/prepared-queries.hpp"
 #include "util.hpp"
 
-std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number) {
-  switch (server_number) {
-    case 49:
-      return {0, 1, 2, 3};
-    case 44:
-      return {0};
-    default:
-      LOG(FATAL) << "unknown server number";
-  }
-}
-
-std::vector<uint32_t> get_default_compute_numa_nodes(int server_number) {
-  switch (server_number) {
-    case 49:
-      return {4, 5, 6, 7};
-    case 46:
-      return {1};
-    default:
-      LOG(FATAL) << "unknown server number";
-  }
-}
 
 /**
  * Arguments for the bench_nvme_vary_sel_micro function

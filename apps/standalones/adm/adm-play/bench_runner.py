@@ -610,6 +610,54 @@ def setup_benchmarks() -> List[BenchmarkConfig]:
         #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=4",
         #     shortname_with_args="sel_cpu_grouter_pd_dop_4"
         # )
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_adaptive_back_pressure",
+            args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_bp_adaptive_dop4"
+        ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_adaptive_throughput",
+        #     args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_tp_adaptive_dop4"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_direct",
+        #     args="--bench_grouter_direct_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_grouter_direct"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_staging",
+        #     args="--bench_grouter_staging_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_grouter_staging"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_pushdown",
+        #     args="--bench_grouter_pushdown_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_grouter_pushdown_dop4"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_adaptive_back_pressure",
+        #     args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_bp_adaptive_dop16"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_pushdown",
+        #     args="--bench_grouter_pushdown_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_grouter_pushdown_dop16"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./proteusadm-play",
+        #     shortname="ssb_cpu_grouter_adaptive_throughput",
+        #     args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+        #     shortname_with_args="ssb_bp_td_adaptive_dop16"
+        # ),
     ]
 
 

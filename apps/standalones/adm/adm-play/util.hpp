@@ -172,4 +172,8 @@ class TimeStampLogger {
 
 extern TimeStampLogger* global_timestamp_logger;
 
+std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number);
+
+std::vector<uint32_t> get_default_compute_numa_nodes(int server_number);
+
 #endif  // PROTEUS_ADM_BENCH_UTIL_HPP
