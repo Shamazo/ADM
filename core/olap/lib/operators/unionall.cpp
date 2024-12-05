@@ -31,9 +31,11 @@ void UnionAll::produce_(OlapParallelContext *context) {
   catch_pip = context->operator->();
 
   // push new pipeline for the throw part
+  int child_idx = 0;
   for (const auto &child : children) {
     context->popPipeline();
-    context->pushPipeline();
+    context->pushPipeline(nullptr,
+                          "union_child_" + std::to_string(child_idx++) + "_");
 
     context->registerOpen(this, [this](Pipeline *pip) {
       event_range<range_log_op::UNION_ALL_OPEN> er(
