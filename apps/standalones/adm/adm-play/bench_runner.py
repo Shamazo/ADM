@@ -19,6 +19,7 @@ import traceback
 @dataclass
 class BenchmarkConfig:
     """Configuration for a single benchmark run."""
+    binary: str
     shortname: str
     args: str
     shortname_with_args: Optional[str] = None
@@ -98,7 +99,7 @@ class BenchmarkRunner:
         self.base_output = self.args.output_dir / self.result_subdir / timestamp
         os.makedirs(self.base_output, exist_ok=True)
         self.slack_thread = SlackThread(
-            f":weight_lifter: running selectivity micros :weight_lifter: \n Result directory will be {self.base_output}")
+            f":weight_lifter: :crossed_fingers: running benchmarks :crossed_fingers: :weight_lifter: \n Result directory will be {self.base_output}")
 
     def get_benchmark_output_dir(self, benchmark: BenchmarkConfig) -> Path:
         """Construct full output path for a benchmark."""
@@ -147,25 +148,27 @@ class BenchmarkRunner:
         for device, latencies in high_latencies.items():
             self.slack_thread.send_slack_message(
                 f" {':warning:' * 10} \n Disk {device} read await time is high, upto {max(latencies)} ms. Latency > 60ms observed in {len(latencies)}/{num_entries} iostat samples \n {':warning:' * 10}",
-                to_channel=True)
+                to_channel=False)
 
     def create_trace(self, outdir: Path, trace_name: str = "out.trace") -> None:
         """Create a trace file using conda."""
         try:
+            if self.args.no_process_traces:
+                subprocess.run(f"rm -f timeline*", shell=True)
+                return
             logging.info(f"Creating trace: {trace_name}")
+            log_file = outdir / f"trace_parser_{trace_name}.log"
             subprocess.run(
                 ["python3", "/tmp/tmp.YD2SgUVlV5/tools/tracing/cli.py", ".", f"{trace_name}"],
                 check=True,
-                capture_output=True,
-                text=True
+                stdout=open(log_file, "a"),
+                stderr=subprocess.STDOUT
             )
             subprocess.run(["pigz", f"{trace_name}"], check=True, capture_output=True, text=True)
             subprocess.run(["mv", f"{trace_name}.gz", str(outdir)], check=True, capture_output=True, text=True)
             subprocess.run(f"rm -f timeline*", shell=True)
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to create trace: {str(e)}")
-            logging.error(f"Command output: {e.output}")
-            logging.error(f"Command stderr: {e.stderr}")
             if e.returncode:
                 logging.error(f"Return code: {e.returncode}")
 
@@ -207,26 +210,42 @@ class BenchmarkRunner:
 
             # Create benchmark command script
             with open("bench_command.sh", "w") as f:
-                cmd = f"LD_LIBRARY_PATH=../lib:/scratch/pelago/llvm-14/opt/lib {self.args.bin_dir}/proteusadm-play {self.get_benchmark_args(bench, output_dir)}"
+                cmd = f"LD_LIBRARY_PATH=../lib:/scratch/pelago/llvm-14/opt/lib {self.args.bin_dir}/{bench.binary} {self.get_benchmark_args(bench, output_dir)}"
                 f.write(cmd)
             os.chmod("bench_command.sh", 0o755)
 
-            logging.info(f"Running AMD profile for benchmark: {bench.shortname}")
+            logging.info(f"Running AMD profile for benchmark: {bench.binary} {bench.shortname}")
+            try:
+                iostat_process = self.start_iostat_collection()
+            except:
+                logging.error("Failed to start iostat collection")
+                return
             # Run AMD profiler
             try:
                 subprocess.run([
                     "sudo", "-E", "/opt/AMDuProf_4.1-424/bin/AMDuProfPcm",
-                    "-r", "-m", "xgmi,memory,dc", "-a", "-A", "package", "-t", "20",
-                    "-s", "-o", str(output_dir / "amd_pcm.csv"),
+                    "-r", "-m", "xgmi,memory", "-a", "-A", "package", "-t", "50",
+                    "-s", "-o", str(os.getcwd() + "/amd_pcm.csv"),
                     "-q", "-k", "--", f"{os.getcwd()}/bench_command.sh"
                 ], stdout=open(log_file, "w"), stderr=subprocess.STDOUT, check=True)
             except subprocess.CalledProcessError as e:
                 logging.error(f"AMD profiling failed: {e}")
+
+                iostat_process.terminate()
                 continue
+
+            iostat_process.send_signal(subprocess.signal.SIGINT)
+            time.sleep(1)
+            iostat_process.terminate()
+            iostat_process.wait(2)
+            self.parse_iostat_and_check_health()
 
             os.remove("bench_command.sh")
             subprocess.run(["sudo", "chmod", "-R", "755", str(output_dir)])
             subprocess.run(["sudo", "chown", "-R", "nicholso:DIAS-unit", str(output_dir)])
+            self.create_trace(output_dir,
+                              f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
+            subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
 
     def run_perf_profile(self):
         """Run benchmarks with perf profiling."""
@@ -242,7 +261,7 @@ class BenchmarkRunner:
                 subprocess.run(f"rm -f {self.args.bin_dir}/generated_code/*", shell=True)
 
                 benchmark_args = self.get_benchmark_args(bench, output_dir)
-                logging.info(f"Running perf profile for benchmark: {bench.shortname}")
+                logging.info(f"Running perf profile for benchmark: {bench.binary} {bench.shortname}")
 
                 try:
                     # Record perf data
@@ -251,7 +270,7 @@ class BenchmarkRunner:
                                        "--control", f"fd:{ctl_fd},{ack_fd}",
                                        "-e", self.perf_events, "--sample-cpu",
                                        "-o", "/tmp/perf.data", "--",
-                                       "./selectivity-micros"
+                                       bench.binary
                                    ] + benchmark_args.split(),
                                    stdout=open(log_file, "w"),
                                    stderr=subprocess.STDOUT,
@@ -306,9 +325,9 @@ class BenchmarkRunner:
                 cmd = [
                           "perf", "record", "-k", "1", "--delay=-1",
                           "--control", f"fd:{ctl_fd},{ack_fd}",
-                          "-F", "199", "-e", "cpu-clock", "--call-graph", "dwarf",
+                          "-F", "199", "-e", "cpu-clock", "--call-graph", "dwarf", "--sample-cpu",
                           "-o", "/tmp/perf.data", "--",
-                          "./selectivity-micros"
+                          bench.binary
                       ] + benchmark_args.split()
 
                 iostat_process = self.start_iostat_collection()
@@ -332,12 +351,13 @@ class BenchmarkRunner:
                 with open(
                         f"flame_graph_{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.svg",
                         "w") as f:
-                    perf_script = subprocess.Popen(["perf", "script", "-i", "perf.data.jit"], stdout=subprocess.PIPE)
+                    perf_script = subprocess.Popen(["perf", "script", "-i", "perf.data.jit", "-F", "+cpu"],
+                                                   stdout=subprocess.PIPE)
                     collapse = subprocess.Popen([f"{self.args.flame_graph_path}/stackcollapse-perf.pl"],
                                                 stdin=perf_script.stdout, stdout=subprocess.PIPE)
                     flamegraph = subprocess.Popen([f"{self.args.flame_graph_path}/flamegraph.pl",
                                                    "--width", "2400",
-                                                   "--subtitle", f"./selectivity-micros {benchmark_args}"],
+                                                   "--subtitle", f"{bench.binary} {benchmark_args}"],
                                                   stdin=collapse.stdout, stdout=f)
                     flamegraph.wait()
 
@@ -388,12 +408,12 @@ class BenchmarkRunner:
             subprocess.run(f"rm -f {self.args.bin_dir}/generated_code/*", shell=True)
 
             benchmark_args = self.get_benchmark_args(bench, output_dir)
-            logging.info(f"Generating off-CPU flame graph for benchmark: {bench.shortname}")
+            logging.info(f"Generating off-CPU flame graph for benchmark: {bench.binary} {bench.shortname}")
 
             try:
                 # Start the benchmark process
                 benchmark_proc = subprocess.Popen(
-                    ["./selectivity-micros"] + f"{benchmark_args} --exit-exit_loop".split(),
+                    [bench.binary] + f"{benchmark_args} --exit-exit_loop".split(),
                     stdout=open(log_file, "a"),
                     stderr=subprocess.STDOUT
                 )
@@ -407,7 +427,7 @@ class BenchmarkRunner:
                                             stderr=subprocess.DEVNULL)
 
                 # Wait for benchmark
-                time.sleep(100)  # Hard-coded wait time as per original script
+                time.sleep(100)  # Hard-coded wait time
 
                 # Stop profiler
                 profiler.terminate()
@@ -425,7 +445,7 @@ class BenchmarkRunner:
                         "--title=Off-CPU Time Flame Graph",
                         "--countname=us",
                         "--width", "2400",
-                        "--subtitle", f"off-cpu ./selectivity-micros {benchmark_args}"
+                        "--subtitle", f"off-cpu {bench.binary} {benchmark_args}"
                     ], stdin=open("off_cpu.stacks"), stdout=f, check=True)
 
                 # Copy results
@@ -443,6 +463,7 @@ class BenchmarkRunner:
 
     def run_standard_benchmark(self):
         """Run benchmarks without profiling."""
+        benchmark_result_paths = []
         for bench in self.benchmarks:
             output_dir = self.get_benchmark_output_dir(bench)
             os.makedirs(output_dir, exist_ok=True)
@@ -453,15 +474,20 @@ class BenchmarkRunner:
 
             benchmark_args = self.get_benchmark_args(bench, output_dir)
             logging.info(f"Running benchmark: {bench.shortname}")
-            logging.info(f"Command: ./selectivity-micros {benchmark_args}")
+            logging.info(f"Command: {bench.binary} {benchmark_args}")
 
             try:
                 iostat_process = self.start_iostat_collection()
+            except:
+                logging.error("Failed to start iostat collection")
+                return
+            try:
                 subprocess.run(
-                    ["./selectivity-micros"] + benchmark_args.split(),
+                    [bench.binary] + benchmark_args.split(),
                     stdout=open(log_file, "a"),
                     stderr=subprocess.STDOUT,
-                    check=True
+                    check=True,
+                    timeout=3600
                 )
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
@@ -475,85 +501,114 @@ class BenchmarkRunner:
                 self.create_trace(output_dir,
                                   f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
                 subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
-                time.sleep(30)
+                benchmark_result_paths.append(self.get_benchmark_result_filepath(bench, output_dir))
+                time.sleep(10 * self.args.selectivities.count(",") if self.args.selectivities else 10 * 15)
 
-            except subprocess.CalledProcessError as e:
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+                iostat_process.terminate()
                 logging.error(f"Benchmark failed: {e}")
                 continue
+
+        combined_results_path = f'{self.base_output}/results.csv'
+        with open(combined_results_path, 'w') as outfile:
+            # Write first file with header
+            with open(benchmark_result_paths[0]) as firstfile:
+                outfile.write(firstfile.read())
+
+            # Append remaining files without headers
+            for path in benchmark_result_paths[1:]:
+                with open(path) as f:
+                    next(f)  # Skip header
+                    outfile.write(''.join(line for line in f if line.strip()))
+        self.slack_thread.send_file(f"combined results", combined_results_path)
 
 
 def setup_benchmarks() -> List[BenchmarkConfig]:
     """Create list of benchmark configurations."""
     return [
         # BenchmarkConfig(
+        #     binary="./selectivity-micros",
         #     shortname="sel_cpu_pd",
-        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=4 --result_file={output_dir}/sel_cpu_pd_dop_1.csv",
+        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=4",
         #     shortname_with_args="sel_cpu_pd_dop_4"
         # ),
         # BenchmarkConfig(
+        #     binary="./selectivity-micros",
         #     shortname="sel_cpu_pd",
-        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=16 --result_file={output_dir}/sel_cpu_pd_dop_4.csv",
+        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=16",
         #     shortname_with_args="sel_cpu_pd_dop_16"
         # ),
         # BenchmarkConfig(
+        #     binary="./selectivity-micros",
         #     shortname="sel_cpu_baseline",
-        #     args="--bench_micro_cpu_socket_pushdown_baseline --result_file={output_dir}/sel_cpu_baseline.csv"
+        #     args="--bench_micro_cpu_socket_pushdown_baseline"
         # ),
         # BenchmarkConfig(
+        #     binary="./selectivity-micros",
         #     shortname="sel_cpu_stage_one",
-        #     args="--bench_micro_cpu_socket_stage_one --result_file={output_dir}/sel_cpu_stage_one.csv"
+        #     args="--bench_micro_cpu_socket_stage_one"
         # ),
 
-        BenchmarkConfig(
-            shortname="sel_cpu_stage_both",
-            args="--bench_micro_cpu_socket_stage_both"
-        ),
-        BenchmarkConfig(
-            shortname="sel_cpu_grouter_staging",
-            args="--bench_micro_cpu_socket_grouter_stage_both --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
-        ),
-        BenchmarkConfig(
-            shortname="sel_cpu_grouter_staging_partial_sum",
-            args="--bench_micro_cpu_socket_grouter_stage_both_partial_sum --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
-        ),
-        BenchmarkConfig(
-            # currently this relies on hard coding the routing policy
-            shortname="sel_cpu_grouter_adaptive_force_staging",
-            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
-        ),
         # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_adaptive_force_staging_partial",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_force_staging_partial.csv"
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_stage_both",
+        #     args="--bench_micro_cpu_socket_stage_both"
         # ),
         # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_adaptive_throughput",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive_force_staging.csv",
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_grouter_staging",
+        #     args="--bench_micro_cpu_socket_grouter_stage_both --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_grouter_staging_partial_sum",
+        #     args="--bench_micro_cpu_socket_grouter_stage_both_partial_sum --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        # ),
+
+        # BenchmarkConfig(
+        #     binary="./selectivity-micros",
+        #     # currently this relies on hard coding the routing policy
+        #     shortname="sel_cpu_grouter_adaptive_force_staging",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
+        # ),
+
+        # BenchmarkConfig(
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_grouter_adaptive_force_staging_partial",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
+        # ),
+        # BenchmarkConfig(
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_grouter_adaptive_throughput_staging_direct",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
         #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_4"
         # ),
         # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_adaptive_backpressure",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive.csv",
+        #     binary="./selectivity-micros",
+        #     shortname="sel_cpu_grouter_adaptive_backpressure_staging_direct",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
         #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_4"
         # ),
         # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_adaptive_throughput",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive_force_staging.csv",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
         #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_16"
         # ),
         # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_adaptive_backpressure",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --result_file={output_dir}/sel_cpu_grouter_adaptive.csv",
+        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
         #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_16"
         # ),
 
         # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_pd",
-        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1 --result_file={output_dir}/sel_cpu_grouter_pd_dop1.csv",
+        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1",
         #     shortname_with_args="sel_cpu_grouter_pd_dop_1"
         # ),
         # BenchmarkConfig(
         #     shortname="sel_cpu_grouter_pd",
-        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=4 --result_file={output_dir}/sel_cpu_grouter_pd.csv"
+        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=4",
+        #     shortname_with_args="sel_cpu_grouter_pd_dop_4"
         # )
     ]
 
@@ -564,6 +619,7 @@ def main():
     parser.add_argument("-p", "--profile-perf", action="store_true", help="Enable perf profiling")
     parser.add_argument("-f", "--flame-graph", action="store_true", help="Generate flame graph")
     parser.add_argument("-o", "--off-cpu-flame-graph", action="store_true", help="Generate off-CPU flame graph")
+    parser.add_argument("-n", "--no-process-traces", action="store_true", help="Skip processing traces")
 
     # Add path arguments with defaults
     parser.add_argument("--bin-dir", type=Path,
@@ -599,7 +655,7 @@ def main():
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.INFO)
     # Create file handler
-    file_handler = logging.FileHandler(runner.base_output / 'run_sel_micros.log')
+    file_handler = logging.FileHandler(runner.base_output / 'bench_runner.log')
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.INFO)
     # Add handlers to logger
