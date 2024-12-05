@@ -217,31 +217,31 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
       throughputs.resize(num_consumers, 0.0);
     }
     uint64_t get_target() {
-      if (num_consumers == 1) {
-        return 0;
-      } else {
-        return 1;
-      }
+      //      if (num_consumers == 1) {
+      //        return 0;
+      //      } else {
+      //        return 1;
+      //      }
 
-      //      if (exploit) {
-      //        return curr_target;
-      //      }
-      //      if (tracker.get_completed_events() > 1000) {
-      //        throughputs[curr_target] = tracker.get_current_throughput();
-      //        LOG(INFO)<< " previous throughput of " << curr_target << " is "
-      //                  << tracker.get_current_throughput();
-      //        curr_target = (curr_target + 1) % num_consumers;
-      //        LOG(INFO) << "switching to " << curr_target;
-      //        tracker.reset();
-      //        if (curr_target == 0) {
-      //          curr_target = std::distance(
-      //              throughputs.begin(),
-      //              std::max_element(throughputs.begin(), throughputs.end()));
-      //          LOG(INFO) << "exploit time: " << curr_target;
-      //          exploit = true;
-      //        }
-      //      }
-      //      return curr_target;
+      if (exploit) {
+        return curr_target;
+      }
+      if (tracker.get_completed_events() > 400) {
+        throughputs[curr_target] = tracker.get_current_throughput();
+        LOG(INFO) << " previous throughput of " << curr_target << " is "
+                  << tracker.get_current_throughput();
+        curr_target = (curr_target + 1) % num_consumers;
+        LOG(INFO) << "switching to " << curr_target;
+        tracker.reset();
+        if (curr_target == 0) {
+          curr_target = std::distance(
+              throughputs.begin(),
+              std::max_element(throughputs.begin(), throughputs.end()));
+          LOG(INFO) << "exploit time: " << curr_target;
+          exploit = true;
+        }
+      }
+      return curr_target;
     }
   };
 
