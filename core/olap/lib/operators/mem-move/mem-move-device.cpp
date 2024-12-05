@@ -21,8 +21,6 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "mem-move-device.hpp"
-
 #include <lz4.h>
 
 #include <atomic>
@@ -30,7 +28,6 @@
 #include <platform/memory/block-manager.hpp>
 #include <platform/memory/memory-manager.hpp>
 #include <platform/threadpool/threadpool.hpp>
-#include <platform/util/tracing.hpp>
 #include <platform/util/profiling.hpp>
 #include <platform/util/timing.hpp>
 #include <platform/util/tracing.hpp>
@@ -123,9 +120,12 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
       CHECK_GT(decomp_res, 0)
           << "failed to decompress block for page: " << page_id;
       std::free(compressed_buff);
-      std::atomic_fetch_add_explicit(&wu->complete, -1,
-                                     std::memory_order_relaxed);
-      DCHECK_GE(wu->complete, 0);
+      int curr_val = std::atomic_fetch_add_explicit(&wu->complete, -1,
+                                                    std::memory_order_relaxed);
+      if (curr_val - 1 == 0) {
+        wu->cv.notify_one();
+      }
+      DCHECK_GE(curr_val, 0);
     };
     auto read_size = *page_io_info.size;
     if (read_size % 512 != 0) {
@@ -169,8 +169,11 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
       // TODO really should probably pass the result of IO to the callback
       proteus::storage::IoUringThreadUnsafe::CompletionCallBackSuccess cb =
           [wu] {
-            std::atomic_fetch_add_explicit(&wu->complete, -1,
-                                           std::memory_order_relaxed);
+            int curr_val = std::atomic_fetch_add_explicit(
+                &wu->complete, -1, std::memory_order_relaxed);
+            if (curr_val - 1 == 0) {
+              wu->cv.notify_one();
+            }
           };
 
       io_uring->read(page_io_info.fd, buff.get(), *page_io_info.size,
@@ -660,7 +663,7 @@ void MemMoveDevice::consume(OlapParallelContext *context,
 
 MemMoveDevice::MemMoveConf *MemMoveDevice::createMoveConf() const {
   void *pmmc = MemoryManager::mallocPinned(sizeof(MemMoveConf));
-  auto mmc = new (pmmc) MemMoveConf;
+  auto mmc = new (pmmc) MemMoveConf{};
   mmc->do_transfer = do_transfer;
   return mmc;
 }
@@ -718,6 +721,7 @@ void MemMoveDevice::open(Pipeline *pip) {
   }
   char *data_buff = (char *)mmc->data_buffs;
   for (size_t i = 0; i < slack; ++i) {
+    new (&wu[i]) workunit{};
     wu[i].data = ((void *)(data_buff + i * data_size));
     wu[i].complete = 0;
     wu[i].bytes_read = static_cast<ssize_t *>(
@@ -775,10 +779,10 @@ void MemMoveDevice::close(Pipeline *pip) {
   {
     event_range<range_log_op::MEMMOVE_CLOSE> er{m_id, catch_pip->getUUID(),
                                                 pip->getGroup()};
-    mmc->tran.close();
     if (mmc->io_uring) {
       mmc->io_uring->flush();
     }
+    mmc->tran.close();
 
     nvtxRangePop();
     mmc->worker.get();
@@ -838,10 +842,12 @@ void MemMoveDevice::MemMoveConf::propagate(MemMoveDevice::workunit *buff,
     // if idle is empty, then slack is fully utilized
     // This means we the catcher is either waiting on IO to be completed or
     // processing the workunit.
+    io_uring->poll();
     while (idle.empty_unsafe()) {
       // poll and handle io_uring completions
       // Polling enters the kernel, reaps completions and executes the callbacks
       io_uring->poll();
+      std::this_thread::yield();
       //      DLOG_EVERY_N(INFO, 500000) << "polling.... idle size: " <<
       //      idle.size_unsafe() << " tran size: " << tran.size_unsafe();
     }
@@ -878,7 +884,11 @@ bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
     //    cudaStreamSynchronize(strm);
     // wait for io_uring operations if any
     while ((*ret)->complete != 0) {
-      std::this_thread::yield();
+      std::unique_lock<std::mutex> lock((*ret)->lock);
+      // use a timeout to avoid potential deadlock condition if the callback
+      // updates `complete` to 0 after we take the lock
+      (*ret)->cv.wait_for(lock, std::chrono::milliseconds(10),
+                          [&]() { return (*ret)->complete == 0; });
     }
     return true;
   }

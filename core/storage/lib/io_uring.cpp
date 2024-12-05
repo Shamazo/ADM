@@ -21,6 +21,8 @@
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
+#include <linux/time_types.h>
+
 #include <storage/io_uring.hpp>
 
 using namespace proteus::storage;
@@ -113,7 +115,26 @@ void IoUringThreadUnsafe::poll() {
   unsigned head;
   unsigned i = 0;
 
-  // process completed events
+  struct __kernel_timespec ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = 10000000;  // 10ms
+
+  int res = io_uring_wait_cqe_timeout(&m_ring, &cqe, &ts);
+  if (res == 0) {
+    IoInfo *io_info = static_cast<IoInfo *>(io_uring_cqe_get_data(cqe));
+    if (cqe->res < 0) {
+      io_info->call_back_failure(cqe);
+    } else {
+      io_info->call_back_success();
+    }
+    m_IoInfo_free_set.emplace(io_info);
+    io_uring_cqe_seen(&m_ring, cqe);
+  } else {
+    CHECK(res == -ETIME) << "Failed to wait for cqe with: " << strerror(-res);
+    return;
+  }
+
+  // process any other completed events
   io_uring_for_each_cqe(&m_ring, head, cqe) {
     IoInfo *io_info = static_cast<IoInfo *>(io_uring_cqe_get_data(cqe));
     if (cqe->res < 0) {

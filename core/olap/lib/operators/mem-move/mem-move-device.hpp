@@ -52,6 +52,8 @@ class MemMoveDevice : public experimental::UnaryOperator {
     ssize_t *bytes_read;        // for cufile async api only
     cudaStream_t cufile_strm;   // stream for cufile/nvcomp, memcpyasync still
                                 // uses mmc->strm
+    std::mutex lock;
+    std::condition_variable cv;
     std::vector<GpuDecompressor> *decompressors;
     uint8_t index_in_wu;           // Index within bytes_read
     [[maybe_unused]] bool unused;  // FIXME: remove
