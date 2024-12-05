@@ -32,7 +32,7 @@ std::string get_current_date_str() {
   std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
   std::tm* now_tm = std::localtime(&now_time_t);
   char buffer[50];
-  std::strftime(buffer, sizeof(buffer), "%Y %B %e", now_tm);
+  std::strftime(buffer, sizeof(buffer), "%Y %B %e %H:%M", now_tm);
   return {buffer};
 }
 
@@ -98,8 +98,8 @@ QueryBenchResult benchmark_query(const std::string& label,
               << label;
     auto ts = global_timestamp_logger->log_time_range(
         "bench_query_execute", R"("{""query"": "")" + label +
-                             R"("", ""iteration"": )" + std::to_string(i) +
-                             "}\"");
+                                   R"("", ""iteration"": )" +
+                                   std::to_string(i) + "}\"");
 
     profiling::ProfileRegion pr(pr_type);
 

@@ -137,7 +137,12 @@ class TimeStampLogger {
     LOG(INFO) << "opening output file " << output_file_path;
     PCHECK(output_file.is_open()) << "Could not open" << output_file_path;
     output_file << "name,timestamp_start,timestamp_end,extra" << std::endl;
-    log_time_range("start_adm_timestamp");
+    auto start_epoch = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+    log_time_range(
+        "start_adm_timestamp",
+        R"("{""system_clock_start"": )" + std::to_string(start_epoch) + "}\"");
   }
 
   LogTimeRange log_time_range(const std::string& label,
