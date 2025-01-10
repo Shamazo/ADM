@@ -493,29 +493,29 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
       };
 
       std::vector<std::string> twelve_drives = {
-          "/nvme0/nicholso/data/sbm1000_0_12",   // node 0
+          "/nvme1/nicholso/data/sbm1000_0_12",   // node 0
           "/nvme7/nicholso/data/sbm1000_1_12",   // node 1
           "/nvme13/nicholso/data/sbm1000_2_12",  // node 2
-          "/nvme14/nicholso/data/sbm1000_3_12",  // node 2
+          "/nvme8/nicholso/data/sbm1000_3_12",   // node 3
           "/nvme6/nicholso/data/sbm1000_4_12",   // node 1
           "/nvme9/nicholso/data/sbm1000_5_12",   // node 3
           "/nvme3/nicholso/data/sbm1000_6_12",   // node 0
-          "/nvme11/nicholso/data/sbm1000_7_12",  // node 3
-          "/nvme5/nicholso/data/sbm1000_8_12",   // node 1
+          "/nvme4/nicholso/data/sbm1000_7_12",   // node 1
+          "/nvme12/nicholso/data/sbm1000_8_12",  // node 2
           "/nvme10/nicholso/data/sbm1000_9_12",  // node 3
           "/nvme2/nicholso/data/sbm1000_10_12",  // node 0
           "/nvme15/nicholso/data/sbm1000_11_12"  // node 2
       };
-      check_vector_paths(one_drive);
-      check_vector_paths(two_drives);
-      check_vector_paths(four_drives);
-      check_vector_paths(six_drives);
-      check_vector_paths(eight_drives);
-      check_vector_paths(ten_drives);
+      //      check_vector_paths(one_drive);
+      //      check_vector_paths(two_drives);
+      //      check_vector_paths(four_drives);
+      //      check_vector_paths(six_drives);
+      //      check_vector_paths(eight_drives);
+      //      check_vector_paths(ten_drives);
       check_vector_paths(twelve_drives);
-      //      return {twelve_drives}
-      return {one_drive,    two_drives, four_drives,  six_drives,
-              eight_drives, ten_drives, twelve_drives};
+      return {twelve_drives};
+      //      return {one_drive,    two_drives, four_drives,  six_drives,
+      //              eight_drives, ten_drives, twelve_drives};
     }
   }
   LOG(FATAL) << "not set up for this server: " << server_number;

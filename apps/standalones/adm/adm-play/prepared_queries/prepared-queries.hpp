@@ -146,5 +146,11 @@ PreparedStatement prepare21_adaptive(SSBArgs);
 PreparedStatement prepare22_adaptive(SSBArgs);
 PreparedStatement prepare23_adaptive(SSBArgs);
 PreparedStatement prepare31_adaptive(SSBArgs);
+PreparedStatement prepare32_adaptive(SSBArgs);
+PreparedStatement prepare33_adaptive(SSBArgs);
+PreparedStatement prepare34_adaptive(SSBArgs);
+PreparedStatement prepare41_adaptive(SSBArgs);
+PreparedStatement prepare42_adaptive(SSBArgs);
+PreparedStatement prepare43_adaptive(SSBArgs);
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

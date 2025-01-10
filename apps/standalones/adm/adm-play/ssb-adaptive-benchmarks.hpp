@@ -34,17 +34,18 @@ std::vector<std::pair<decltype(&prepare11_adaptive), std::string>>
 grouter_ssb_queries() {
   return {
       {prepare11_adaptive, "grouter_ssb_Q1.1"},
-      //      {prepare12_adaptive, "grouter_ssb_Q1.2"},
-      //      {prepare13_adaptive, "grouter_ssb_Q1.3"},
-      //      {prepare21_adaptive, "grouter_ssb_Q2.1"},
-      //      {prepare22_adaptive, "grouter_ssb_Q2.2"},
-      //      {prepare23_adaptive, "grouter_ssb_Q2.3"},
-      //            {prepare31_adaptive, "grouter_ssb_Q3.1"},
-      //      {ssb::Query::prepare32, "ssb_Q3.2"},
-      //      {ssb::Query::prepare33, "ssb_Q3.3"}, {ssb::Query::prepare34,
-      //      "ssb_Q3.4"}, {ssb::Query::prepare41, "ssb_Q4.1"},
-      //      {ssb::Query::prepare42, "ssb_Q4.2"}, {ssb::Query::prepare43,
-      //      "ssb_Q4.3"}
+      {prepare12_adaptive, "grouter_ssb_Q1.2"},
+      {prepare13_adaptive, "grouter_ssb_Q1.3"},
+      {prepare21_adaptive, "grouter_ssb_Q2.1"},
+      {prepare22_adaptive, "grouter_ssb_Q2.2"},
+      {prepare23_adaptive, "grouter_ssb_Q2.3"},
+      {prepare31_adaptive, "grouter_ssb_Q3.1"},
+      {prepare32_adaptive, "grouter_ssb_Q3.2"},
+      {prepare33_adaptive, "grouter_ssb_Q3.3"},
+      {prepare34_adaptive, "grouter_ssb_Q3.4"},
+      {prepare41_adaptive, "grouter_ssb_Q4.1"},
+      {prepare42_adaptive, "grouter_ssb_Q4.2"},
+      {prepare43_adaptive, "grouter_ssb_Q4.3"},
   };
 }
 
@@ -74,7 +75,8 @@ struct SSBAdaptiveArgs {
   int scale_factor = 1000;
 
   std::string header() {
-    return "server_number,shaper,compressed,pushdown_dop,scan_slack,policy,"
+    return "server_number,shaper,compressed,pushdown_dop,scan_slack,bloom_"
+           "filter_size,policy,"
            "scale_factor";
   }
 };
@@ -83,7 +85,7 @@ std::ostream& operator<<(std::ostream& os, const SSBAdaptiveArgs& args) {
   os << args.server_number << "," << magic_enum::enum_name(args.shaper_type)
      << "," << (args.compressed ? "true," : "false,")
      << args.ssb_query_args.pushdown_dop << ","
-     << args.ssb_query_args.scan_slack << "," << "bf_size,"
+     << args.ssb_query_args.scan_slack << ","
      << args.ssb_query_args.bloom_filter_size << ","
      << magic_enum::enum_name(args.ssb_query_args.policy) << ","
      << args.scale_factor;

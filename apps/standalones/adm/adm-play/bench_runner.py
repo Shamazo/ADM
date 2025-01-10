@@ -502,7 +502,7 @@ class BenchmarkRunner:
                                   f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
                 subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
                 benchmark_result_paths.append(self.get_benchmark_result_filepath(bench, output_dir))
-                time.sleep(10 * self.args.selectivities.count(",") if self.args.selectivities else 10 * 15)
+                time.sleep(10 * self.args.selectivities.count(",") if self.args.selectivities else 20)
 
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
                 iostat_process.terminate()
