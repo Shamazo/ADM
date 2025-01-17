@@ -141,6 +141,12 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   const GeneralizedRoutingPolicy policy_type;
   std::unique_ptr<routing::RoutingPolicy> routing;
   std::weak_ptr<GeneralizedRouter> self_ptr;
+  /// When using the throughput split policies, the number of rowgroups to test
+  /// each consumer with
+  const uint64_t sample_size;
+  /// When using the throughput split policies, skip the first
+  /// count_skip_samples rowgroups when evaluating throughput
+  const uint32_t count_skip_samples;
 
  protected:
   struct ConstructorGuard {
@@ -153,6 +159,12 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
     size_t slack;
     std::vector<RecordAttribute *> attrs;
     GeneralizedRoutingPolicy policy_type;
+    /// When using the throughput split policies, the number of rowgroups to
+    /// test each consumer with
+    uint64_t sample_size = 350;
+    /// When using the throughput split policies, skip the first
+    /// count_skip_samples rowgroups when evaluating throughput
+    uint32_t count_skip_samples = 250;
   };
 
   static std::shared_ptr<GeneralizedRouter> create(Args args) {
@@ -175,7 +187,9 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
         wantedFields(std::move(args.attrs)),
         policy_type(args.policy_type),
         params_type(nullptr),
-        buf_size(0) {}
+        buf_size(0),
+        sample_size(args.sample_size),
+        count_skip_samples(args.count_skip_samples) {}
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;

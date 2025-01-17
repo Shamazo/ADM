@@ -145,9 +145,13 @@ class ThroughputTracker {
   uint64_t current_start_time;
   // Flag to handle first event
   bool first_event;
+  const uint32_t count_skip_events;
 
  public:
-  ThroughputTracker() { reset(); }
+  ThroughputTracker(uint32_t _count_skip_events)
+      : count_skip_events(_count_skip_events) {
+    reset();
+  }
 
   void reset() {
     completed_events = 0;
@@ -171,10 +175,9 @@ class ThroughputTracker {
     if (event != current_event) {
       uint64_t duration = timestamp - current_start_time;
       completed_events++;
-      if (completed_events > 100) {
+      if (completed_events > count_skip_events) {
         total_time += duration;
       }
-
       current_event = event;
       current_start_time = timestamp;
     }
@@ -185,12 +188,16 @@ class ThroughputTracker {
       return 0.0;
     }
     // Return events per unit time
-    return static_cast<double>(completed_events - 100) / total_time;
+    return static_cast<double>(completed_events - count_skip_events) /
+           total_time;
   }
 };
 
 /**
- * WIP
+ * This routing policy will select a consumer based on the throughput of the
+ * consumers. It will sample the throughput of each consumer and select the
+ * consumer with the highest throughput. It will switch to the consumer with the
+ * highest throughput after a certain number of samples.
  */
 class ThroughputSplitPreferDataLocal : public RoutingPolicy {
   const RecordAttribute wantedField;
@@ -199,6 +206,8 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
   std::vector<size_t> consumer_offsets;
   std::vector<DeviceType> device_types;
   StateVar routing_state_var;
+  const uint64_t sample_size;
+  const uint32_t count_skip_events;
 
  public:
   class RoutingState {
@@ -208,12 +217,15 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
     uint64_t curr_target;
     std::vector<double> throughputs;
     bool exploit;
-    RoutingState(uint64_t _num_consumers)
+    const uint64_t sample_size;
+    RoutingState(uint64_t _num_consumers, uint64_t _sample_size,
+                 uint32_t _count_skip_events)
         : num_consumers(_num_consumers),
-          tracker(),
+          tracker(_count_skip_events),
           curr_target(0),
           throughputs(),
-          exploit(false) {
+          exploit(false),
+          sample_size(_sample_size) {
       throughputs.resize(num_consumers, 0.0);
     }
     uint64_t get_target() {
@@ -226,10 +238,11 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
       if (exploit) {
         return curr_target;
       }
-      if (tracker.get_completed_events() > 400) {
+      if (tracker.get_completed_events() > sample_size) {
         throughputs[curr_target] = tracker.get_current_throughput();
         LOG(INFO) << " previous throughput of " << curr_target << " is "
-                  << tracker.get_current_throughput();
+                  << tracker.get_current_throughput() << " with " << sample_size
+                  << "samples";
         curr_target = (curr_target + 1) % num_consumers;
         LOG(INFO) << "switching to " << curr_target;
         tracker.reset();
@@ -249,7 +262,8 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
   ThroughputSplitPreferDataLocal(
       const std::vector<RecordAttribute *> &wantedFields,
       std::vector<Affinitizer *> consumer_affs,
-      const std::vector<DeviceType> &consumer_device_types);
+      const std::vector<DeviceType> &consumer_device_types,
+      uint64_t sample_size, uint32_t count_skip_events);
   routing_target evaluate(OlapParallelContext *context,
                           const OperatorState &childState,
                           ProteusValueMemory retrycnt) override;
@@ -275,7 +289,9 @@ class PreferLocal : public RoutingPolicy {
 
 extern "C" {
 [[maybe_unused]] void record_event(void *state, void *event);
-[[maybe_unused]] void *createRoutingState(uint64_t num_consumers);
+[[maybe_unused]] void *createRoutingState(uint64_t num_consumers,
+                                          uint64_t sample_size,
+                                          uint32_t count_skip_samples);
 [[maybe_unused]] void destroyRoutingState(void *state);
 [[maybe_unused]] uint64_t get_target(void *state);
 }

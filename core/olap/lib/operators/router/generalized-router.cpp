@@ -270,7 +270,7 @@ std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
         device_types.emplace_back(c_ptr->target_device);
       }
       return std::make_unique<routing::ThroughputSplitPreferDataLocal>(
-          _wantedFields, affs, device_types);
+          _wantedFields, affs, device_types, sample_size, count_skip_samples);
     }
     default: {
       CHECK(false) << "Unimplemented";  // FIXME: rest of the policies

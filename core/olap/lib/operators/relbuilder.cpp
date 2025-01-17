@@ -1005,8 +1005,9 @@ RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
       p));
 }
 
-SplitRelBuilder RelBuilder::gsplit(size_t slack,
-                                   GeneralizedRoutingPolicy p) const {
+SplitRelBuilder RelBuilder::gsplit(size_t slack, GeneralizedRoutingPolicy p,
+                                   uint64_t throughput_sample_size,
+                                   uint32_t throughput_skip_samples) const {
   return SplitRelBuilder{apply(proteus::GeneralizedRouter::create(
       {.child = root,
        .slack = slack,
@@ -1022,9 +1023,9 @@ SplitRelBuilder RelBuilder::gsplit(size_t slack,
              }
              return attrs;
            }(),
-       .policy_type = p})
-
-                                   )};
+       .policy_type = p,
+       .sample_size = throughput_sample_size,
+       .count_skip_samples = throughput_skip_samples}))};
 }
 
 RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,

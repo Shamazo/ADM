@@ -131,11 +131,14 @@ struct SSBArgs {
   inline void check() {
     CHECK_NE(morph, nullptr);
     if (do_filter_pushdown) {
-      CHECK_GE(pushdown_dop, 0);
-      CHECK_GE(pushdown_numa_nodes.size(), 0);
+      CHECK_GT(pushdown_dop, 0);
+      CHECK_GT(pushdown_numa_nodes.size(), 0);
     }
     CHECK_GE(compute_numa_nodes.size(), 0);
     CHECK_EQ(do_bloom_filter_pushdown, do_bloom_filter_build);
+    CHECK_GT(scan_slack, 0);
+    CHECK_GT(num_samples, skip_first_samples);
+    CHECK(!compute_numa_nodes.empty());
   }
 };
 

@@ -424,8 +424,10 @@ class RelBuilder {
       size_t alternatives, size_t slack, RoutingPolicy p,
       std::unique_ptr<Affinitizer> aff = nullptr) const;
 
-  [[nodiscard]] SplitRelBuilder gsplit(size_t slack,
-                                       GeneralizedRoutingPolicy p) const;
+  [[nodiscard]] SplitRelBuilder gsplit(
+      size_t slack, GeneralizedRoutingPolicy p,
+      uint64_t throughput_sample_size = 350,
+      uint32_t throughput_skip_samples = 250) const;
 
   /**
    * Union the items from the current flow and the others

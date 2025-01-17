@@ -488,10 +488,13 @@ RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
 ThroughputSplitPreferDataLocal::ThroughputSplitPreferDataLocal(
     const std::vector<RecordAttribute *> &wantedFields,
     std::vector<Affinitizer *> _affs,
-    const std::vector<DeviceType> &target_device_types)
+    const std::vector<DeviceType> &target_device_types, uint64_t _sample_size,
+    uint32_t _count_skip_events)
     : wantedField(*wantedFields[0]),
       consumer_affs(std::move(_affs)),
-      device_types(target_device_types) {
+      device_types(target_device_types),
+      sample_size(_sample_size),
+      count_skip_events(_count_skip_events) {
   CHECK_EQ(consumer_affs.size(), target_device_types.size())
       << "consumer_affs and target_device_types must have the same size";
   const auto &topo = topology::getInstance();
@@ -515,8 +518,10 @@ void record_event(void *state, void *event) {
       ->tracker.notify_event(event, rdtsc());
 }
 
-void *createRoutingState(uint64_t num_consumers) {
-  return new ThroughputSplitPreferDataLocal::RoutingState(num_consumers);
+void *createRoutingState(uint64_t num_consumers, uint64_t sample_size,
+                         uint32_t count_skip_events) {
+  return new ThroughputSplitPreferDataLocal::RoutingState(
+      num_consumers, sample_size, count_skip_events);
 }
 void destroyRoutingState(void *state) {
   delete static_cast<ThroughputSplitPreferDataLocal::RoutingState *>(state);
@@ -534,7 +539,9 @@ void ThroughputSplitPreferDataLocal::generateStateInit(
       charPtrType,
       [=](llvm::Value *pip) -> llvm::Value * {
         return context->gen_call(createRoutingState,
-                                 {context->createInt64(consumer_affs.size())});
+                                 {context->createInt64(consumer_affs.size()),
+                                  context->createInt64(sample_size),
+                                  context->createInt32(count_skip_events)});
       },
       [=](llvm::Value *, llvm::Value *s) {
         return context->gen_call(destroyRoutingState, {s});
