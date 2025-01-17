@@ -75,7 +75,7 @@ namespace routing {
 
   auto fanoutV =
       llvm::ConstantInt::get((llvm::IntegerType *)target->getType(), fanout);
-  return {Builder->CreateURem(target, fanoutV), context->createTrue()};
+  return {Builder->CreateURem(target, fanoutV), context->createFalse()};
 }
 
 ::routing_target HashBased::evaluate(OlapParallelContext *const context,

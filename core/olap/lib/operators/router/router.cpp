@@ -183,7 +183,11 @@ void Router::generate_catch(OlapParallelContext *context) {
 
 proteus::managed_ptr Router::acquireBuffer(int target, bool polling) {
   nvtxRangePushA("rtr::acq_buff");
-
+  /// random policy uses a single shared free pool
+  // this is not well tested and there are cleaner ways to do this
+  if (policy_type == RoutingPolicy::RANDOM){
+    target = 0;
+  }
   if (free_pool[target].empty_unsafe() && polling) {
     nvtxRangePop();
     return nullptr;
@@ -208,6 +212,10 @@ void Router::releaseBuffer(int target, proteus::managed_ptr buff) {
 }
 
 void Router::freeBuffer(int target, proteus::managed_ptr buff) {
+  /// random policy uses a single shared free pool
+  if (policy_type == RoutingPolicy::RANDOM){
+    target = 0;
+  }
   free_pool[target].emplace(buff.release());
 }
 
