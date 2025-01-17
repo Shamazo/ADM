@@ -98,6 +98,9 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
                 << "paths,"
                 << "num_drives,"
                 << "time_ms,"
+                << "using_hyperthreading,"
+                << "samples,"
+                << "skip_samples,"
                 << "date," << args.header() << std::endl;
 
   CHECK(!args.compressed) << "todo";
@@ -146,9 +149,26 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
 
       auto bench_res =
           benchmark_query(query_name, prep_query, args.num_iterations);
-      result_string << bench_res.label << "," << paths << "," << md_dirs.size()
-                    << "," << bench_res.average_query_time.count() << ","
-                    << get_current_date_str() << "," << args << std::endl;
+      for (auto& query_time : bench_res.per_query_times) {
+        result_string
+            << bench_res.label << "," << paths << "," << md_dirs.size() << ","
+            << query_time.count() << "," << std::boolalpha
+            << args.ssb_query_args.use_hyper_threads << ","
+            << (args.ssb_query_args.policy ==
+                        GeneralizedRoutingPolicy::
+                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
+                    ? args.ssb_query_args.num_samples
+                    : 0)
+            << ","
+            << (args.ssb_query_args.policy ==
+                        GeneralizedRoutingPolicy::
+                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
+                    ? args.ssb_query_args.skip_first_samples
+                    : 0)
+            << "," << get_current_date_str() << "," << args << std::endl;
+      }
+      LOG(INFO) << bench_res.label
+                << " average time: " << bench_res.average_query_time.count();
     }
   }
 

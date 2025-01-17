@@ -125,7 +125,15 @@ QueryBenchResult benchmark_query(const std::string& label,
         std::chrono::milliseconds(sum_of_pipeline_times.at(j) / num_iterations);
   }
 
+  std::vector<std::chrono::milliseconds> mean_per_query_times(num_iterations);
+  for (int i = 0; i < num_iterations; i++) {
+    mean_per_query_times[i] = std::chrono::milliseconds(
+        std::accumulate(pipeline_times[i].begin(), pipeline_times[i].end(),
+                        std::chrono::milliseconds(0)));
+  }
+
   QueryBenchResult result;
+  result.per_query_times = mean_per_query_times;
   result.label = label;
   result.pipeline_times = mean_pipeline_times;
   result.average_query_time = std::chrono::milliseconds(

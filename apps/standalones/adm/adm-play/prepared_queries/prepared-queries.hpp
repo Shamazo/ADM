@@ -132,7 +132,10 @@ struct SSBArgs {
   bool do_filter_pushdown = false;
   bool do_bloom_filter_build = false;
   bool do_bloom_filter_pushdown = false;
-  size_t bloom_filter_size = 1_M; // in bits
+  size_t bloom_filter_size = 1_M;     // in bits
+  uint64_t num_samples = 350;         // for throughput policy only
+  uint32_t skip_first_samples = 250;  // for throughput policy only
+  bool use_hyper_threads = false;
   inline void check() {
     CHECK_NE(morph, nullptr);
     if (do_filter_pushdown) {

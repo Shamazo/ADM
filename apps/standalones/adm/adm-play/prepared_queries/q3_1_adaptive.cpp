@@ -35,7 +35,9 @@ PreparedStatement prepare31_adaptive(SSBArgs args) {
   auto &topo = topology::getInstance();
   const auto compute_dop =
       args.compute_numa_nodes.size() *
-      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0)).local_cores.size();
+      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0))
+          .local_cores.size() /
+      2;
 
   auto scan_build_date =
       args.morph->scan("date", {"d_datekey", "d_year"})
@@ -103,7 +105,8 @@ PreparedStatement prepare31_adaptive(SSBArgs args) {
   auto scan_probe = args.morph->scan(
       "lineorder", {"lo_custkey", "lo_suppkey", "lo_orderdate", "lo_revenue"});
 
-  auto probe_split = scan_probe.gsplit(args.scan_slack, args.policy);
+  auto probe_split = scan_probe.gsplit(
+      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
   std::vector<RelBuilder> paths;
   if (args.do_direct) {
     paths.emplace_back(
@@ -111,7 +114,7 @@ PreparedStatement prepare31_adaptive(SSBArgs args) {
             .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.compute_numa_nodes))
-            .memmove(4, DeviceType::CPU));
+            .memmove(2, DeviceType::CPU));
   }
 
   if (args.do_staging) {
@@ -120,7 +123,7 @@ PreparedStatement prepare31_adaptive(SSBArgs args) {
             .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.compute_numa_nodes))
-            .memmove(4, DeviceType::CPU,
+            .memmove(2, DeviceType::CPU,
                      std::vector<bool>{false, false, false, false}));
   }
 

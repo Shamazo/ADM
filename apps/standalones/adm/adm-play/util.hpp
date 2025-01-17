@@ -34,6 +34,7 @@
 enum class Shaper { NVMECPU, NVMEGPU, NVMEGPUPUSHDOWN, NVMESOCKETPUSHDOWN };
 
 struct QueryBenchResult {
+  std::vector<std::chrono::milliseconds> per_query_times;
   std::vector<std::chrono::milliseconds> pipeline_times;
   std::chrono::milliseconds average_query_time;
   std::string label;

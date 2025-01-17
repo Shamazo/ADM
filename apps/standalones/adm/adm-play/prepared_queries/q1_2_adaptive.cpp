@@ -35,7 +35,7 @@ static RelBuilder add_direct_path(
       .path(
           DeviceType::CPU, DegreeOfParallelism{compute_dop},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(4, DeviceType::CPU)
+      .memmove(2, DeviceType::CPU)
       .unpack()
       .filter([&](const auto &arg) -> expression_t {
         return expressions::hint(
@@ -53,7 +53,7 @@ static RelBuilder add_staging_path(
       .path(
           DeviceType::CPU, DegreeOfParallelism{compute_dop},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(4, DeviceType::CPU,
+      .memmove(2, DeviceType::CPU,
                std::vector<bool>{false, false, false, false})
       .unpack()
       .filter([&](const auto &arg) -> expression_t {
@@ -95,7 +95,9 @@ PreparedStatement prepare12_adaptive(SSBArgs args) {
   auto &topo = topology::getInstance();
   const auto compute_dop =
       args.compute_numa_nodes.size() *
-      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0)).local_cores.size();
+      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0))
+          .local_cores.size() /
+      (args.use_hyper_threads ? 1 : 2);
 
   auto scan_build = args.morph->scan("date", {"d_datekey", "d_yearmonthnum"});
 
@@ -136,7 +138,8 @@ PreparedStatement prepare12_adaptive(SSBArgs args) {
             .unpack();
   }
 
-  auto probe_split = scan_probe.gsplit(args.scan_slack, args.policy);
+  auto probe_split = scan_probe.gsplit(
+      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
 
   std::vector<RelBuilder> paths;
   if (args.do_direct) {

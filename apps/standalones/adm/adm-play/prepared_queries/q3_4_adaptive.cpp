@@ -36,7 +36,9 @@ PreparedStatement prepare34_adaptive(SSBArgs args) {
   auto &topo = topology::getInstance();
   const auto compute_dop =
       args.compute_numa_nodes.size() *
-      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0)).local_cores.size();
+      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0))
+          .local_cores.size() /
+      (args.use_hyper_threads ? 1 : 2);
 
   auto scan_build_date =
       args.morph->scan("date", {"d_datekey", "d_year", "d_yearmonth"})
@@ -102,7 +104,8 @@ PreparedStatement prepare34_adaptive(SSBArgs args) {
   auto scan_probe = args.morph->scan(
       "lineorder", {"lo_custkey", "lo_suppkey", "lo_orderdate", "lo_revenue"});
 
-  auto probe_split = scan_probe.gsplit(args.scan_slack, args.policy);
+  auto probe_split = scan_probe.gsplit(
+      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
   std::vector<RelBuilder> paths;
   if (args.do_direct) {
     paths.emplace_back(

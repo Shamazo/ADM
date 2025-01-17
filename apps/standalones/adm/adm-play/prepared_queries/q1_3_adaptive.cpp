@@ -35,7 +35,7 @@ static RelBuilder add_direct_path(
       .path(
           DeviceType::CPU, DegreeOfParallelism{compute_dop},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(4, DeviceType::CPU)
+      .memmove(2, DeviceType::CPU)
       .unpack()
       .filter([&](const auto &arg) -> expression_t {
         return expressions::hint(
@@ -53,7 +53,7 @@ static RelBuilder add_staging_path(
       .path(
           DeviceType::CPU, DegreeOfParallelism{compute_dop},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(4, DeviceType::CPU,
+      .memmove(2, DeviceType::CPU,
                std::vector<bool>{false, false, false, false})
       .unpack()
       .filter([&](const auto &arg) -> expression_t {
@@ -95,7 +95,9 @@ PreparedStatement prepare13_adaptive(SSBArgs args) {
   auto &topo = topology::getInstance();
   const auto compute_dop =
       args.compute_numa_nodes.size() *
-      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0)).local_cores.size();
+      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0))
+          .local_cores.size() /
+      (args.use_hyper_threads ? 1 : 2);
 
   auto scan_build =
       args.morph->scan("date", {"d_datekey", "d_year", "d_weeknuminyear"});
@@ -138,7 +140,8 @@ PreparedStatement prepare13_adaptive(SSBArgs args) {
             .unpack();
   }
 
-  auto probe_split = scan_probe.gsplit(args.scan_slack, args.policy);
+  auto probe_split = scan_probe.gsplit(
+      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
 
   std::vector<RelBuilder> paths;
   if (args.do_staging) {
@@ -146,14 +149,15 @@ PreparedStatement prepare13_adaptive(SSBArgs args) {
         add_staging_path(probe_split, compute_dop, args.compute_numa_nodes));
   }
 
+  if (args.do_direct) {
+    paths.emplace_back(
+        add_direct_path(probe_split, compute_dop, args.compute_numa_nodes));
+  }
+
   if (args.do_filter_pushdown) {
     paths.emplace_back(add_pushdown_path(
         probe_split, args.pushdown_dop, args.pushdown_numa_nodes,
         args.do_bloom_filter_pushdown, args.bloom_filter_size));
-  }
-  if (args.do_direct) {
-    paths.emplace_back(
-        add_direct_path(probe_split, compute_dop, args.compute_numa_nodes));
   }
 
   CHECK_GT(paths.size(), 0) << "Cannot have a plan with with no paths";

@@ -138,7 +138,9 @@ DEFINE_int32(
 DECLARE_int32(scale_factor);
 DEFINE_int32(scale_factor, 100, "SSB scale factor");
 
-
+DECLARE_bool(use_hyper_threads);
+DEFINE_bool(use_hyper_threads, false,
+            "currently only used in SSB grouter queries ");
 
 TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
@@ -311,7 +313,8 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = true,
                      .do_direct = true,
                      .policy = policy,
-                     .scan_slack = 24,
+                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
                      .compute_numa_nodes =
@@ -340,7 +343,8 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = false,
                      .do_direct = true,
                      .policy = policy,
-                     .scan_slack = 24,
+                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
                      .compute_numa_nodes =
@@ -369,7 +373,8 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = true,
                      .do_direct = false,
                      .policy = policy,
-                     .scan_slack = 24,
+                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
                      .compute_numa_nodes =
@@ -398,7 +403,8 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = false,
                      .do_direct = false,
                      .policy = policy,
-                     .scan_slack = 24,
+                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
                      .compute_numa_nodes =
