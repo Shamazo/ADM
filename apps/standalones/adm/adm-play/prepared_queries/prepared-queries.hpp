@@ -76,6 +76,11 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
     DegreeOfParallelism pushdown_dop, int scan_slack,
     GeneralizedRoutingPolicy policy);
 
+PreparedStatement scan_sum_micro_grouter_direct(
+    proteus::QueryShaper &morph, double selectivity,
+    DegreeOfParallelism pushdown_dop, int scan_slack,
+    GeneralizedRoutingPolicy policy);
+
 PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
                                             double selectivity,
                                             DegreeOfParallelism pushdown_dop,
