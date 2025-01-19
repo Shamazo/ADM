@@ -37,21 +37,24 @@ namespace proteus {
 
 int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
 
-[[nodiscard]] void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
+[[nodiscard]] void *acquireBufferGeneralized(int free_pool_idx,
+                                             GeneralizedRouter *xch,
                                              int64_t groupId) {
   //  event_range<range_log_op::GROUTER_ACQUIRE_BUFF> er{{}, {},
   //                                             groupId};
-  return xch->acquireBufferGeneralized(target, false, groupId).release();
+  return xch->acquireBufferGeneralized(free_pool_idx, false, groupId).release();
 }
 
-[[nodiscard]] void *try_acquireBufferGeneralized(int target,
+[[nodiscard]] void *try_acquireBufferGeneralized(int free_pool_idx,
                                                  GeneralizedRouter *xch,
 
                                                  int64_t groupId) {
   // can generate a lot of trace events
   //  event_range<range_log_op::GROUTER_ACQUIRE_BUFF> er{{}, {},
   //                                             groupId};
-  return xch->acquireBufferGeneralized(target, true, groupId).release();
+  //  LOG(INFO) << "Trying to acquire buffer for free_pool_idx " <<
+  //  free_pool_idx;
+  return xch->acquireBufferGeneralized(free_pool_idx, true, groupId).release();
 }
 
 void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
@@ -451,6 +454,7 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
 
   llvm::Value *param_ptr;
   llvm::Value *target;
+  llvm::Value *source_free_pool;
   context
       ->gen_do([&]() {
         // FIXME: rest of policies
@@ -458,8 +462,10 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
           case GeneralizedRoutingPolicy::SHARED_RANDOM: {
             DCHECK_EQ(getNumberOfQueues(), 1);
             target = context->createInt32(0);
-            param_ptr = context->gen_call(proteus::acquireBufferGeneralized,
-                                          {target, exchange, groupId});
+            source_free_pool = context->createInt32(0);
+            param_ptr =
+                context->gen_call(proteus::acquireBufferGeneralized,
+                                  {source_free_pool, exchange, groupId});
             break;
           }
           default: {
@@ -506,6 +512,8 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
             r.target->setName("target");
             target = Builder->CreateTruncOrBitCast(
                 r.target, llvm::Type::getInt32Ty(llvmContext));
+            source_free_pool = Builder->CreateTruncOrBitCast(
+                r.source_pool, llvm::Type::getInt32Ty(llvmContext));
             //                  may_retry = r.may_retry;
 
             //                  b1 = Builder->GetInsertBlock();
@@ -541,7 +549,7 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
             // currently always retry, ignore the routing policy
             param_ptr = context->gen_call(
                 proteus::try_acquireBufferGeneralized /* FIXME */,
-                {target, exchange, groupId});
+                {source_free_pool, exchange, groupId});
 
             break;
           }
@@ -616,19 +624,16 @@ DegreeOfParallelism GeneralizedRouter::getDOP() const {
   return DegreeOfParallelism{total};
 }
 
-void *GeneralizedRouter::allocate_buffers_for_queue(size_t queue) {
+void *GeneralizedRouter::allocate_buffers_for_free_pool(size_t free_pool_idx) {
   DCHECK_NE(buf_size, 0);
   void *mem = MemoryManager::mallocPinned(buf_size * slack);
   for (int j = 0; j < slack; ++j) {
-    freeBufferGeneralized(queue,
+    freeBufferGeneralized(free_pool_idx,
                           proteus::managed_ptr{((char *)mem) + j * buf_size});
   }
-  const int fifo_size = ready_fifo.at(queue).size_unsafe();
-  counterlogger.log(getUUID(), counter_type::ROUTER_READY_QUEUE_SIZE, fifo_size,
-                    queue);
-  const int free_size = free_pool.at(queue).size_unsafe();
+  const int free_size = free_pool.at(free_pool_idx).size_unsafe();
   counterlogger.log(getUUID(), counter_type::ROUTER_FREE_POOL_SIZE, free_size,
-                    queue);
+                    free_pool_idx);
   return mem;
 }
 
@@ -639,6 +644,9 @@ void GeneralizedRouter::create_queues() {
     ready_fifo.clear();
     for (size_t i = 0; i < queueCnt; ++i) {
       // note, queues currently don't use numa affinity for memory allocation
+      // note, we may create more free_pools than necessary. This depends on the
+      // policy. but the distinct policies have distinct queues, but shared free
+      // pools per numa node
       free_pool.emplace_back(1);
       ready_fifo.emplace_back();
     }
@@ -686,12 +694,13 @@ void GeneralizedRouter::open(Pipeline *pip) {
       }
     };
     size_t consumer_index = 0;
+    std::unordered_set<int> allocated_pools{};
     for (auto &cons : consumers) {
       auto c_ptr = cons.lock();
       event_range<range_log_op::GROUTER_INIT_CONS> e{
           m_id, c_ptr->catch_pip->getUUID()};
       c_ptr->spawnWorker(pip->getSession(), queue_offset(consumer_index),
-                         firers);
+                         firers, allocated_pools);
       consumer_index += 1;
     }
   }
@@ -762,7 +771,9 @@ proteus::traits::HomReplication GeneralizedRouterConsumer::getHomReplication()
   return producer->getHomReplication();
 }
 
-void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
+void GeneralizedRouterConsumer::foreachTaskDo(int target_queue,
+                                              int source_free_pool,
+                                              Pipeline *pip,
                                               PipelineGen *pipGen,
                                               std::function<void(void *)> f) {
   DCHECK_LE(target_queue, producer->ready_fifo.size());
@@ -780,7 +791,7 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
                                 counter_type::ROUTER_READY_QUEUE_SIZE,
                                 fifo_size, target_queue);
               const int free_size =
-                  producer->free_pool.at(target_queue).size_unsafe();
+                  producer->free_pool.at(source_free_pool).size_unsafe();
               counterlogger.log(producer->getUUID(),
                                 counter_type::ROUTER_FREE_POOL_SIZE, free_size,
                                 target_queue);
@@ -801,7 +812,7 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
             f(ptr);
 
             {
-              producer->freeBufferGeneralized(target_queue,
+              producer->freeBufferGeneralized(source_free_pool,
                                               proteus::managed_ptr{ptr});
               std::this_thread::yield();
             }
@@ -809,7 +820,8 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue, Pipeline *pip,
 }
 
 void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
-                                     PipelineGen *pipGen, const void *session,
+                                     int source_free_pool, PipelineGen *pipGen,
+                                     const void *session,
                                      bool should_allocate_queue_buffs) {
   pthread_setname_np(pthread_self(),
                      (pipGen->getName() + ":" + std::to_string(target_queue) +
@@ -827,16 +839,17 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
   if (should_allocate_queue_buffs) {
     event_range<range_log_op::GROUTER_ALLOC_QUEUE_BUFFS> er2{
         m_id, pip->getGeneratorUUID(), pip->getGroup()};
-    buffer_mem = producer->allocate_buffers_for_queue(target_queue);
+    buffer_mem = producer->allocate_buffers_for_free_pool(source_free_pool);
   }
 
   pip->open(session);
   {
-    foreachTaskDo(target_queue, pip.get(), pipGen, [&](void *ptr) {
-      event_range<range_log_op::GROUTER_CONSUME> er2{
-          m_id, pip->getGeneratorUUID(), pip->getGroup()};
-      pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
-    });
+    foreachTaskDo(target_queue, source_free_pool, pip.get(), pipGen,
+                  [&](void *ptr) {
+                    event_range<range_log_op::GROUTER_CONSUME> er2{
+                        m_id, pip->getGeneratorUUID(), pip->getGroup()};
+                    pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
+                  });
   }
 
   pip->close();
@@ -844,7 +857,7 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
     for (int j = 0; j < producer->slack; ++j) {
       /* Release and ignore, it will be handled by the following freePinned */
       ((void)(producer
-                  ->acquireBufferGeneralized(target_queue, false,
+                  ->acquireBufferGeneralized(source_free_pool, false,
                                              pip->getGroup())
                   .release()));
     }
@@ -853,16 +866,18 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
   consumed_count = 0;
 }
 
-void GeneralizedRouterConsumer::spawnWorker(const void *session,
-                                            size_t queue_offset,
-                                            threadvector &firers) {
+void GeneralizedRouterConsumer::spawnWorker(
+    const void *session, size_t queue_offset, threadvector &firers,
+    std::unordered_set<int> &allocated_pools) {
   /// local_targets holds the offsets for the target queues (i.e numa
   /// nodes/gpus) ignoring which consumer this is which is then accounted for by
-  /// the queue_offset. When the queues are shared between consumers
+  /// the queue_offset. When the target queues are shared between consumers
   /// queue_offset will be 0. When the queues are distinct queue_offset will be
   /// a multiple of the total number of CPU numa nodes + gpus in the system.
   /// This is important for the case where a consumer may only run on a subset
   /// of nodes/gpus
+  /// This has been updated to separately consider the source freepool and the
+  /// target queue. Now freepools are always shared between consumers.
   const std::vector<int> local_targets =
       [dop = getDOP(), routing_policy = producer->policy_type,
        device_type = target_device,
@@ -925,12 +940,13 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
           /// Untested code path
           return firers.size() < fanout;
         }
+        case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL:
         case GeneralizedRoutingPolicy::SHARED_LOCAL: {
           // this _may_ be a race condition
-          if (i < local_targets.size()) {
-            return producer->free_pool
-                .at(local_targets[i % local_targets.size()])
-                .empty();
+          int potential_target = local_targets[i % local_targets.size()];
+          if (allocated_pools.find(potential_target) == allocated_pools.end()) {
+            allocated_pools.insert(potential_target);
+            return true;
           } else {
             return false;
           }
@@ -940,7 +956,13 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
         case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
         case GeneralizedRoutingPolicy::
             DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
-          return i < local_targets.size();
+          int potential_target = local_targets[i % local_targets.size()];
+          if (allocated_pools.find(potential_target) == allocated_pools.end()) {
+            allocated_pools.insert(potential_target);
+            return true;
+          } else {
+            return false;
+          }
         }
         default:
           return false;
@@ -949,20 +971,21 @@ void GeneralizedRouterConsumer::spawnWorker(const void *session,
 
     firers.emplace_back(&GeneralizedRouterConsumer::fire, this,
                         queue_offset + local_targets[i % local_targets.size()],
-                        i, catch_pip, session, alloc_buffers);
+                        i, local_targets[i % local_targets.size()], catch_pip,
+                        session, alloc_buffers);
   }
 }
 
 proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
-    int target, bool polling, int64_t groupId) {
-  DCHECK_LT(target, free_pool.size());
-  if (free_pool.at(target).empty_unsafe() && polling) {
+    int free_pool_idx, bool polling, int64_t groupId) {
+  DCHECK_LT(free_pool_idx, free_pool.size());
+  if (free_pool.at(free_pool_idx).empty_unsafe() && polling) {
     nvtxRangePop();
     return nullptr;
   }
   void *buff = nullptr;
-  DCHECK_LE(target, ready_fifo.size());
-  auto x = free_pool.at(target).pop(buff);
+  DCHECK_LE(free_pool_idx, ready_fifo.size());
+  auto x = free_pool.at(free_pool_idx).pop(buff);
   DCHECK(x);
 
   return proteus::managed_ptr{buff};
@@ -974,10 +997,10 @@ void GeneralizedRouter::releaseBufferGeneralized(int target,
   ready_fifo.at(target).push(buff.release());
 }
 
-void GeneralizedRouter::freeBufferGeneralized(int target,
+void GeneralizedRouter::freeBufferGeneralized(int free_pool_idx,
                                               proteus::managed_ptr buff) {
-  DCHECK_LE(target, free_pool.size()) << "invalid target free pool";
-  free_pool.at(target).emplace(buff.release());
+  DCHECK_LE(free_pool_idx, free_pool.size()) << "invalid target free pool";
+  free_pool.at(free_pool_idx).emplace(buff.release());
 }
 
 bool GeneralizedRouter::get_readyGeneralized(int target,

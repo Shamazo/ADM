@@ -36,6 +36,7 @@
 
 struct routing_target {
   llvm::Value *target;
+  llvm::Value *source_pool;
   llvm::Value *may_retry;
 };
 
@@ -93,6 +94,11 @@ class Local : public RoutingPolicy {
  * and two consumers, the targets/queues are as follows:
  * [CONS1_CPU1, CONS1_CPU2, CONS1_CPU3, CONS1_CPU4, CONS1_GPU1, CONS1_GPU2,
  * CONS2_CPU1, CONS2_CPU2, CONS2_CPU3, CONS2_CPU4, CONS2_GPU1, CONS2_GPU2]
+ *
+ * A routing policy returns a target queue, a source free pool (to use for
+ * acquiring a slot), and a boolean indicating if the operation may be retried.
+ * Router ignores the source free pool and uses just the target queue.
+ * Generalized router uses the source free pool to acquire a slot.
  *
  * Each consumer supplies their own Affinitizer, that returns an index of
  * the target node/GPU in the topology, and target device.

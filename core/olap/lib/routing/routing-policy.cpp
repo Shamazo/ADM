@@ -47,7 +47,9 @@ namespace routing {
 ::routing_target Random::evaluate(OlapParallelContext *const context,
                                   const OperatorState &childState,
                                   ProteusValueMemory retrycnt) {
-  if (fanout == 1) return {context->createInt64(0), context->createFalse()};
+  if (fanout == 1)
+    return {context->createInt64(0), context->createInt64(0),
+            context->createFalse()};
   auto *Builder = context->getBuilder();
 
   // state is initialized with a random number in the entry block
@@ -75,7 +77,8 @@ namespace routing {
 
   auto fanoutV =
       llvm::ConstantInt::get((llvm::IntegerType *)target->getType(), fanout);
-  return {Builder->CreateURem(target, fanoutV), context->createFalse()};
+  return {Builder->CreateURem(target, fanoutV), context->createInt64(0),
+          context->createFalse()};
 }
 
 ::routing_target HashBased::evaluate(OlapParallelContext *const context,
@@ -84,16 +87,19 @@ namespace routing {
   auto Builder = context->getBuilder();
 
   ExpressionGeneratorVisitor exprGenerator{context, childState};
-  auto target = e.accept(exprGenerator).value;
-  auto fanoutV =
-      llvm::ConstantInt::get((llvm::IntegerType *)target->getType(), fanout);
-  return {Builder->CreateURem(target, fanoutV), context->createFalse()};
+  auto target_hash = e.accept(exprGenerator).value;
+  auto fanoutV = llvm::ConstantInt::get(
+      (llvm::IntegerType *)target_hash->getType(), fanout);
+  auto target = Builder->CreateURem(target_hash, fanoutV);
+  return {Builder->CreateURem(target, fanoutV), target, context->createFalse()};
 }
 
 ::routing_target Local::evaluate(OlapParallelContext *const context,
                                  const OperatorState &childState,
                                  ProteusValueMemory retrycnt) {
-  if (fanout == 1) return {context->createInt64(0), context->createFalse()};
+  if (fanout == 1)
+    return {context->createInt64(0), context->createInt64(0),
+            context->createFalse()};
 
   auto *Builder = context->getBuilder();
   auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
@@ -108,7 +114,7 @@ namespace routing {
 
   auto target = context->gen_call(random_local_cu_index, {ptr8, this_ptr});
 
-  return {target, context->createTrue()};
+  return {target, target, context->createTrue()};
 }
 
 Local::Local(size_t fanout, const std::vector<RecordAttribute *> &wantedFields,
@@ -235,7 +241,7 @@ RandomSplitForceDataLocal::RandomSplitForceDataLocal(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa, queue_offset_for_consumer);
-  return {target_queue, context->createTrue()};
+  return {target_queue, target_numa, context->createTrue()};
 }
 
 RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
@@ -415,6 +421,7 @@ RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
          childState, context)([&]() {
     // we use locality to find the queue for the target consumer
     // using the affinity policy. The queue offset is added after the phi
+    // The numa is used for the source free_pool
     auto charPtrType = llvm::Type::getInt8PtrTy(context->getLLVMContext());
     auto ptr = Builder->CreateLoad(
         childState[wantedField].mem->getType()->getPointerElementType(),
@@ -482,7 +489,7 @@ RandomSplitPreferDataLocal::RandomSplitPreferDataLocal(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa_phi, queue_offset_for_consumer);
-  return {target_queue, context->createTrue()};
+  return {target_queue, target_numa_phi, context->createTrue()};
 }
 
 ThroughputSplitPreferDataLocal::ThroughputSplitPreferDataLocal(
@@ -714,7 +721,7 @@ void ThroughputSplitPreferDataLocal::generateStateInit(
          childState, context)([&]() {
     // we use locality to find the queue for the target consumer
     // using the affinity policy. The queue offset is added after the phi
-
+    // The numa is used for the source free_pool
     auto aff_int_ptr = Builder->CreateLoad(
         Builder->getInt64Ty(),
         Builder->CreateGEP(Builder->getInt64Ty(), llvm_consumer_affs,
@@ -776,7 +783,7 @@ void ThroughputSplitPreferDataLocal::generateStateInit(
       "load_queue_offset_for_consumer");
   auto target_queue =
       Builder->CreateAdd(target_numa_phi, queue_offset_for_consumer);
-  return {target_queue, context->createTrue()};
+  return {target_queue, target_numa_phi, context->createTrue()};
 }
 
 LocalServer::LocalServer(size_t fanout)
@@ -851,7 +858,7 @@ routing_target PreferLocal::evaluate(OlapParallelContext *context,
   retry_phi->addIncoming(retry_p1, retry_b1);
   retry_phi->addIncoming(retry_p2, retry_b2);
 
-  return {target_phi, retry_phi};
+  return {target_phi, target_phi, retry_phi};
 }
 
 PreferLocalServer::PreferLocalServer(size_t fanout)
@@ -890,7 +897,7 @@ routing_target PreferLocalServer::evaluate(OlapParallelContext *context,
   phi->addIncoming(p1, b1);
   phi->addIncoming(p2, b2);
 
-  return {phi, context->createTrue()};
+  return {phi, phi, context->createTrue()};
 }
 
 }  // namespace routing

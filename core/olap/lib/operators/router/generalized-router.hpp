@@ -28,6 +28,7 @@
 #include <platform/memory/managed-pointer.hpp>
 #include <platform/threadpool/threadvector.hpp>
 #include <platform/util/datastructures/threadsafe-set.hpp>
+#include <unordered_set>
 
 #include "lib/operators/operators.hpp"
 #include "lib/operators/router/routing-policy.hpp"
@@ -82,10 +83,13 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
  protected:
   void produce_(OlapParallelContext *context) override;
   virtual void spawnWorker(const void *session, size_t queue_offset,
-                           threadvector &firers);
-  virtual void fire(int target_queue, int local_target, PipelineGen *pipGen,
-                    const void *session, bool should_allocate_queue_buffs);
-  virtual void foreachTaskDo(int target, Pipeline *pip, PipelineGen *pipGen,
+                           threadvector &firers,
+                           std::unordered_set<int> &allocated_pools);
+  virtual void fire(int target_queue, int local_target, int source_free_pool,
+                    PipelineGen *pipGen, const void *session,
+                    bool should_allocate_free_pool_buffs);
+  virtual void foreachTaskDo(int target, int source_free_pool, Pipeline *pip,
+                             PipelineGen *pipGen,
                              std::function<void(void *)> f);
 
   friend class GeneralizedRouter;
@@ -212,21 +216,22 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   /**
    * Aquire a buffer from a free_pool
-   * @param target The free pool to aquire a buffer from
+   * @param free_pool_idx The free pool to aquire a buffer from
    * @param polling If false, the function will block until a buffer is
    * available. If true, will return nullptr if the target free pool is empty
    * @param groupId unsure why needed
    * @return nullptr or a buffer
    */
   [[nodiscard]] virtual proteus::managed_ptr acquireBufferGeneralized(
-      int target, bool polling, int64_t groupId);
+      int free_pool_idx, bool polling, int64_t groupId);
   /**
    * Release a buffer to the target ready queue
    * @param target target queue
    * @param buff buffer previously acquired from the target free pool
    */
   virtual void releaseBufferGeneralized(int target, proteus::managed_ptr buff);
-  virtual void freeBufferGeneralized(int target, proteus::managed_ptr buff);
+  virtual void freeBufferGeneralized(int free_pool_idx,
+                                     proteus::managed_ptr buff);
   virtual bool get_readyGeneralized(int target, proteus::managed_ptr &buff);
 
   friend void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
@@ -244,11 +249,11 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   virtual void open(Pipeline *pip);
   /**
-   * helper function to create queues
+   * helper function to allocate slots for a free pool
    * Assumes init_mutex is held when called.
    */
   virtual void create_queues();
-  virtual void *allocate_buffers_for_queue(size_t queue);
+  virtual void *allocate_buffers_for_free_pool(size_t free_pool_idx);
   virtual void close(Pipeline *pip);
 
   virtual llvm::Value *createTaskDescription(OlapParallelContext *context,
