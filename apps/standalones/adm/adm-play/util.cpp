@@ -504,7 +504,7 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
           "/nvme1/nicholso/data/sbm1000_0_12",   // node 0
           "/nvme7/nicholso/data/sbm1000_1_12",   // node 1
           "/nvme13/nicholso/data/sbm1000_2_12",  // node 2
-          "/nvme8/nicholso/data/sbm1000_3_12",   // node 3
+          "/nvme11/nicholso/data/sbm1000_3_12",   // node 3
           "/nvme6/nicholso/data/sbm1000_4_12",   // node 1
           "/nvme9/nicholso/data/sbm1000_5_12",   // node 3
           "/nvme3/nicholso/data/sbm1000_6_12",   // node 0
