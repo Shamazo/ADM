@@ -328,7 +328,8 @@ class JITer_impl {
       llvm::orc::JITTargetMachineBuilder JTMB =
           llvm::cantFail(llvm::orc::JITTargetMachineBuilder::detectHost())
               .setCodeGenOptLevel(CodeGenOpt::Aggressive)
-              .setCodeModel(llvm::CodeModel::Model::Large))
+              .setCodeModel(llvm::CodeModel::Model::Large)
+              .addFeatures(extra_features))
       : pool(false, std::thread::hardware_concurrency()),
         DL(llvm::cantFail(JTMB.getDefaultDataLayoutForTarget())),
         Mangle(ES, this->DL),

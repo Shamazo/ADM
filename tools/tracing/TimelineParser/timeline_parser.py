@@ -273,6 +273,20 @@ def parse_amd_pcm_to_trace(input_path: Path, tgen: TraceGenerator):
                     continue
                 col_to_track_dict[col].count(int(ts_ns), int(row[col] * 1000))
 
+    dc_fill_names = sorted([col for col in df.columns if ('DC' in col or 'L3' in col)])
+    if len(dc_fill_names):
+        mem_group = tgen.create_group("Cache")
+        col_to_track_dict: Dict[str, CounterTrack] = dict()
+        for col in dc_fill_names:
+            col_to_track_dict[col] = mem_group.create_counter_track(col)
+        for index, row in df.iterrows():
+            for col in dc_fill_names:
+                ts_ns = row['Timestamp'].value - time_offset_ns
+                # if AMD PCM starts before the first proteus trace
+                if ts_ns < 0:
+                    continue
+                col_to_track_dict[col].count(int(ts_ns), int(row[col] * 1000))
+
 
 def peek_line(file, index=0):
     pos = file.tell()  # Remember the current position

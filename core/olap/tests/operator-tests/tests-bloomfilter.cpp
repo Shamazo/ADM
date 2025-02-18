@@ -107,6 +107,7 @@ TEST_P(BloomFilterTest, SingleThreadEmptyFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
+  auto build_res = build_statement.execute();
 
   auto probe_statement =
       getRelBuilderFactoryProbe()
@@ -124,7 +125,7 @@ TEST_P(BloomFilterTest, SingleThreadEmptyFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
+
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   EXPECT_EQ(probe_count, 0);
@@ -154,6 +155,7 @@ TEST_P(BloomFilterTest, SingleThreadFullFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
+  auto build_res = build_statement.execute();
 
   auto probe_statement =
       getRelBuilderFactoryProbe()
@@ -171,7 +173,7 @@ TEST_P(BloomFilterTest, SingleThreadFullFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
+
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   size_t build_count = parse_count(build_res);
@@ -206,6 +208,8 @@ TEST_P(BloomFilterTest, SingleThreadPartialFilter) {
           .print(pg{"pm-csv"})
           .prepare();
 
+  auto build_res = build_statement.execute();
+
   auto probe_statement =
       getRelBuilderFactoryProbe()
           .getBuilder()
@@ -222,7 +226,6 @@ TEST_P(BloomFilterTest, SingleThreadPartialFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   size_t build_count = parse_count(build_res);
@@ -275,6 +278,7 @@ TEST_P(BloomFilterTest, PartialFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
+  auto build_res = build_statement.execute();
 
   auto probe_statement =
       getRelBuilderFactoryProbe()
@@ -301,7 +305,6 @@ TEST_P(BloomFilterTest, PartialFilter) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   // this has been multiplied by the build fanout (number of numa nodes) because
@@ -360,6 +363,8 @@ TEST_P(BloomFilterTest, PartialFilterPackRepack) {
           .print(pg{"pm-csv"})
           .prepare();
 
+  auto build_res = build_statement.execute();
+
   auto probe_statement =
       getRelBuilderFactoryProbe()
           .getBuilder()
@@ -387,7 +392,6 @@ TEST_P(BloomFilterTest, PartialFilterPackRepack) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   // this has been multiplied by the build fanout (number of numa nodes) because
@@ -445,6 +449,7 @@ TEST_P(BloomFilterTest, EmptyFilterPackRepack) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
+  auto build_res = build_statement.execute();
 
   auto probe_statement =
       getRelBuilderFactoryProbe()
@@ -473,7 +478,6 @@ TEST_P(BloomFilterTest, EmptyFilterPackRepack) {
               {SUM})
           .print(pg{"pm-csv"})
           .prepare();
-  auto build_res = build_statement.execute();
   auto probe_res = probe_statement.execute();
   size_t probe_count = parse_count(probe_res);
   // this has been multiplied by the build fanout (number of numa nodes) because

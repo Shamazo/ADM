@@ -698,13 +698,16 @@ void DoWhile::gen_while(const std::function<ProteusValue()> &cond) && {
 
 std::string getFunctionName(void *f) {
   Dl_info info{};
-#ifndef NDEBUG
-  int ret =
-#endif
-      dladdr(f, &info);
-  assert(ret && "Looking for function failed");
-  assert(info.dli_saddr == (decltype(Dl_info::dli_saddr))f);
-  assert(info.dli_sname);
+  int ret = dladdr(f, &info);
+
+  DCHECK_NE(ret, 0) << "dladdr for function failed";
+  DCHECK_EQ(info.dli_saddr, (decltype(Dl_info::dli_saddr))f)
+      << "dladdr could not resolve function address. dladdr detected shared "
+         "object: "
+      << info.dli_fname << " detected symbol name: "
+      << (info.dli_sname ? info.dli_sname : "nullptr")
+      << " expected symbol address: " << std::hex << (uintptr_t)f;
+  DCHECK(info.dli_sname);
   return info.dli_sname;
 }
 

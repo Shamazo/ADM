@@ -50,12 +50,16 @@ PreparedStatement scan_sum_micro_pushdown(proteus::QueryShaper &morph,
  *
  * @param morph Is only used for morph.scan to handle metadata stuff
  * @param selectivity selectivity of the filter, value in [0, 1]
+ * @param throughput_sample_size number of samples to use in the throughput
+ * policy
  */
 PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
                                           double selectivity,
                                           DegreeOfParallelism pushdown_dop,
                                           int scan_slack,
-                                          GeneralizedRoutingPolicy policy);
+                                          GeneralizedRoutingPolicy policy,
+                                          uint64_t throughput_sample_size = 500,
+                                          uint32_t skip_samples = 0);
 
 PreparedStatement scan_sum_micro_grouter_staging(
     proteus::QueryShaper &morph, double selectivity,

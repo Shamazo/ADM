@@ -969,6 +969,14 @@ void GeneralizedRouterConsumer::spawnWorker(
       }
     }();
 
+    if (alloc_buffers) {
+      LOG(INFO) << "Will allcoate buffer for consumer " << consumer_index
+                << " target queue "
+                << queue_offset + local_targets[i % local_targets.size()]
+                << " source free pool "
+                << local_targets[i % local_targets.size()] << " i: " << i;
+    }
+
     firers.emplace_back(&GeneralizedRouterConsumer::fire, this,
                         queue_offset + local_targets[i % local_targets.size()],
                         i, local_targets[i % local_targets.size()], catch_pip,
@@ -979,6 +987,10 @@ void GeneralizedRouterConsumer::spawnWorker(
 proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
     int free_pool_idx, bool polling, int64_t groupId) {
   DCHECK_LT(free_pool_idx, free_pool.size());
+//  if (free_pool_idx < 4) {
+//    free_pool_idx += 4;
+//  }
+//  free_pool_idx = 0;
   if (free_pool.at(free_pool_idx).empty_unsafe() && polling) {
     nvtxRangePop();
     return nullptr;
@@ -1000,6 +1012,10 @@ void GeneralizedRouter::releaseBufferGeneralized(int target,
 void GeneralizedRouter::freeBufferGeneralized(int free_pool_idx,
                                               proteus::managed_ptr buff) {
   DCHECK_LE(free_pool_idx, free_pool.size()) << "invalid target free pool";
+//  if (free_pool_idx < 4) {
+//    free_pool_idx += 4;
+//  }
+//  free_pool_idx = 0;
   free_pool.at(free_pool_idx).emplace(buff.release());
 }
 

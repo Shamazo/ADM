@@ -163,7 +163,7 @@ class NVMeHealthMonitor:
         """Generate FIO configuration for all NVMe drives."""
         fio_config = "[global]\n"
         fio_config += "time_based=1\n"
-        fio_config += "runtime=300\n"
+        fio_config += "runtime=120\n"
         fio_config += "group_reporting=0\n"
         fio_config += f"numjobs={self.num_threads}\n"  # Use multiple threads per drive
         fio_config += "thread=1\n"  # Use threads instead of processes

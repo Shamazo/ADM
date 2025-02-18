@@ -32,6 +32,7 @@
 #include <platform/util/tracing.hpp>
 #include <utility>
 
+#include "lib/operators/bloom-filter/bloom-filter-build.hpp"
 #include "lib/util/caching.hpp"
 #include "lib/util/catalog.hpp"
 #include "lib/util/flush-operator-tree.hpp"
@@ -143,6 +144,7 @@ QueryResult PreparedStatement::execute(
   }
 
   profiling::pause();
+  cleanBloomFilterRegistry();
 
   if (freePtr) MemoryManager::freePinned(const_cast<void *>(session));
 

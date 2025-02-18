@@ -104,8 +104,10 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
                 << "date," << args.header() << std::endl;
 
   CHECK(!args.compressed) << "todo";
+//  const auto all_md_dirs =
+//      get_input_dirs_socket_zero(args.scale_factor, args.server_number);
   const auto all_md_dirs =
-      get_input_dirs_socket_zero(args.scale_factor, args.server_number);
+      get_input_dirs_socket_one(args.scale_factor, args.server_number);
 
   for (auto [query, query_name] : grouter_ssb_queries()) {
     for (const auto& md_dirs : all_md_dirs) {

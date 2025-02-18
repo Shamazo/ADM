@@ -24,13 +24,16 @@
 #ifndef PROTEUS_SELECTIVITY_MICROS_HPP
 #define PROTEUS_SELECTIVITY_MICROS_HPP
 
+#include <string.h>
+
 #include <magic_enum.hpp>
 #include <olap/plan/catalog-parser.hpp>
+#include <optional>
 #include <query-shaping/nvme-shapers.hpp>
+#include <vector>
 
 #include "prepared_queries/prepared-queries.hpp"
 #include "util.hpp"
-
 
 /**
  * Arguments for the bench_nvme_vary_sel_micro function
@@ -59,9 +62,17 @@ struct VarySelMicroArgs {
   /// applicable to shapers that use CPU (i.e. CPUOnlyNvmeProbeFilterPushdown).
   std::vector<uint32_t> compute_numa_nodes =
       get_default_compute_numa_nodes(server_number);
-  std::vector<double> selectivities = {0.0001, 0.001, 0.005, 0.01, 0.02, 0.05,
-                                       0.1,    0.2,   0.3,   0.4,  0.5,  0.6,
-                                       0.7,    0.8,   0.9,   1.0};
+  std::vector<double> selectivities = {0.001, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06,
+                                       0.1, 0.15,
+                                       0.2, 0.25,
+                                       0.3, 0.35,
+                                       0.4, 0.45,
+                                       0.5, 0.55,
+                                       0.6, 0.65,
+                                       0.7, 0.75,
+                                       0.8, 0.85,
+                                       0.9, 0.95,
+                                       1.0};
 };
 
 std::string bench_nvme_vary_sel_micro(VarySelMicroArgs args) {
@@ -177,9 +188,17 @@ struct VarySelMicroAdaptiveArgs {
   /// applicable to shapers that use CPU (i.e. CPUOnlyNvmeProbeFilterPushdown).
   std::vector<uint32_t> compute_numa_nodes =
       get_default_compute_numa_nodes(server_number);
-  std::vector<double> selectivities = {0.0001, 0.001, 0.005, 0.01, 0.02, 0.05,
-                                       0.1,    0.2,   0.3,   0.4,  0.5,  0.6,
-                                       0.7,    0.8,   0.9,   1.0};
+  std::vector<double> selectivities = {0.001, 0.005, 0.009, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08,
+                                       0.1, 0.15,
+                                       0.2, 0.25,
+                                       0.3, 0.35,
+                                       0.4, 0.45,
+                                       0.5, 0.55,
+                                       0.6, 0.65,
+                                       0.7, 0.75,
+                                       0.8, 0.85,
+                                       0.9, 0.95,
+                                       1.0};
   GeneralizedRoutingPolicy policy =
       GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL;
 
@@ -224,10 +243,14 @@ std::string bench_micro_cpu_adaptive_vary_sel(VarySelMicroAdaptiveArgs args) {
       std::make_unique<proteus::CPUOnlyNVMeMorsel>(
           md_dirs, "inputs/random_ints", sel_micro_stats, true, 0, 0, 16);
 
+  uint32_t skip_samples = (4*12) + (48 * 4) + (48*2) + 32;
+//  skip_samples = std::max(skip_samples, 144 + 96 + (((uint32_t) args.pushdown_dop.value_or(24)) * 8) + 20);
+  const uint64_t num_samples = skip_samples + 150;
+
   for (const double& sel : args.selectivities) {
     auto query = scan_sum_micro_adaptive(
         *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
-        args.scan_slack, args.policy);
+        args.scan_slack, args.policy, num_samples, skip_samples);
     auto ts = global_timestamp_logger->log_time_range(
         "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
                          R"(, ""query"": "")" +
@@ -330,6 +353,55 @@ std::string bench_micro_cpu_grouter_staging_vary_sel(
 
     auto bench_res =
         benchmark_query("grouter_staging", query, args.num_iterations);
+
+    result_string << bench_res.label << "," << md_dirs.size() << ","
+                  << bench_res.average_query_time.count() << ","
+                  << get_current_date_str() << "," << bench_res.query_result
+                  << "," << sel << "," << args << std::endl;
+  }
+
+  return result_string.str();
+}
+
+std::string bench_micro_cpu_grouter_direct_vary_sel(
+    VarySelMicroAdaptiveArgs args) {
+  CHECK(args.server_number == 49)
+      << "not set up for this server: " << args.server_number;
+
+  std::stringstream result_string;
+
+  result_string << "query,"
+                << "num_drives,"
+                << "time_ms,"
+                << "date,"
+                << "query_output,"
+                << "selectivity," << args.header() << std::endl;
+
+  const auto md_dirs =
+      get_ran_ints_input_dirs_socket_zero_12_drives(args.server_number);
+
+  // row count. This is currently hardcoded to the row count of 100GiB of ints
+  // and also is not currently used in mem-move for selectivity estimates
+  std::map<std::string, std::function<double(proteus::InputPrefixQueryShaper&)>>
+      sel_micro_stats = {
+          {"random_ints_100GB_10000", [](auto&) { return 26843545600.0; }}};
+
+  // arguments apart from MD_dirs, input prefix, and stats are not used
+  std::unique_ptr<proteus::QueryShaper> shaper =
+      std::make_unique<proteus::CPUOnlyNVMeMorsel>(
+          md_dirs, "inputs/random_ints", sel_micro_stats, true, 0, 0, 16);
+
+  for (const double& sel : args.selectivities) {
+    auto query = scan_sum_micro_grouter_direct(
+        *shaper, sel, DegreeOfParallelism{args.pushdown_dop.value_or(24)},
+        args.scan_slack, args.policy);
+    auto ts = global_timestamp_logger->log_time_range(
+        "benchmark", R"("{""selectivity"": )" + std::to_string(sel) +
+                         R"(, ""query"": "")" +
+                         args.prep_query_function.second + "\"\"}\"");
+
+    auto bench_res =
+        benchmark_query("grouter_direct", query, args.num_iterations);
 
     result_string << bench_res.label << "," << md_dirs.size() << ","
                   << bench_res.average_query_time.count() << ","

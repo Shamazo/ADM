@@ -138,9 +138,6 @@ DEFINE_int32(
 DECLARE_int32(scale_factor);
 DEFINE_int32(scale_factor, 100, "SSB scale factor");
 
-DECLARE_bool(use_hyper_threads);
-DEFINE_bool(use_hyper_threads, false,
-            "currently only used in SSB grouter queries ");
 
 TimeStampLogger* global_timestamp_logger;
 int main(int argc, char* argv[]) {
@@ -305,6 +302,15 @@ int main(int argc, char* argv[]) {
     auto policy =
         magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
             .value();
+    uint64_t num_samples = 325;
+    uint32_t skip_first_samples = 200;
+    if (FLAGS_use_hyper_threads){
+        num_samples = 400;
+        skip_first_samples = 300;
+    }
+
+
+
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
              SSBArgs{.do_staging = true,
@@ -313,7 +319,9 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = true,
                      .do_direct = true,
                      .policy = policy,
-                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .scan_slack = 12,
+                     .num_samples = num_samples,
+                     .skip_first_samples = skip_first_samples,
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
@@ -343,7 +351,7 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = false,
                      .do_direct = true,
                      .policy = policy,
-                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .scan_slack = 12,
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
@@ -373,7 +381,7 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = true,
                      .do_direct = false,
                      .policy = policy,
-                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .scan_slack = 12,
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
@@ -403,7 +411,7 @@ int main(int argc, char* argv[]) {
                      .do_filter_pushdown = false,
                      .do_direct = false,
                      .policy = policy,
-                     .scan_slack = 12 * (FLAGS_use_hyper_threads ? 2 : 1),
+                     .scan_slack = 12,
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),

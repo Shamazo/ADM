@@ -22,6 +22,7 @@
 */
 
 #include <cli-flags.hpp>
+#include <vector>
 
 #include "common-flags.hpp"
 #include "selectivity-micros.hpp"
@@ -74,6 +75,9 @@ DEFINE_bool(bench_micro_cpu_socket_grouter_pd, false, "");
 
 DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both);
 DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both, false, "");
+
+DECLARE_bool(bench_micro_cpu_socket_grouter_direct);
+DEFINE_bool(bench_micro_cpu_socket_grouter_direct, false, "");
 
 DECLARE_bool(bench_micro_cpu_socket_grouter_stage_both_partial_sum);
 DEFINE_bool(bench_micro_cpu_socket_grouter_stage_both_partial_sum, false, "");
@@ -338,7 +342,7 @@ int main(int argc, char* argv[]) {
         .server_number = FLAGS_server_number,
         .num_iterations = FLAGS_num_iterations,
         .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
-        .scan_slack = 24,
+        .scan_slack = 12,
         .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
@@ -359,7 +363,7 @@ int main(int argc, char* argv[]) {
         .server_number = FLAGS_server_number,
         .num_iterations = FLAGS_num_iterations,
         .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
-        .scan_slack = 24,
+        .scan_slack = 12,
         .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
@@ -380,7 +384,7 @@ int main(int argc, char* argv[]) {
         .server_number = FLAGS_server_number,
         .num_iterations = FLAGS_num_iterations,
         .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
-        .scan_slack = 24,
+        .scan_slack = 12,
         .policy = policy};
     if (!FLAGS_selectivities.empty()) {
       args.selectivities = parseDoubles(FLAGS_selectivities);
@@ -392,6 +396,30 @@ int main(int argc, char* argv[]) {
       *out_file << res << std::endl;
     }
   }
+
+
+  if (FLAGS_bench_micro_cpu_socket_grouter_direct) {
+    auto policy =
+        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+            .value();
+
+    VarySelMicroAdaptiveArgs args = {
+        .server_number = FLAGS_server_number,
+        .num_iterations = FLAGS_num_iterations,
+        .pushdown_dop = FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16,
+        .scan_slack = 12,
+        .policy = policy};
+    if (!FLAGS_selectivities.empty()) {
+      args.selectivities = parseDoubles(FLAGS_selectivities);
+    }
+    LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_direct";
+    auto res = bench_micro_cpu_grouter_direct_vary_sel(args);
+    ss << res;
+    if (out_file.has_value()) {
+      *out_file << res << std::endl;
+    }
+  }
+
 
   if (FLAGS_bench_micro_cpu_socket_grouter_stage_both_partial_sum) {
     auto policy =

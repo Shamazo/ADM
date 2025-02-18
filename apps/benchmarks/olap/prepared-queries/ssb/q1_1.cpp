@@ -36,7 +36,7 @@ PreparedStatement ssb::Query::prepare11(proteus::QueryShaper &morph) {
   return morph
       .parallel(
           rel, {rel2337},
-          [](RelBuilder probe, std::vector<RelBuilder> build) {
+          [&](RelBuilder probe, std::vector<RelBuilder> build) {
             auto rel2337_d =
                 build.at(0)
                     .unpack()
@@ -56,6 +56,7 @@ PreparedStatement ssb::Query::prepare11(proteus::QueryShaper &morph) {
                           lt(arg["lo_quantity"], 25),
                       expressions::Selectivity(0.5 * 3.0 / 11));
                 })
+//                .pack().unionAll({}, DegreeOfParallelism{morph.getDOP()}).unpack()
                 .join(
                     rel2337_d,
                     [&](const auto &build_arg) -> expression_t {

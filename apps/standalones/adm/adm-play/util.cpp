@@ -93,7 +93,7 @@ QueryBenchResult benchmark_query(const std::string& label,
   std::this_thread::sleep_for(std::chrono::seconds(10));
   profiling::ProfileRegionType pr_type = profiling::ProfileRegionType(label);
   for (int i = 0; i < num_iterations; i++) {
-    std::this_thread::sleep_for(std::chrono::seconds(4));
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
               << label;
     auto ts = global_timestamp_logger->log_time_range(
@@ -354,9 +354,9 @@ std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
         "/nvme1/nicholso/data/random_ints_0_12",   // node 0
         "/nvme7/nicholso/data/random_ints_1_12",   // node 1
         "/nvme13/nicholso/data/random_ints_2_12",  // node 2
-//        "/nvme14/nicholso/data/random_ints_3_12",  // node 2,  problem child
-//        "/nvme5/nicholso/data/random_ints_3_12",  // node 1
-        "/nvme8/nicholso/data/random_ints_3_12",  // node 3
+        // "/nvme14/nicholso/data/random_ints_3_12",  // node 2,  problem child
+        // "/nvme5/nicholso/data/random_ints_3_12",  // node 1
+        "/nvme8/nicholso/data/random_ints_3_12",   // node 3
         "/nvme6/nicholso/data/random_ints_4_12",   // node 1
         "/nvme9/nicholso/data/random_ints_5_12",   // node 3
         "/nvme3/nicholso/data/random_ints_6_12",   // node 0
@@ -504,7 +504,7 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
           "/nvme1/nicholso/data/sbm1000_0_12",   // node 0
           "/nvme7/nicholso/data/sbm1000_1_12",   // node 1
           "/nvme13/nicholso/data/sbm1000_2_12",  // node 2
-          "/nvme11/nicholso/data/sbm1000_3_12",   // node 3
+          "/nvme11/nicholso/data/sbm1000_3_12",  // node 3
           "/nvme6/nicholso/data/sbm1000_4_12",   // node 1
           "/nvme9/nicholso/data/sbm1000_5_12",   // node 3
           "/nvme3/nicholso/data/sbm1000_6_12",   // node 0
@@ -524,6 +524,36 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
       return {twelve_drives};
       //      return {one_drive,    two_drives, four_drives,  six_drives,
       //              eight_drives, ten_drives, twelve_drives};
+    }
+  }
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::vector<std::string>> get_input_dirs_socket_one(
+    int sf, int server_number) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  if (server_number == 49) {
+    if (sf == 100) {
+      LOG(FATAL) << "no sf100 on diascld49 yet";
+    }
+
+    if (sf == 1000) {
+      std::vector<std::string> twelve_drives = {
+          "/nvme16/nicholso/data/sbm1000_0_12",   // node 4
+          "/nvme22/nicholso/data/sbm1000_1_12",   // node 5
+          "/nvme29/nicholso/data/sbm1000_2_12",   // node 6
+          "/nvme24/nicholso/data/sbm1000_3_12",   // node 7
+          "/nvme18/nicholso/data/sbm1000_4_12",   // node 4
+          "/nvme23/nicholso/data/sbm1000_5_12",   // node 5
+          "/nvme30/nicholso/data/sbm1000_6_12",   // node 6
+          "/nvme25/nicholso/data/sbm1000_7_12",   // node 7
+          "/nvme19/nicholso/data/sbm1000_8_12",   // node 4
+          "/nvme28/nicholso/data/sbm1000_9_12",   // node 6
+          "/nvme26/nicholso/data/sbm1000_10_12",  // node 7
+          "/nvme27/nicholso/data/sbm1000_11_12"   // node 7
+      };
+      check_vector_paths(twelve_drives);
+      return {twelve_drives};
     }
   }
   LOG(FATAL) << "not set up for this server: " << server_number;
@@ -722,7 +752,7 @@ std::vector<std::vector<std::string>> get_input_dirs(int sf,
   LOG(FATAL) << "not set up for this server: " << server_number;
 }
 
-std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number) {
+std::vector<uint32_t> get_default_compute_numa_nodes(int server_number) {
   switch (server_number) {
     case 49:
       return {0, 1, 2, 3};
@@ -733,7 +763,7 @@ std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number) {
   }
 }
 
-std::vector<uint32_t> get_default_compute_numa_nodes(int server_number) {
+std::vector<uint32_t> get_default_pushdown_numa_nodes(int server_number) {
   switch (server_number) {
     case 49:
       return {4, 5, 6, 7};

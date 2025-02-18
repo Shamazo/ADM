@@ -229,6 +229,35 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
 
   size_t getLocalCUIndex(void *p) const override {
     auto &topo = topology::getInstance();
+    if (NvmePlugin::PageId_t::isPageIdPtr(p)) {
+      auto page_id = NvmePlugin::PageId_t::from_ptr(p);
+      const auto &node_local_to_nvme =
+          topo.getCpuNumaNodes()[page_id.getCpuNumaAffinity()];
+
+      if (std::find(m_node_ids.begin(), m_node_ids.end(),
+                    node_local_to_nvme.id) != m_node_ids.end()) {
+        return node_local_to_nvme.index_in_topo;
+      } else {
+        // find the closest node in m_node_ids
+        std::vector<size_t> idx(node_local_to_nvme.distance.size());
+        std::iota(idx.begin(), idx.end(), 0);
+        stable_sort(idx.begin(), idx.end(),
+                    [&v = std::as_const(node_local_to_nvme.distance)](
+                        size_t i1, size_t i2) { return v[i1] < v[i2]; });
+        // shuffle because NUMA nodes on the other socket are often all equal
+        // distance so on a chiplet system we could end up sending all NVMe data
+        // from socket 0 to the same NUMA node on socket 1
+        shuffleAdjacentIndexes(idx, node_local_to_nvme.distance);
+        for (const auto &i : idx) {
+          const auto &cpu_node = topo.getCpuNumaNodes()[i];
+          if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
+              m_node_ids.end()) {
+            return cpu_node.index_in_topo;
+          }
+        }
+      }
+    }
+
     const auto *g = topo.getGpuAddressed(p);
     auto *c = topo.getCpuNumaNodeAddressed(p);
     if (c) {
@@ -267,6 +296,7 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
         stable_sort(idx.begin(), idx.end(),
                     [&v = std::as_const(g->getLocalCPUNumaNode().distance)](
                         size_t i1, size_t i2) { return v[i1] < v[i2]; });
+        shuffleAdjacentIndexes(idx, g->getLocalCPUNumaNode().distance);
         for (const auto &i : idx) {
           const auto &cpu_node = topo.getCpuNumaNodes()[i];
           const auto &local_gpus = cpu_node.local_gpus;
@@ -281,35 +311,8 @@ class SpecificCpuNumaNodeAffinitizer : public Affinitizer {
       }
     }
 
-    DCHECK(NvmePlugin::PageId_t::isPageIdPtr(p));
-    auto page_id = NvmePlugin::PageId_t::from_ptr(p);
-    const auto &node_local_to_nvme =
-        topo.getCpuNumaNodes()[page_id.getCpuNumaAffinity()];
-
-    if (std::find(m_node_ids.begin(), m_node_ids.end(),
-                  node_local_to_nvme.id) != m_node_ids.end()) {
-      return node_local_to_nvme.index_in_topo;
-    } else {
-      // find the closest node in m_node_ids
-      std::vector<size_t> idx(node_local_to_nvme.distance.size());
-      std::iota(idx.begin(), idx.end(), 0);
-      stable_sort(idx.begin(), idx.end(),
-                  [&v = std::as_const(node_local_to_nvme.distance)](
-                      size_t i1, size_t i2) { return v[i1] < v[i2]; });
-      // shuffle because NUMA nodes on the other socket are often all equal
-      // distance so on a chiplet system we could end up sending all NVMe data
-      // from socket 0 to the same NUMA node on socket 1
-      shuffleAdjacentIndexes(idx, node_local_to_nvme.distance);
-      for (const auto &i : idx) {
-        const auto &cpu_node = topo.getCpuNumaNodes()[i];
-        if (std::find(m_node_ids.begin(), m_node_ids.end(), cpu_node.id) !=
-            m_node_ids.end()) {
-          return cpu_node.index_in_topo;
-        }
-      }
-      LOG(FATAL)
-          << "SpecificCpuNumaNodeAffinitizer unreachable code! (in theory)";
-    }
+    LOG(FATAL)
+        << "SpecificCpuNumaNodeAffinitizer unreachable code! (in theory)";
   }
 };
 

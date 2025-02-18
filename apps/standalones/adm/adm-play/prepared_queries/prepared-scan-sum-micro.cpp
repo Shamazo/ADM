@@ -117,7 +117,9 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
                                           double selectivity,
                                           DegreeOfParallelism pushdown_dop,
                                           int scan_slack,
-                                          GeneralizedRoutingPolicy policy) {
+                                          GeneralizedRoutingPolicy policy,
+                                          uint64_t throughput_sample_size,
+                                          uint32_t skip_samples) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -131,7 +133,8 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split =
+      scan.gsplit(scan_slack, policy, throughput_sample_size, skip_samples);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -156,11 +159,14 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
       DeviceType::CPU, pushdown_dop,
       std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_0_node_ids));
   pushdown_path =
-      pushdown_path.memmove(8, DeviceType::CPU)
+      pushdown_path.memmove(192/pushdown_dop, DeviceType::CPU)
           .unpack()
           .filter([&](const auto &arg) -> expression_t {
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
+          })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
           })
           .pack();
 
@@ -175,6 +181,9 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
+          })
           .pack();
 
   auto standard_path = split.path(
@@ -188,6 +197,9 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
+          })
           .pack();
 
   return pushdown_path
@@ -195,7 +207,7 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
           {staging_path, standard_path},
           DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          4)
+          2)
       .unpack()
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
@@ -263,6 +275,9 @@ PreparedStatement scan_sum_micro_grouter_staging(
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
+          })
           .pack();
 
   return staging_path
@@ -270,7 +285,7 @@ PreparedStatement scan_sum_micro_grouter_staging(
           {},
           DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          4)
+          2)
       .unpack()
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
@@ -409,11 +424,14 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
       DeviceType::CPU, pushdown_dop,
       std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_0_node_ids));
   pushdown_path =
-      pushdown_path.memmove(8, DeviceType::CPU)
+      pushdown_path.memmove(192/pushdown_dop, DeviceType::CPU)
           .unpack()
           .filter([&](const auto &arg) -> expression_t {
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
+          })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
           })
           .pack();
 
@@ -421,7 +439,8 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
       .unionAll(
           {},
           DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
-          std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids))
+//          DegreeOfParallelism{1},
+          std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids), 2)
       .unpack()
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
@@ -489,6 +508,9 @@ PreparedStatement scan_sum_micro_grouter_direct(
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["col2"])};
+          })
           .pack();
 
   return standard_path
@@ -496,7 +518,7 @@ PreparedStatement scan_sum_micro_grouter_direct(
           {},
           DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          4)
+          2)
       .unpack()
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
@@ -582,7 +604,7 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
       DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
       std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids));
   staging_path =
-      staging_path.memmove(4, DeviceType::CPU, std::vector<bool>{false, false})
+      staging_path.memmove(2, DeviceType::CPU, std::vector<bool>{false, false})
           .unpack()
           .filter([&](const auto &arg) -> expression_t {
             return expressions::hint(lt(arg["col1"], query_upperbound),
@@ -599,7 +621,7 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
       DegreeOfParallelism{count_per_numa_cores * socket_1_nodes.size()},
       std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids));
   standard_path =
-      standard_path.memmove(4, DeviceType::CPU)
+      standard_path.memmove(2, DeviceType::CPU)
           .unpack()
           .filter([&](const auto &arg) -> expression_t {
             return expressions::hint(lt(arg["col1"], query_upperbound),

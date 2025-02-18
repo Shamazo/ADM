@@ -144,7 +144,7 @@ class TraceGenerator:
         self.flush()
         self.file.close()
 
-    def _gid_packet(self, gid, process_name: str, track_name: str = None):
+    def _gid_packet(self, gid, process_name: str, track_name: str = None, child_track_ordering = None):
         """ Create a group.  Each "group" comes with a default normal track (named track_name)."""
         uuid = self.__uuid__
         pkt = self.trace.packet.add()
@@ -158,6 +158,9 @@ class TraceGenerator:
             pkt.track_descriptor.name = process_name
         else:
             pkt.track_descriptor.name = track_name
+
+        # if child_track_ordering is not None:
+            # pkt.track_descriptor.child_ordering = child_track_ordering
 
         self.__uuid__ += 1
 
@@ -334,12 +337,14 @@ class TraceGenerator:
 
         self._flush_if_necessary()
 
-    def create_group(self, process_name: str, track_name: str = None) -> Group:
-        """ Create a group.  Each "group" comes with a default normal track (named track_name)."""
+    def create_group(self, process_name: str, track_name: str = None, child_track_order: int = None) -> Group:
+        """ Create a group.  Each "group" comes with a default normal track (named track_name).
+        child_track_order see https://perfetto.dev/docs/reference/trace-packet-proto#TrackDescriptor.ChildTracksOrdering
+        """
         gid = self.__gid__
         self.__gid__ += 1
 
-        uuid = self._gid_packet(gid, process_name, track_name)
+        uuid = self._gid_packet(gid, process_name, track_name, child_track_order)
         return Group(process_name, self, uuid)
 
     def _create_track(self, parent_uuid, track_name: str, ttype, thread_id: Optional[int] = None):

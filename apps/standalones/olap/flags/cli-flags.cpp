@@ -62,10 +62,10 @@ DEFINE_string(url, "localhost",
               "Used in conjuction with --secondary to specify the address of "
               "the primary");
 DEFINE_int32(repeat, 1, "# repetitions of default query");
-DEFINE_bool(print_generated_code, true,
+DEFINE_bool(print_generated_code, false,
             "Print generated code into files (use only for debugging as it "
             "will slow down excecution significnatly)");
-DEFINE_bool(insert_preopt_debug_info, true,
+DEFINE_bool(insert_preopt_debug_info, false,
             "Insert LLVM-IR debug info into the generated code based on the "
             "unoptimized generated LLVM-IR. Only applicable if "
             "print_generated_code is true. If insert_postopt_debug_info is "
@@ -75,7 +75,7 @@ DEFINE_bool(
     "Insert LLVM-IR debug info into the generated code based on the optimized "
     "generated LLVM-IR. Only applicable if print_generated_code is true. "
     "Overrides insert_postopt_debug_info.");
-DEFINE_bool(dump_compiled_object_files, false,
+DEFINE_bool(dump_compiled_object_files, true,
             "Dump compiled object files to disk. These can be inspected with "
             "objdump. Example: `objdump -I ./generated_code/ --source "
             "./generated_code/{filename}` where if you have debug info and "

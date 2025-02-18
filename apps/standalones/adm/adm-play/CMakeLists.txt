@@ -65,3 +65,37 @@ target_link_libraries(selectivity-micros
 )
 
 configure_proteus_experiment(selectivity-micros)
+
+add_executable(adaptivity-micros
+  adaptivity-micros-main.cpp
+  prepared_queries/prepared-scans.cpp
+  util.cpp
+  prepared_queries/prepared-scan-sum-micro.cpp
+  prepared_queries/q1_1_adaptive.cpp
+  prepared_queries/q1_2_adaptive.cpp
+  prepared_queries/q1_3_adaptive.cpp
+  prepared_queries/q2_1_adaptive.cpp
+  prepared_queries/q2_2_adaptive.cpp
+  prepared_queries/q2_3_adaptive.cpp
+  prepared_queries/q3_1_adaptive.cpp
+  prepared_queries/q3_2_adaptive.cpp
+  prepared_queries/q3_3_adaptive.cpp
+  prepared_queries/q3_4_adaptive.cpp
+  prepared_queries/q4_1_adaptive.cpp
+  prepared_queries/q4_2_adaptive.cpp
+  prepared_queries/q4_3_adaptive.cpp
+)
+
+# Depending on the olap libraries
+target_link_libraries(adaptivity-micros
+  jemalloc
+  codegen::olap_flags
+  proteus::olap
+  proteus::storage
+  proteus::platform
+  queries::ssb
+  magic_enum::magic_enum
+  ${CMAKE_DL_LIBS}
+)
+
+configure_proteus_experiment(adaptivity-micros)

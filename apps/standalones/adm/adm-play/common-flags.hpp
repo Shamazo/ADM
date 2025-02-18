@@ -40,4 +40,8 @@ DEFINE_string(timestamp_file, "adm-timestamps.csv",
               "[optional] output file for TimeStampLogger logs  [default: "
               "adm-timestamps.csv]");
 
+DECLARE_bool(use_hyper_threads);
+DEFINE_bool(use_hyper_threads, false,
+            "currently only used in SSB grouter queries ");
+
 #endif  // PROTEUS_COMMON_FLAGS_HPP

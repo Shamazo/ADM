@@ -102,11 +102,11 @@ FOR_SSB_QUERY(SSB_BENCH_REGISTER_GPU)
       ->UseRealTime()                                   \
       ->Unit(benchmark::kMillisecond)                   \
       ->Iterations(5);                                  \
-  BENCHMARK_REGISTER_F(SSBGPUOnlyLazy, GPULazy_##name)  \
-      ->Args({1000, 1})                                 \
-      ->UseRealTime()                                   \
-      ->Unit(benchmark::kMillisecond)                   \
-      ->Iterations(3);
+//  BENCHMARK_REGISTER_F(SSBGPUOnlyLazy, GPULazy_##name)  \
+//      ->Args({1000, 1})                                 \
+//      ->UseRealTime()                                   \
+//      ->Unit(benchmark::kMillisecond)                   \
+//      ->Iterations(3);
 
 FOR_SSB_QUERY(SSB_BENCH_DEFINE_GPU_LAZY)
 FOR_SSB_QUERY(SSB_BENCH_REGISTER_GPU_LAZY)

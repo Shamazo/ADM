@@ -90,7 +90,8 @@ class BenchmarkRunner:
     def __init__(self, args, benchmarks: List[BenchmarkConfig]):
         self.args = args
         self.benchmarks = benchmarks
-        self.common_args = f"--server_number=49 --num_iterations={args.num_iterations} --timestamp_file=adm-timestamps.csv {'--selectivities=' + args.selectivities if args.selectivities is not None else ''}"
+        # --num_iterations={args.num_iterations}
+        self.common_args = f"--server_number=49 --num_iterations={args.num_iterations}  --timestamp_file=adm-timestamps.csv {'--selectivities=' + args.selectivities if args.selectivities is not None else ''}"
         self.result_subdir = "gmi_x8_noavx"
         self.perf_events = "cpu-cycles"
 
@@ -230,7 +231,6 @@ class BenchmarkRunner:
                 ], stdout=open(log_file, "w"), stderr=subprocess.STDOUT, check=True)
             except subprocess.CalledProcessError as e:
                 logging.error(f"AMD profiling failed: {e}")
-
                 iostat_process.terminate()
                 continue
 
@@ -487,8 +487,114 @@ class BenchmarkRunner:
                     stdout=open(log_file, "a"),
                     stderr=subprocess.STDOUT,
                     check=True,
-                    timeout=3600
+                    timeout=14200
                 )
+                iostat_process.send_signal(subprocess.signal.SIGINT)
+                time.sleep(1)
+                iostat_process.terminate()
+                iostat_process.wait(2)
+                self.parse_iostat_and_check_health()
+                self.slack_thread.send_file(
+                    f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname} results",
+                    self.get_benchmark_result_filepath(bench, output_dir))
+                subprocess.run(f"cp -r ./generated_code {output_dir}", shell=True, check=True)
+                self.create_trace(output_dir,
+                                  f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}.trace")
+                subprocess.run(f"cp *.csv {output_dir}", shell=True, check=True)
+                benchmark_result_paths.append(self.get_benchmark_result_filepath(bench, output_dir))
+                time.sleep(10 * self.args.selectivities.count(",") if self.args.selectivities else 45)
+
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+                iostat_process.terminate()
+                logging.error(f"Benchmark failed: {e}")
+                continue
+
+        combined_results_path = f'{self.base_output}/results.csv'
+        with open(combined_results_path, 'w') as outfile:
+            # Write first file with header
+            with open(benchmark_result_paths[0]) as firstfile:
+                outfile.write(firstfile.read())
+
+            # Append remaining files without headers
+            for path in benchmark_result_paths[1:]:
+                with open(path) as f:
+                    next(f)  # Skip header
+                    outfile.write(''.join(line for line in f if line.strip()))
+        self.slack_thread.send_file(f"combined results", combined_results_path)
+
+    def run_stream_interference_benchmark(self):
+        logging.warning(
+            "Make sure your stream binary is compiled with the correct flags to ensure it runs long enough!")
+        """Run benchmarks without profiling."""
+        benchmark_result_paths = []
+        for bench in self.benchmarks:
+            output_dir = self.get_benchmark_output_dir(bench)
+            os.makedirs(output_dir, exist_ok=True)
+            log_file = output_dir / f"{bench.shortname_with_args if bench.shortname_with_args else bench.shortname}_log.txt"
+
+            # Clear generated code
+            subprocess.run(f"rm -f {self.args.bin_dir}/generated_code/*", shell=True)
+
+            benchmark_args = self.get_benchmark_args(bench, output_dir)
+            logging.info(f"Running benchmark: {bench.shortname}")
+            logging.info(f"Command: {bench.binary} {benchmark_args}")
+
+            try:
+                # Create benchmark command script
+                with open("bench_command.sh", "w") as f:
+                    cmd = f"LD_LIBRARY_PATH=../lib:/scratch/pelago/llvm-14/opt/lib {self.args.bin_dir}/{bench.binary} {self.get_benchmark_args(bench, output_dir)}"
+                    f.write(cmd)
+                os.chmod("bench_command.sh", 0o755)
+
+                logging.info(f"Running AMD profile for benchmark: {bench.binary} {bench.shortname}")
+                try:
+                    iostat_process = self.start_iostat_collection()
+                except:
+                    logging.error("Failed to start iostat collection")
+                    return
+                logging.info("Starting stream")
+                stream_binary_path = self.args.stream_binary
+                if not stream_binary_path.is_absolute():
+                    this_dir = Path(__file__).parent
+                    stream_binary_path = this_dir / stream_binary_path
+                if not stream_binary_path.exists():
+                    logging.fatal(f"Stream binary not found: {stream_binary_path}")
+                    # wget https://raw.githubusercontent.com/jeffhammond/STREAM/refs/heads/master/stream.c
+                    # gcc -O2 -fopenmp -DSTREAM_ARRAY_SIZE=100000000 -DNTIMES=5000 stream.c -o stream_100m
+                    return
+                logging.info(['numactl', '--membind=4,5,6,7', '--cpubind=4,5,6,7', f'{stream_binary_path}'])
+                stream_process = subprocess.Popen(
+                    [f"exec numactl --membind=4,5,6,7 --cpubind=4,5,6,7 {stream_binary_path}"],
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+
+                # Run AMD profiler
+                try:
+                    logging.info("starting proteus under AMDuProfPcm")
+                    subprocess.run([
+                        "sudo", "-E", "/opt/AMDuProf_4.1-424/bin/AMDuProfPcm",
+                        "-r", "-m", "xgmi,memory", "-a", "-A", "package", "-t", "50",
+                        "-s", "-o", str(os.getcwd() + "/amd_pcm.csv"),
+                        "-q", "-k", "--", f"{os.getcwd()}/bench_command.sh"
+                    ], stdout=open(log_file, "w"), stderr=subprocess.STDOUT, check=True)
+                except subprocess.CalledProcessError as e:
+                    logging.error(f"AMDuProfPcm failed: {e}")
+                    iostat_process.terminate()
+                    continue
+                # currently hardcoded to use AMDuProfPcm, but can be changed to run without profiling
+                # subprocess.run(
+                #     [bench.binary] + benchmark_args.split(),
+                #     stdout=open(log_file, "a"),
+                #     stderr=subprocess.STDOUT,
+                #     check=True,
+                #     timeout=3600
+                # )
+                logging.info("Proteus done, killing stream")
+                stream_process.send_signal(subprocess.signal.SIGINT)
+                time.sleep(1)
+                stream_process.kill()
                 iostat_process.send_signal(subprocess.signal.SIGINT)
                 time.sleep(1)
                 iostat_process.terminate()
@@ -509,7 +615,7 @@ class BenchmarkRunner:
                 logging.error(f"Benchmark failed: {e}")
                 continue
 
-        combined_results_path = f'{self.base_output}/results.csv'
+        combined_results_path = f'{self.base_output}/stream_interference_results.csv'
         with open(combined_results_path, 'w') as outfile:
             # Write first file with header
             with open(benchmark_result_paths[0]) as firstfile:
@@ -522,142 +628,197 @@ class BenchmarkRunner:
                     outfile.write(''.join(line for line in f if line.strip()))
         self.slack_thread.send_file(f"combined results", combined_results_path)
 
-
 def setup_benchmarks() -> List[BenchmarkConfig]:
     """Create list of benchmark configurations."""
     return [
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_pd",
-        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=4",
-        #     shortname_with_args="sel_cpu_pd_dop_4"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_pd",
-        #     args="--bench_micro_cpu_socket_pushdown_filter --pushdown_dop=16",
-        #     shortname_with_args="sel_cpu_pd_dop_16"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_baseline",
-        #     args="--bench_micro_cpu_socket_pushdown_baseline"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_stage_one",
-        #     args="--bench_micro_cpu_socket_stage_one"
-        # ),
 
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_stage_both",
-        #     args="--bench_micro_cpu_socket_stage_both"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_grouter_staging",
-        #     args="--bench_micro_cpu_socket_grouter_stage_both --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_grouter_staging_partial_sum",
-        #     args="--bench_micro_cpu_socket_grouter_stage_both_partial_sum --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
-        # ),
-
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     # currently this relies on hard coding the routing policy
-        #     shortname="sel_cpu_grouter_adaptive_force_staging",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
-        # ),
-
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_grouter_adaptive_force_staging_partial",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_grouter_adaptive_throughput_staging_direct",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_4"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./selectivity-micros",
-        #     shortname="sel_cpu_grouter_adaptive_backpressure_staging_direct",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_4"
-        # ),
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_adaptive_throughput",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="sel_cpu_adaptive_tp_pd_dop_16"
-        # ),
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_adaptive_backpressure",
-        #     args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="sel_cpu_adaptive_bp_pd_dop_16"
-        # ),
-
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_pd",
-        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1",
-        #     shortname_with_args="sel_cpu_grouter_pd_dop_1"
-        # ),
-        # BenchmarkConfig(
-        #     shortname="sel_cpu_grouter_pd",
-        #     args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=4",
-        #     shortname_with_args="sel_cpu_grouter_pd_dop_4"
-        # )
+        ##### SSB ######
         BenchmarkConfig(
             binary="./proteusadm-play",
-            shortname="ssb_cpu_grouter_adaptive_back_pressure",
-            args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-            shortname_with_args="ssb_bp_adaptive_dop4"
+            shortname="ssb_cpu_grouter_direct",
+            args="--bench_grouter_direct_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_grouter_direct"
         ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_adaptive_throughput",
-        #     args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_tp_adaptive_dop4"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_direct",
-        #     args="--bench_grouter_direct_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_grouter_direct"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_staging",
-        #     args="--bench_grouter_staging_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_grouter_staging"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_pushdown",
-        #     args="--bench_grouter_pushdown_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_grouter_pushdown_dop4"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_adaptive_back_pressure",
-        #     args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_bp_adaptive_dop16"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_pushdown",
-        #     args="--bench_grouter_pushdown_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_grouter_pushdown_dop16"
-        # ),
-        # BenchmarkConfig(
-        #     binary="./proteusadm-play",
-        #     shortname="ssb_cpu_grouter_adaptive_throughput",
-        #     args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
-        #     shortname_with_args="ssb_bp_td_adaptive_dop16"
-        # ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_staging",
+            args="--bench_grouter_staging_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_grouter_staging"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_pushdown",
+            args="--bench_grouter_pushdown_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_grouter_pushdown_dop4"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_pushdown",
+            args="--bench_grouter_pushdown_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_grouter_pushdown_dop16"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_adaptive_throughput",
+            args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_tp_adaptive_dop4"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_adaptive_throughput",
+            args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="ssb_tp_adaptive_dop16"
+        ),
+
+        # SSB with hyperthreads
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_direct",
+            args="--bench_grouter_direct_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_grouter_direct_ht"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_staging",
+            args="--bench_grouter_staging_ssb --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_grouter_staging_ht"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_pushdown",
+            args="--bench_grouter_pushdown_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_grouter_pushdown_dop4_ht"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_adaptive_throughput",
+            args="--bench_adaptive_ssb --pushdown_dop=4 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_tp_adaptive_dop4_ht"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_pushdown",
+            args="--bench_grouter_pushdown_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_grouter_pushdown_dop16_ht"
+        ),
+        BenchmarkConfig(
+            binary="./proteusadm-play",
+            shortname="ssb_cpu_grouter_adaptive_throughput",
+            args="--bench_adaptive_ssb --pushdown_dop=16 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL --use_hyper_threads",
+            shortname_with_args="ssb_tp_adaptive_dop16_ht"
+        ),
+
+        #### adaptivity micros ####
+            BenchmarkConfig(
+                binary="./adaptivity-micros",
+                shortname="adaptivity_micros",
+                args="--pushdown_dop=4 --bench_vary_samples_ssb_q31 --num_iterations=10",
+                shortname_with_args="adaptivity_ssbq31_dop4"
+            ),
+        BenchmarkConfig(
+            binary="./adaptivity-micros",
+            shortname="adaptivity_micros_ht",
+            args="--pushdown_dop=4 --bench_vary_samples_ssb_q31 --num_iterations=3 --use_hyper_threads",
+            shortname_with_args="adaptivity_ssbq31_ht_dop4"
+        ),
+        BenchmarkConfig(
+            binary="./adaptivity-micros",
+            shortname="adaptivity_micros_ht_skip",
+            args="--pushdown_dop=4 --bench_vary_samples_ssb_q31 --num_iterations=3 --use_hyper_threads --skip_samples=11",
+            shortname_with_args="adaptivity_ssbq31_ht_skip_dop4"
+        ),
+        BenchmarkConfig(
+            binary="./adaptivity-micros",
+            shortname="adaptivity_micros_ht",
+            args="--pushdown_dop=4 --bench_vary_samples_ssb_q31 --num_iterations=3 --use_hyper_threads",
+            shortname_with_args="adaptivity_ssbq31_ht_dop4"
+        ),
+
+        ##### selectivity micros #####
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_staging",
+            args="--bench_micro_cpu_socket_grouter_stage_both --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_direct",
+            args="--bench_micro_cpu_socket_grouter_direct --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL"
+        ),
+
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=1 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_1"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=2 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_2"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=4 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_4"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=8 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_8"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=12 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_12"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_pd",
+            args="--bench_micro_cpu_socket_grouter_pd --pushdown_dop=16 --num_iterations=5 --grouter_policy=DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_grouter_pd_dop_16"
+        ),
+
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=1 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_1"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=2 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_2"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=4 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_4"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=8 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_8"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=12 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_12"
+        ),
+        BenchmarkConfig(
+            binary="./selectivity-micros",
+            shortname="sel_cpu_grouter_adaptive_throughput",
+            args="--bench_micro_cpu_socket_adaptive --pushdown_dop=16 --num_iterations=5 --grouter_policy=DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+            shortname_with_args="sel_cpu_adaptive_tp_pd_dop_16"
+        ),
     ]
 
 
@@ -667,6 +828,8 @@ def main():
     parser.add_argument("-p", "--profile-perf", action="store_true", help="Enable perf profiling")
     parser.add_argument("-f", "--flame-graph", action="store_true", help="Generate flame graph")
     parser.add_argument("-o", "--off-cpu-flame-graph", action="store_true", help="Generate off-CPU flame graph")
+    parser.add_argument("-s", "--stream-interference", action="store_true",
+                        help="Run the stream memory benchmark on socket 0 to cause memory bandwidth interference")
     parser.add_argument("-n", "--no-process-traces", action="store_true", help="Skip processing traces")
 
     # Add path arguments with defaults
@@ -684,6 +847,9 @@ def main():
                         help="Output directory path")
     parser.add_argument("--selectivities", type=str, default=None,
                         help="Selectivities to run. Comma seperated list of doubles. ")
+    parser.add_argument("--stream-binary", type=Path,
+                        default="./stream_100m",
+                        help="stream binary path")
     parser.add_argument("--num-iterations", type=int, default=5, help="Number of iterations to run each benchmark")
 
     args = parser.parse_args()
@@ -719,6 +885,8 @@ def main():
             runner.run_flame_graph()
         elif args.off_cpu_flame_graph:
             runner.run_off_cpu_flame_graph()
+        elif args.stream_interference:
+            runner.run_stream_interference_benchmark()
         else:
             runner.run_standard_benchmark()
     except Exception as e:

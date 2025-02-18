@@ -186,6 +186,7 @@ proteus::managed_ptr MemMoveDevice::MemMoveConf::force_push_from_nvme(
 buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
                                            size_t bytes, int target_device,
                                            uint64_t srcServer, workunit *wu) {
+  //  event_range<range_log_op::MEMMOVE_PUSH> er{{}};
   DCHECK_EQ(srcServer, 0);
   if (NvmePlugin::PageId_t::isPageIdPtr(src.get())) {
     target_device = target_device < 0 ? -1 : target_device;

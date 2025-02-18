@@ -111,7 +111,7 @@ PreparedStatement prepare32_adaptive(SSBArgs args) {
   if (args.do_direct) {
     paths.emplace_back(
         probe_split
-            .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
+            .path(DeviceType::CPU, DegreeOfParallelism{16},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.compute_numa_nodes))
             .memmove(4, DeviceType::CPU));
@@ -120,7 +120,7 @@ PreparedStatement prepare32_adaptive(SSBArgs args) {
   if (args.do_staging) {
     paths.emplace_back(
         probe_split
-            .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
+            .path(DeviceType::CPU, DegreeOfParallelism{16},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.compute_numa_nodes))
             .memmove(4, DeviceType::CPU,
@@ -128,12 +128,13 @@ PreparedStatement prepare32_adaptive(SSBArgs args) {
   }
 
   if (args.do_bloom_filter_pushdown) {
+    const size_t mm_slack = std::max(4ul, 32/args.pushdown_dop);
     paths.emplace_back(
         probe_split
             .path(DeviceType::CPU, DegreeOfParallelism{args.pushdown_dop},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.pushdown_numa_nodes))
-            .memmove(8, DeviceType::CPU)
+            .memmove(mm_slack, DeviceType::CPU)
             .unpack()
             .bloomfilter_probe(
                 [&](const auto &arg) -> expression_t {
@@ -151,7 +152,7 @@ PreparedStatement prepare32_adaptive(SSBArgs args) {
                 DegreeOfParallelism{compute_dop},
                 std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                     args.compute_numa_nodes),
-                4)
+                2)
       .unpack()
       .join(
           scan_build_supp,

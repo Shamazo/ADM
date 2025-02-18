@@ -233,6 +233,7 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
           exploit(false),
           sample_size(_sample_size) {
       throughputs.resize(num_consumers, 0.0);
+      LOG(INFO) << "will skip: " << _count_skip_events;
     }
     uint64_t get_target() {
       //      if (num_consumers == 1) {
@@ -248,7 +249,7 @@ class ThroughputSplitPreferDataLocal : public RoutingPolicy {
         throughputs[curr_target] = tracker.get_current_throughput();
         LOG(INFO) << " previous throughput of " << curr_target << " is "
                   << tracker.get_current_throughput() << " with " << sample_size
-                  << "samples";
+                  << " samples" ;
         curr_target = (curr_target + 1) % num_consumers;
         LOG(INFO) << "switching to " << curr_target;
         tracker.reset();

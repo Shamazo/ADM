@@ -36,7 +36,7 @@ PreparedStatement ssb::Query::prepare13(proteus::QueryShaper &morph) {
   return morph
       .parallel(
           rel, {rel6631},
-          [](RelBuilder probe, std::vector<RelBuilder> build) {
+          [&](RelBuilder probe, std::vector<RelBuilder> build) {
             auto rel6631_d =
                 build.at(0)
                     .unpack()
@@ -50,6 +50,14 @@ PreparedStatement ssb::Query::prepare13(proteus::QueryShaper &morph) {
                       return {(arg["d_datekey"])};
                     });
             return probe.unpack()
+                .filter([&](const auto &arg) -> expression_t {
+                  return expressions::hint(
+                      ge(arg["lo_discount"], 5) & le(arg["lo_discount"], 7) &
+                          ge(arg["lo_quantity"], 26) &
+                          le(arg["lo_quantity"], 35),
+                      expressions::Selectivity{0.1 * 3 / 11});
+                })
+//                .pack().unionAll({}, DegreeOfParallelism{morph.getDOP()}).unpack()
                 .join(
                     rel6631_d,
                     [&](const auto &build_arg) -> expression_t {
@@ -59,13 +67,6 @@ PreparedStatement ssb::Query::prepare13(proteus::QueryShaper &morph) {
                       return probe_arg["lo_orderdate"];
                     },
                     5, 8)
-                .filter([&](const auto &arg) -> expression_t {
-                  return expressions::hint(
-                      ge(arg["lo_discount"], 5) & le(arg["lo_discount"], 7) &
-                          ge(arg["lo_quantity"], 26) &
-                          le(arg["lo_quantity"], 35),
-                      expressions::Selectivity{0.1 * 3 / 11});
-                })
                 .reduce(
                     [&](const auto &arg) -> std::vector<expression_t> {
                       return {(arg["lo_extendedprice"] * arg["lo_discount"])

@@ -114,7 +114,7 @@ class flush_log {
         {},
         std::nullopt,
         std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
+            std::chrono::system_clock::now().time_since_epoch())
             .count()};
     for (const auto &data : logs) {
       for (const auto &t : data) t.flush();
@@ -157,7 +157,7 @@ class flush_counter_log {
         {},
         std::nullopt,
         std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
+            std::chrono::system_clock::now().time_since_epoch())
             .count()};
     for (const auto &data : logs) {
       for (const auto &t : data) t.flush();
@@ -200,7 +200,7 @@ class flush_range_log {
         {},
         std::nullopt,
         std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
+            std::chrono::system_clock::now().time_since_epoch())
             .count()};
     for (const auto &data : logs) {
       for (const auto &t : data) t.flush();
@@ -243,7 +243,7 @@ logger::logger() {
       {},
       std::nullopt,
       std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::high_resolution_clock::now().time_since_epoch())
+          std::chrono::system_clock::now().time_since_epoch())
           .count()};
 }
 
@@ -268,7 +268,7 @@ ranged_logger::ranged_logger() {
       {},
       std::nullopt,
       std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::high_resolution_clock::now().time_since_epoch())
+          std::chrono::system_clock::now().time_since_epoch())
           .count()};
 }
 

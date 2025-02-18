@@ -66,6 +66,8 @@ extern "C" void copyBloomFilterToNode(Pipeline *pip, void *s, uint64_t bloomId,
   char *bloom_filter_copy = static_cast<char *>(
       MemoryManager::mallocPinnedOnNode(bloom_filter_size, target_numa_index));
   memcpy(bloom_filter_copy, s, bloom_filter_size);
+  LOG(INFO) << "copying bloom filter with id: " << bloomId
+            << " from node: " << this_cpu.id << " to node: " << target_numa_id;
   bloom_filter_registry[target_key] = bloom_filter_copy;
 }
 

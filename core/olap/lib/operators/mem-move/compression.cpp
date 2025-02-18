@@ -51,7 +51,8 @@ GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
   }
   m_gpu_index_in_topo = gpu_index;
 
-  set_device_on_scope d(topology::getInstance().getGpus()[m_gpu_index_in_topo]);
+  auto scope =
+      topology::getInstance().getGpus()[m_gpu_index_in_topo].set_on_scope();
 
   const int max_batch_chunks = max_batch_block_count * max_chunks_per_block;
   m_host_compressed_ptrs = static_cast<void **>(
@@ -155,9 +156,8 @@ void **GpuDecompressor::get_device_uncompressed_ptrs(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpyAsync(m_device_uncompressed_ptrs, m_host_uncompressed_ptrs,
-                          sizeof(void *) * batch_size, cudaMemcpyHostToDevice,
-                          stream));
+  gpu_run(cudaMemcpy(m_device_uncompressed_ptrs, m_host_uncompressed_ptrs,
+                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
 
   return m_device_uncompressed_ptrs;
 }
@@ -171,9 +171,9 @@ size_t *GpuDecompressor::get_device_uncompressed_chunk_sizes(
     m_host_uncompressed_chunk_sizes[i] = m_max_decomp_chunk_size;
   }
 
-  gpu_run(cudaMemcpyAsync(
-      m_device_uncompressed_chunk_sizes, m_host_uncompressed_chunk_sizes,
-      sizeof(void *) * batch_size, cudaMemcpyHostToDevice, stream));
+  gpu_run(cudaMemcpy(m_device_uncompressed_chunk_sizes,
+                     m_host_uncompressed_chunk_sizes,
+                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
 
   return m_device_uncompressed_chunk_sizes;
 }
@@ -191,9 +191,8 @@ size_t *GpuDecompressor::get_device_compressed_bytes(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpyAsync(
-      m_device_compressed_bytes, m_host_compressed_chunk_sizes,
-      sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream));
+  gpu_run(cudaMemcpy(m_device_compressed_bytes, m_host_compressed_chunk_sizes,
+                     sizeof(size_t) * batch_size, cudaMemcpyHostToDevice));
 
   return m_device_compressed_bytes;
 }
@@ -215,9 +214,8 @@ void **GpuDecompressor::get_device_compressed_ptrs(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpyAsync(m_device_compressed_ptrs, m_host_compressed_ptrs,
-                          sizeof(void *) * batch_size, cudaMemcpyHostToDevice,
-                          stream));
+  gpu_run(cudaMemcpy(m_device_compressed_ptrs, m_host_compressed_ptrs,
+                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
 
   return m_device_compressed_ptrs;
 }

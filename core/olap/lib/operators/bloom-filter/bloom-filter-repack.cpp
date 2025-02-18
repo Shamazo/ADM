@@ -90,6 +90,7 @@ void BloomFilterRepack::produce_(OlapParallelContext *context) {
         return mem;
       },
       [=](llvm::Value *, llvm::Value *s) { context->deallocateStateVar(s); });
+  LOG(INFO) << "got here";
 
   std::shared_ptr<Plugin> pg =
       Catalog::getInstance().getPlugin(wantedFields[0].getRegisteredRelName());
@@ -107,9 +108,9 @@ void BloomFilterRepack::produce_(OlapParallelContext *context) {
   getChild()->produce(context);
 }
 
-void BloomFilterRepack::consumeVector(OlapParallelContext *context,
-                                      const OperatorState &childState,
-                                      llvm::Value *filter, size_t vsize,
+void __attribute__((optnone)) BloomFilterRepack::consumeVector(
+    OlapParallelContext *context, const OperatorState &childState,
+    llvm::Value *filter, size_t vsize,
                                       llvm::Value *offset, llvm::Value *N) {
   // vectorized bloom filter probe
   // consumes tuples, filters them and then repacks them into a new buffer
@@ -130,6 +131,7 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
         context->createFalse()));
     variableBindings[attr.getRegisteredAs()] = outputBuffs.back();
   }
+  LOG(INFO) << "got here1";
 
   auto outCnt = context->toMem(
       Builder->CreateLoad(
@@ -235,6 +237,7 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
                              filter_i32ptr, index);
       indices_ptrs = Builder->CreateInsertElement(indices_ptrs, ptr, i);
     }
+    LOG(INFO) << "got here3";
 
     auto gatheredIndices = Builder->CreateMaskedGather(
         t_int32_16vec, indices_ptrs, llvm::Align(4));
@@ -294,6 +297,7 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
       outCnt.mem->getType()->getPointerElementType(),
       outCnt.mem);  // popCnt; // FIXME: Update next cnt to offset + popCnt
 
+  LOG(INFO) << "got here4";
   context->gen_if({Builder->CreateICmpNE(
                        popCnt, llvm::ConstantInt::get(popCnt->getType(), 0)),
                    context->createFalse()})([&] {
@@ -303,9 +307,12 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
 
     for (size_t attr_idx = 0; attr_idx < wantedFields.size(); attr_idx++) {
       const auto &attr = wantedFields[attr_idx];
+      LOG(INFO) << attr.getRegisteredAs().getName();
       auto tmpPtr = outputBuffs[attr_idx].mem;
       auto tmp = Builder->CreateLoad(tmpPtr->getType()->getPointerElementType(),
                                      tmpPtr);
+      tmpPtr->getType()->dump();
+      tmp->getType()->dump();
       auto b_ptr = Builder->CreateInBoundsGEP(
           tmp->getType()->getNonOpaquePointerElementType(), tmp,
           {context->createInt32(0), cnt});
@@ -318,6 +325,7 @@ void BloomFilterRepack::consumeVector(OlapParallelContext *context,
       auto t = llvm::PointerType::getUnqual(
           llvm::VectorType::get(vs_tmp->getType()->getPointerElementType(),
                                 llvm::ElementCount::getFixed(vsize)));
+      t->dump();
       auto ld = Builder->CreateAlignedLoad(
           Builder->CreateBitCast(vs_tmp, t)->getType()->getPointerElementType(),
           Builder->CreateBitCast(vs_tmp, t), llvm::MaybeAlign{512 / 8});

@@ -106,8 +106,8 @@ class SSBCPUOnly : public SSBBaseFixture {
   void setLoaders(benchmark::State& state) override {}
 
   void setQueryShaper(benchmark::State& state) override {
-    auto* shaperPtr = new proteus::CPUOnlySingleServer{
-        "inputs/ssbm" + std::to_string(SF) + "/", stats};
+    auto* shaperPtr = new proteus::CPUOnlySingleServerMorsel{
+        "inputs/ssbm" + std::to_string(SF) + "/", stats, false};
     shaper.reset(shaperPtr);
   }
 };

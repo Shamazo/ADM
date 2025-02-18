@@ -53,7 +53,7 @@ QueryResult::QueryResult(const std::string &outputfile)
   // mmap shared memory
   if (output_path.is_relative()) {
     auto p = "/dev/shm" / std::filesystem::path{outputfile};
-    CHECK(std::filesystem::exists(p));
+    CHECK(std::filesystem::exists(p)) << p;
 
     int fd = shm_open(outputfile.c_str(), O_RDONLY, S_IRWXU);
     PCHECK(fd >= 0) << "shm_open failed to open: " << outputfile;

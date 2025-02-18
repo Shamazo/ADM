@@ -114,6 +114,9 @@ class exec_location {
  public:
   void activate() const {
     // std::cout << "d" << gpu_device << " " << cpu.local_cpu_set << std::endl;
+    // if you dead lock here in cuda-gdb it may be this issue
+    // https://forums.developer.nvidia.com/t/cuda-gdb-hangs-indefinitely/217087/21
+    // and you may need to try a different version of cuda-gdb
     if (gpu_device >= 0) gpu_run(cudaSetDevice(gpu_device));
     // pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpus);
     affinity_cpu_set::set(cpu, cores);

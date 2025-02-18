@@ -118,12 +118,12 @@ __host__ void buffer_manager<T>::__release_buffer_host(T *buff) {
             device_buffs_pool[devid].end() - device_buff_size,
             device_buffs_pool[devid].end());
         lock.unlock();
-        LOG(INFO) << "release spawned";
+        //        LOG(INFO) << "release spawned";
         release_buffer_host<<<1, 1, 0, release_streams[devid]>>>(
             (void **)device_buff[devid], device_buff_size);
         gpu_run(cudaStreamSynchronize(release_streams[devid]));
         lock.lock();
-        LOG(INFO) << "release done";
+        //        LOG(INFO) << "release done";
         // gpu_run(cudaPeekAtLastError()  );
         // gpu_run(cudaDeviceSynchronize());
         nvtxRangePop();
@@ -470,7 +470,7 @@ __host__ void buffer_manager<T>::init(float gpu_mem_pool_percentage,
           size_t cpu_h_size =
               cpu_mem_pool_percentage * (cpu.getMemorySize() / buffer_size);
           buffer_manager<T>::h_size[cpu.id] = cpu_h_size;
-          LOG(INFO) << "Using " << h_size << " " << bytes{buffer_size}
+          LOG(INFO) << "Using " << cpu_h_size << " " << bytes{buffer_size}
                     << "-buffers in CPU " << cpu.id
                     << " (Total: " << bytes{cpu_h_size * buffer_size} << "/"
                     << bytes{cpu.getMemorySize()} << ")";
@@ -872,6 +872,8 @@ __host__ void buffer_manager<T>::log_buffers(size_t freq) {
 template <typename T>
 __host__ inline T *buffer_manager<T>::h_get_buffer(int dev) {
   if (dev >= 0) {
+    DCHECK_LT(dev, topology::getInstance().getGpuCount())
+        << "Invalid device index: " << dev;
     std::unique_lock<std::mutex> lock(device_buffs_mutex[dev]);
 
     device_buffs_cv[dev].wait(

@@ -182,6 +182,8 @@ void Router::generate_catch(OlapParallelContext *context) {
 }
 
 proteus::managed_ptr Router::acquireBuffer(int target, bool polling) {
+  event_range<range_log_op::ROUTER_ACQUIRING_BUFF> er{
+      m_id};
   nvtxRangePushA("rtr::acq_buff");
   /// random policy uses a single shared free pool
   // this is not well tested and there are cleaner ways to do this

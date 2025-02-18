@@ -648,7 +648,7 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     cf_descr.type = CU_FILE_HANDLE_TYPE_OPAQUE_FD;
     CUfileError_t status = cuFileHandleRegister(&cufile_handle, &cf_descr);
     if (status.err != CU_FILE_SUCCESS) {
-      LOG(ERROR)
+      LOG_FIRST_N(ERROR, 5)
           << "failed to cuFileHandleRegister for file: " << data_file_path
           << " status: " << cufileop_status_error(status.err)
           << "\n This will only be fatal if cufile APIs are used on this file";

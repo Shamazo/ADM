@@ -1,0 +1,11 @@
+name: profiling
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pandas
+  - protobuf
+  - matplotlib
+  - jinja2
+  - slack-sdk
+  - conda-lock

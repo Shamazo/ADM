@@ -33,17 +33,17 @@ static RelBuilder add_direct_path(
     const std::vector<uint32_t> &compute_numa_nodes) {
   return split
       .path(
-          DeviceType::CPU, DegreeOfParallelism{compute_dop},
+          DeviceType::CPU, DegreeOfParallelism{16},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(2, DeviceType::CPU)
-      .unpack()
-      .filter([&](const auto &arg) -> expression_t {
-        return expressions::hint(
-            ge(arg["lo_discount"], 4) & le(arg["lo_discount"], 6) &
-                ge(arg["lo_quantity"], 26) & le(arg["lo_quantity"], 35),
-            expressions::Selectivity{0.2 * 3.0 / 11});
-      })
-      .pack();
+      .memmove(4, DeviceType::CPU);
+//      .unpack()
+//      .filter([&](const auto &arg) -> expression_t {
+//        return expressions::hint(
+//            ge(arg["lo_discount"], 4) & le(arg["lo_discount"], 6) &
+//                ge(arg["lo_quantity"], 26) & le(arg["lo_quantity"], 35),
+//            expressions::Selectivity{0.2 * 3.0 / 11});
+//      })
+//      .pack();
 }
 
 static RelBuilder add_staging_path(
@@ -51,29 +51,30 @@ static RelBuilder add_staging_path(
     const std::vector<uint32_t> &compute_numa_nodes) {
   return split
       .path(
-          DeviceType::CPU, DegreeOfParallelism{compute_dop},
+          DeviceType::CPU, DegreeOfParallelism{16},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
-      .memmove(2, DeviceType::CPU,
-               std::vector<bool>{false, false, false, false})
-      .unpack()
-      .filter([&](const auto &arg) -> expression_t {
-        return expressions::hint(
-            ge(arg["lo_discount"], 4) & le(arg["lo_discount"], 6) &
-                ge(arg["lo_quantity"], 26) & le(arg["lo_quantity"], 35),
-            expressions::Selectivity{0.2 * 3.0 / 11});
-      })
-      .pack();
+      .memmove(4, DeviceType::CPU,
+               std::vector<bool>{false, false, false, false});
+//      .unpack()
+//      .filter([&](const auto &arg) -> expression_t {
+//        return expressions::hint(
+//            ge(arg["lo_discount"], 4) & le(arg["lo_discount"], 6) &
+//                ge(arg["lo_quantity"], 26) & le(arg["lo_quantity"], 35),
+//            expressions::Selectivity{0.2 * 3.0 / 11});
+//      })
+//      .pack();
 }
 
 static RelBuilder add_pushdown_path(
     SplitRelBuilder &split, size_t pushdown_dop,
     const std::vector<uint32_t> &pushdown_numa_nodes, bool do_bloomfilter,
     size_t bloom_filter_size) {
+  const size_t mm_slack = std::max(4ul, 32/pushdown_dop);
   auto filter = split
                     .path(DeviceType::CPU, DegreeOfParallelism{pushdown_dop},
                           std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                               pushdown_numa_nodes))
-                    .memmove(8, DeviceType::CPU)
+                    .memmove(mm_slack, DeviceType::CPU)
                     .unpack();
   if (do_bloomfilter) {
     filter = filter.bloomfilter_probe(
@@ -166,7 +167,7 @@ PreparedStatement prepare12_adaptive(SSBArgs args) {
                 DegreeOfParallelism{compute_dop},
                 std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                     args.compute_numa_nodes),
-                4)
+                2)
       .unpack()
       .join(
           build_pipeline,
@@ -176,6 +177,12 @@ PreparedStatement prepare12_adaptive(SSBArgs args) {
           [&](const auto &probe_arg) -> expression_t {
             return probe_arg["lo_orderdate"];
           })
+      .filter([&](const auto &arg) -> expression_t {
+        return expressions::hint(
+            ge(arg["lo_discount"], 4) & le(arg["lo_discount"], 6) &
+                ge(arg["lo_quantity"], 26) & le(arg["lo_quantity"], 35),
+            expressions::Selectivity{0.2 * 3.0 / 11});
+      })
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {(arg["lo_extendedprice"] * arg["lo_discount"])
