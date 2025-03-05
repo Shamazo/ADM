@@ -1,7 +1,8 @@
 /*
+                         RADaFlow (forked from proteus)
     Proteus -- High-performance query processing on heterogeneous hardware.
 
-                            Copyright (c) 2024
+                        Copyright (c) 2025
         Data Intensive Applications and Systems Laboratory (DIAS)
                 École Polytechnique Fédérale de Lausanne
 
