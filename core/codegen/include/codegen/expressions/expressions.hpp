@@ -980,7 +980,24 @@ class TBinaryExpression : public BinaryExpressionCRTP<T> {
  protected:
   TBinaryExpression(const ExpressionType *type, expression_t lhs,
                     expression_t rhs)
-      : Tparent(type, new Top(), std::move(lhs), std::move(rhs)) {}
+      : Tparent(type, new Top(), std::move(lhs), std::move(rhs)) {
+    const ExpressionType *lhs_type =
+        Tparent::getLeftOperand().getExpressionType();
+    const ExpressionType *rhs_type =
+        Tparent::getRightOperand().getExpressionType();
+
+    // check just the lhs type for being primitive. If the lhs is not primitive,
+    // then it can make sense. e.g. for IndexedSeq
+    if (lhs_type->isPrimitive() &&
+        (lhs_type->getTypeID() != rhs_type->getTypeID())) {
+      std::string error_msg =
+          "Incompatible types for binary expression. lhs: " +
+          lhs_type->getType() + ", rhs: " + rhs_type->getType() +
+          ", opID: " + std::to_string(Tparent::getOp()->getID());
+      LOG(ERROR) << error_msg;
+      throw std::runtime_error(error_msg);
+    }
+  }
 
  public:
   [[nodiscard]] ExpressionId getTypeID() const override { return BINARY; }

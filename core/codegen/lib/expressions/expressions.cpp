@@ -319,6 +319,15 @@ expression_t::expression_t(std::string v, void *dict)
           expressions::DStringConstant{probeDictionary(dict, v), dict}) {}
 
 expressions::EqExpression eq(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for EqExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
@@ -344,6 +353,15 @@ expressions::EqExpression eq(const char *lhs, const expression_t &rhs) {
 }
 
 expressions::NeExpression ne(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for NeExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
@@ -369,6 +387,15 @@ expressions::NeExpression ne(const char *lhs, const expression_t &rhs) {
 }
 
 expressions::GeExpression ge(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for GeExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
@@ -394,6 +421,15 @@ expressions::LeExpression ge(const char *lhs, const expression_t &rhs) {
 }
 
 expressions::GtExpression gt(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for GtExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
@@ -419,6 +455,15 @@ expressions::LtExpression gt(const char *lhs, const expression_t &rhs) {
 }
 
 expressions::LeExpression le(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for LeExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
@@ -444,6 +489,15 @@ expressions::GeExpression le(const char *lhs, const expression_t &rhs) {
 }
 
 expressions::LtExpression lt(const expression_t &lhs, const expression_t &rhs) {
+  const ExpressionType *lhs_type = lhs.getExpressionType();
+  const ExpressionType *rhs_type = rhs.getExpressionType();
+  if (lhs_type->getTypeID() != rhs_type->getTypeID()) {
+    std::string error_msg =
+        "Incompatible types for LtExpression: " + lhs_type->getType() +
+        " and " + rhs_type->getType();
+    LOG(ERROR) << error_msg;
+    throw std::runtime_error(error_msg);
+  }
   return {lhs, rhs};
 }
 
