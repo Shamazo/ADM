@@ -1018,6 +1018,8 @@ __host__ __device__ bool equalStringObjs(StringObject o1, StringObject o2) {
 #endif
 }
 
+// These logging functions really should be moved to core/codegen since that is
+// where they are registered for use by generated code
 template <typename T>
 __host__ __device__ void log_impl(
     const T &x, decltype(__builtin_FILE()) file = __builtin_FILE(),
@@ -1027,6 +1029,18 @@ __host__ __device__ void log_impl(
   printf("I %s:%u] %" PRId64 "\n", file, line, static_cast<int64_t>(x));
 #else
   google::LogMessage(file, line, google::GLOG_INFO).stream() << x;
+#endif
+}
+
+template <>
+__host__ __device__ void log_impl(const uintptr_t &x,
+                                  decltype(__builtin_FILE()) file,
+                                  decltype(__builtin_LINE()) line) {
+#ifdef __CUDA_ARCH__
+  printf("I %s:%u] %" PRId64 "\n", file, line, x);
+#else
+  google::LogMessage(file, line, google::GLOG_INFO).stream()
+      << "0x" << std::hex << x << std::dec;
 #endif
 }
 
@@ -1070,6 +1084,15 @@ extern "C" __host__ __device__ void logi8ptr(const char *x,
                                              decltype(__builtin_FILE()) file,
                                              decltype(__builtin_LINE()) line) {
   log_impl(x, file, line);
+}
+extern "C" __host__ __device__ void logdouble(double x,
+                                              decltype(__builtin_FILE()) file,
+                                              decltype(__builtin_LINE()) line) {
+  log_impl(x, file, line);
+}
+extern "C" __host__ __device__ void logdoubleptr(
+    void *x, decltype(__builtin_FILE()) file, decltype(__builtin_LINE()) line) {
+  log_impl(reinterpret_cast<uintptr_t>(x), file, line);
 }
 
 #pragma clang diagnostic pop

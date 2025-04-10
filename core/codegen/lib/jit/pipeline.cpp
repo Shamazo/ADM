@@ -1012,9 +1012,9 @@ void PipelineGenFactory::registerFunctions(PipelineGen *pipelineGen) {
   else
     assert(false);
 
-  for (auto t :
-       std::vector<llvm::Type *>{int1_bool_type, int8_type, int16_type,
-                                 int32_type, int64_type, char_ptr_type}) {
+  for (auto t : std::vector<llvm::Type *>{
+           int1_bool_type, int8_type, int16_type, int32_type, int64_type,
+           char_ptr_type, double_type, PointerType::get(double_type, 0)}) {
     auto fName = "log" + pipelineGen->convertTypeToFuncSuffix(t);
 
     auto fType =
