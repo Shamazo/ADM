@@ -341,6 +341,20 @@ class Context {
     return {mem, isNull};
   }
 
+  /**
+   * Insert a debug break point at the current position.
+   * A breakpoint will be caught by gdb, but will otherwise result in program
+   * termination
+   */
+  inline void insertDebugBreakPoint() {
+    llvm::Function *DebugTrapFn = llvm::Intrinsic::getDeclaration(
+        getModule(), llvm::Intrinsic::debugtrap);
+    // to ensure the trap instruction is not reordered by the compiler
+    getBuilder()->CreateFence(llvm::AtomicOrdering::SequentiallyConsistent);
+    getBuilder()->CreateCall(DebugTrapFn);
+    getBuilder()->CreateFence(llvm::AtomicOrdering::SequentiallyConsistent);
+  }
+
   inline ProteusValueMemory toMem(
       llvm::Value *val, llvm::Value *isNull,
       /* The weird argument order is to avoid conflicts with the above def */
