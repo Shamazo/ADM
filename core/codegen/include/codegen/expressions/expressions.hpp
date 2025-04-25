@@ -1230,8 +1230,8 @@ enum class extract_unit {
   SECOND,
   MINUTE,
   HOUR,
-  DAYOFWEEK,
-  ISO_DAYOFWEEK,
+  DAYOFWEEK, /// sun = 1, sat = 7
+  ISO_DAYOFWEEK, /// mon = 1, sun = 7
   DAYOFMONTH,
   DAYOFYEAR,
   WEEK,
