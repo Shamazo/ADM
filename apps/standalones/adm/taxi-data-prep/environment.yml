@@ -1,0 +1,8 @@
+name: taxi-data-prep
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - matplotlib
+  - conda-forge::python-duckdb
