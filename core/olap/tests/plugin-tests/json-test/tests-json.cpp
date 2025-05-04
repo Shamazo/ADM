@@ -160,7 +160,7 @@ TEST_F(JSONTest, String) {
 
   int linehint = 3;
   auto pg = openJSON(&ctx, fname, &documentType, linehint);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   /**
    * SELECT
@@ -204,7 +204,7 @@ TEST_F(JSONTest, ScanJSON) {
   ListType documentType = ListType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   /* Reduce */
   expressions::InputArgument lhsArg(&inner, 0);
@@ -230,7 +230,7 @@ TEST_F(JSONTest, SelectJSON) {
   ListType documentType = ListType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   /**
    * SELECT
@@ -285,7 +285,7 @@ TEST_F(JSONTest, unnestJSON) {
   ListType documentType(inner);
 
   auto pg = openJSON(&ctx, fname, &documentType);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   expressions::InputArgument inputArg(&inner, 0);
   string nestedName = "c";
@@ -347,7 +347,7 @@ TEST_F(JSONTest, reduceListObjectFlat) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, linehint);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   expressions::InputArgument arg{&inner, 0};
 
@@ -430,7 +430,7 @@ TEST_F(JSONTest, reduceMax) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, lineHint);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   /**
    * REDUCE
@@ -468,7 +468,7 @@ TEST_F(JSONTest, reduceMax) {
      */
     auto pgCached =
         openJSON(&ctx, fname, &documentType, lineHint, pg->getTokens());
-    auto scan = std::make_shared<Scan>(*pgCached);
+    auto scan = std::make_shared<Scan>(pgCached);
 
     /**
      * REDUCE
@@ -552,7 +552,7 @@ TEST_F(JSONTest, reduceDeeperMax) {
    * SCAN
    */
   auto pg = openJSON(&ctx, fname, &documentType, lineHint);
-  auto scan = std::make_shared<Scan>(*pg);
+  auto scan = std::make_shared<Scan>(pg);
 
   /**
    * REDUCE
@@ -635,7 +635,7 @@ TEST_F(JSONTest, jsonRelBuilder) {
   RelBuilderFactory factory{testLabel};
   auto statement =
       factory.getBuilder()
-          .scan(*pg)
+          .scan(pg)
           .unnest([&](const auto &arg) -> expression_t {
             return arg[attr3].as(&nestedAs);
           })

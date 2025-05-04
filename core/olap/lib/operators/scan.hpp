@@ -28,7 +28,7 @@
 
 class Scan : public experimental::UnaryOperator {
  public:
-  explicit Scan(Plugin &pg) : UnaryOperator(nullptr), pg(pg) {}
+  explicit Scan(std::shared_ptr<Plugin> pg) : UnaryOperator(nullptr), pg(pg) {}
   [[nodiscard]] std::shared_ptr<Operator> getChild() const final {
     throw runtime_error(string("Scan operator has no children"));
   }
@@ -50,14 +50,14 @@ class Scan : public experimental::UnaryOperator {
     LOG(WARNING) << "Setting arbitrary number for #servers == 2 !";
     return DegreeOfParallelism{2};
   }
-  [[nodiscard]] bool isPacked() const override { return pg.isPacked(); }
+  [[nodiscard]] bool isPacked() const override { return pg->isPacked(); }
   [[nodiscard]] proteus::traits::HomReplication getHomReplication()
       const override {
     return proteus::traits::HomReplication::UNIQUE;
   }
 
  private:
-  Plugin &pg;
+  std::shared_ptr<Plugin> pg;
 };
 
 #endif /* SCAN_HPP_ */

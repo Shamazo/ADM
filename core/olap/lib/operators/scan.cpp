@@ -24,8 +24,8 @@
 #include "scan.hpp"
 
 void Scan::produce_(OlapParallelContext *context) {
-  pg.init();
-  pg.generate(*this, context);
+  pg->init();
+  pg->generate(*this, context);
 }
 
 void Scan::consume(OlapParallelContext *context,
@@ -34,4 +34,4 @@ void Scan::consume(OlapParallelContext *context,
   // this should in general be true, but not for the block2tuple scan
 }
 
-RecordType Scan::getRowType() const { return pg.getRowType(); }
+RecordType Scan::getRowType() const { return pg->getRowType(); }

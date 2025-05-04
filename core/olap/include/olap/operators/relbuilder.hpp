@@ -113,7 +113,7 @@ class RelBuilder {
       const expressions::InputArgument&)>
       OptionalExpressionFactory;
 
-  RelBuilder scan(Plugin& pg) const;
+  RelBuilder scan(std::shared_ptr<Plugin> pg) const;
 
   /**
    * All (global) plans start with scans.
@@ -202,7 +202,7 @@ class RelBuilder {
     setOIDType(catalog, relName, pg->getOIDType());
     registerPlugin(relName, pg);
 
-    return scan(*pg);
+    return scan(pg);
   }
 
   [[nodiscard]] RelBuilder update(

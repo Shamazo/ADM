@@ -133,7 +133,7 @@ RelBuilder RelBuilder::apply(std::shared_ptr<Operator> op) const {
   return {*this, registerOutput(std::move(op))};
 }
 
-RelBuilder RelBuilder::scan(Plugin &pg) const {
+RelBuilder RelBuilder::scan(std::shared_ptr<Plugin> pg) const {
   return RelBuilder{ctx, std::make_shared<Scan>(pg)};
 }
 
@@ -878,7 +878,7 @@ RelBuilder RelBuilder::scan(
   ii->oidType = new RecordType(pg->getRowType());
 
   Catalog::getInstance().registerPlugin(fileName, pg);
-  return scan(*pg);
+  return scan(pg);
 }
 
 RelBuilder RelBuilder::scan(
@@ -901,7 +901,7 @@ RelBuilder RelBuilder::scan(
   ii->oidType = new RecordType(pg->getRowType());
 
   Catalog::getInstance().registerPlugin(fileName, pg);
-  return scan(*pg);
+  return scan(pg);
 }
 
 RelBuilder RelBuilder::scan(std::string relName,
@@ -925,7 +925,7 @@ RelBuilder RelBuilder::scan(const RecordType &rec,
   }
 
   auto pg = createPlugin(rec, projs, pgType);
-  return scan(*pg);
+  return scan(pg);
 }
 
 RelBuilder RelBuilder::print(pg pgType, std::string outrel) const {

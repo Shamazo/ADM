@@ -1290,7 +1290,7 @@ RelBuilder PlanExecutor::parseOperator(const rapidjson::Value &val) {
     assert(val[keyPg].IsObject());
     std::shared_ptr<Plugin> pg = this->parsePlugin(val[keyPg]);
 
-    return factory.getBuilder().scan(*pg);
+    return factory.getBuilder().scan(pg);
   } else if (strcmp(opName, "values") == 0) {
     assert(val.HasMember("values"));
     assert(val["values"].IsArray());
