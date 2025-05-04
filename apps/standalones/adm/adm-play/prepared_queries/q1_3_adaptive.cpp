@@ -92,7 +92,7 @@ static RelBuilder add_pushdown_path(
       .pack();
 }
 
-PreparedStatement prepare13_adaptive(SSBArgs args) {
+PreparedStatement prepare13_adaptive(QueryArgs args) {
   args.morph->setQueryName(query);
   auto &topo = topology::getInstance();
   const auto compute_dop =

@@ -124,7 +124,7 @@ PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
 PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph,
                                      bool move_after_pushdown = false);
 
-struct SSBArgs {
+struct QueryArgs {
   std::shared_ptr<proteus::CPUOnlyNVMeMorsel> morph = nullptr;
   DegreeOfParallelism pushdown_dop = DegreeOfParallelism{4};
   int scan_slack = 24;
@@ -155,18 +155,56 @@ struct SSBArgs {
   }
 };
 
-PreparedStatement prepare11_adaptive(SSBArgs);
-PreparedStatement prepare12_adaptive(SSBArgs);
-PreparedStatement prepare13_adaptive(SSBArgs);
-PreparedStatement prepare21_adaptive(SSBArgs);
-PreparedStatement prepare22_adaptive(SSBArgs);
-PreparedStatement prepare23_adaptive(SSBArgs);
-PreparedStatement prepare31_adaptive(SSBArgs);
-PreparedStatement prepare32_adaptive(SSBArgs);
-PreparedStatement prepare33_adaptive(SSBArgs);
-PreparedStatement prepare34_adaptive(SSBArgs);
-PreparedStatement prepare41_adaptive(SSBArgs);
-PreparedStatement prepare42_adaptive(SSBArgs);
-PreparedStatement prepare43_adaptive(SSBArgs);
+PreparedStatement prepare11_adaptive(QueryArgs);
+PreparedStatement prepare12_adaptive(QueryArgs);
+PreparedStatement prepare13_adaptive(QueryArgs);
+PreparedStatement prepare21_adaptive(QueryArgs);
+PreparedStatement prepare22_adaptive(QueryArgs);
+PreparedStatement prepare23_adaptive(QueryArgs);
+PreparedStatement prepare31_adaptive(QueryArgs);
+PreparedStatement prepare32_adaptive(QueryArgs);
+PreparedStatement prepare33_adaptive(QueryArgs);
+PreparedStatement prepare34_adaptive(QueryArgs);
+PreparedStatement prepare41_adaptive(QueryArgs);
+PreparedStatement prepare42_adaptive(QueryArgs);
+PreparedStatement prepare43_adaptive(QueryArgs);
+
+PreparedStatement prepare_taxi_1_adaptive(QueryArgs &, double trip_distance_min,
+                                          double trip_distance_max);
+inline PreparedStatement prepare_taxi_11_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q11");
+  return prepare_taxi_1_adaptive(args, 0.0, 0.04);
+}
+inline PreparedStatement prepare_taxi_12_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q12");
+  return prepare_taxi_1_adaptive(args, 0.0, 0.29);
+}
+inline PreparedStatement prepare_taxi_13_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q13");
+  return prepare_taxi_1_adaptive(args, 0.0, 0.69);
+}
+inline PreparedStatement prepare_taxi_14_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q14");
+  return prepare_taxi_1_adaptive(args, 0.0, 1.74);
+}
+
+PreparedStatement prepare_taxi_2_adaptive(QueryArgs &, double fare_amount_min,
+                                          double fare_amount_max);
+inline PreparedStatement prepare_taxi_21_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q21");
+  return prepare_taxi_2_adaptive(args, 0.0, 2.5);
+}
+inline PreparedStatement prepare_taxi_22_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q22");
+  return prepare_taxi_2_adaptive(args, 0.0, 3.3);
+}
+inline PreparedStatement prepare_taxi_23_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q23");
+  return prepare_taxi_2_adaptive(args, 0.0, 5.0);
+}
+inline PreparedStatement prepare_taxi_24_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q24");
+  return prepare_taxi_2_adaptive(args, 0.0, 9.3);
+}
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

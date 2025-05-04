@@ -149,7 +149,7 @@ std::string bench_adaptive_micro(AdaptiveMicroArgs args) {
 }
 
 struct AdaptiveSSBArgs {
-  SSBArgs ssb_query_args;
+  QueryArgs ssb_query_args;
   int server_number;
   std::pair<std::function<decltype(scan_sum_micro)>, std::string>
       prep_query_function = {scan_sum_micro, "random_ints_scan_sum"};
@@ -211,7 +211,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
       continue;
     }
 //  for (uint64_t samples : {250, 300, 400, 500}) {
-    SSBArgs ssb_args = args.ssb_query_args;
+    QueryArgs ssb_args = args.ssb_query_args;
     ssb_args.morph = shaper;
     ssb_args.num_samples = samples;
     ssb_args.check();
@@ -263,7 +263,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
       continue;
     }
     //  for (uint64_t samples : {250, 300, 400, 500}) {
-    SSBArgs ssb_args = args.ssb_query_args;
+    QueryArgs ssb_args = args.ssb_query_args;
     ssb_args.morph = shaper;
     ssb_args.num_samples = samples;
     ssb_args.check();

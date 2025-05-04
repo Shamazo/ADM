@@ -70,6 +70,8 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
 std::vector<std::vector<std::string>> get_input_dirs_socket_one(
     int sf, int server_number);
 
+std::vector<std::vector<std::string>> get_taxi_input_dirs_socket_one(int server_number);
+
 std::vector<std::string> get_ran_ints_input_dirs_socket_zero_12_drives(
     int server_number);
 

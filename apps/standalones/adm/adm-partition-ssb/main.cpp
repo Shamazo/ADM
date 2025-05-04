@@ -30,11 +30,173 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <platform/threadpool/threadpool.hpp>
 #include <platform/topology/topology.hpp>
 #include <platform/util/glog.hpp>
 #include <span>
+#include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "rapidjson/document.h"
+#include "rapidjson/error/en.h"  // For better error messages
+
+/**
+ * @brief Parses a JSON string with a specific structure to extract attribute
+ * names and their types for all relations
+ *
+ * Assumes the JSON structure under the target key follows the pattern:
+ * {
+ * "relation1": {
+ * "type": {
+ * "inner": {
+ * "attributes": [
+ * { "attrName": "name1", "relName": "inputs/taxi/relation1.csv", "type": {
+ * "type": "type1" } }, { "attrName": "name2", "relName":
+ * "inputs/taxi/relation1.csv", "type": { "type": "type2" } },
+ * ...
+ * ]
+ * }
+ * }
+ * }
+ * }
+ * It extracts the mapping from "attrName" to the inner "type" string.
+ *
+ * @param json_string A C-style string containing the JSON document.
+ * @return std::unordered_map<std::string, std::string> Mapping attribute names
+ * to their types. Attribute names are prepended with the relName, stripping
+ * anything before the last '/'. e.g. in the above example relation1.csv.name1 :
+ * type1
+ */
+std::unordered_map<std::string, std::string> parseAttributeTypes(
+    const char* json_string) {
+  std::unordered_map<std::string, std::string> attribute_map;
+  rapidjson::Document document;
+
+  // 1. Parse the JSON string
+  rapidjson::ParseResult parseResult = document.Parse(json_string);
+  if (!parseResult) {
+    std::cerr << "JSON parse error: "
+              << rapidjson::GetParseError_En(parseResult.Code())
+              << " at offset " << parseResult.Offset() << std::endl;
+    return attribute_map;  // Return empty map on parse error
+  }
+
+  // 2. Validate root is an object
+  if (!document.IsObject()) {
+    LOG(FATAL) << "Error: JSON root is not an object." << std::endl;
+  }
+
+  // 4. iterate over relations, assume all are objects
+  for (auto const& [key, top_level_value] : document.GetObject()) {
+    // 5. Check each value is an object
+    if (!top_level_value.IsObject()) {
+      LOG(FATAL) << "Error: Value associated with key '" << key.GetString()
+                 << "' is not an object." << std::endl;
+    }
+
+    // --- Start navigating the structure under the target key ---
+
+    // 6. Access the nested "type" object
+    if (!top_level_value.HasMember("type") ||
+        !top_level_value["type"].IsObject()) {
+      LOG(FATAL) << "Error: Key '" << key.GetString()
+                 << "' does not contain a valid 'type' object." << std::endl;
+    }
+    const rapidjson::Value& type_object = top_level_value["type"];
+
+    // 7. Access the nested "inner" object
+    if (!type_object.HasMember("inner") || !type_object["inner"].IsObject()) {
+      LOG(FATAL) << "Error: Key '" << key.GetString()
+                 << "' does not contain a valid 'type.inner' object."
+                 << std::endl;
+    }
+    const rapidjson::Value& inner_object = type_object["inner"];
+
+    // 8. Access the "attributes" array
+    if (!inner_object.HasMember("attributes") ||
+        !inner_object["attributes"].IsArray()) {
+      LOG(FATAL) << "Error: Key '" << key.GetString()
+                 << "' does not contain a valid 'type.inner.attributes' array."
+                 << std::endl;
+    }
+    const rapidjson::Value& attributes_array = inner_object["attributes"];
+
+    // 9. Iterate through the attribute objects in the array
+    for (const auto& attribute_obj : attributes_array.GetArray()) {
+      if (!attribute_obj.IsObject()) {
+        LOG(FATAL) << "Warning: Found non-object element within 'attributes' "
+                      "array for key '"
+                   << key.GetString() << "'." << std::endl;
+      }
+
+      // 10. Extract "attrName" and "relName"
+      std::string attr_name;
+      if (attribute_obj.HasMember("attrName") &&
+          attribute_obj["attrName"].IsString()) {
+        attr_name = attribute_obj["attrName"].GetString();
+      } else {
+        LOG(FATAL) << "Warning: Found attribute object without a valid string "
+                      "'attrName' under key '"
+                   << key.GetString() << "'." << std::endl;
+      }
+
+      std::string rel_name;
+      if (attribute_obj.HasMember("relName") &&
+          attribute_obj["relName"].IsString()) {
+        std::string full_rel_name = attribute_obj["relName"].GetString();
+        size_t last_slash_pos = full_rel_name.find_last_of('/');
+        if (last_slash_pos != std::string::npos) {
+          rel_name = full_rel_name.substr(last_slash_pos + 1);
+        }
+
+      } else {
+        LOG(FATAL) << "Warning: Found attribute object without a valid string "
+                      "'relName' under key '"
+                   << key.GetString() << "'." << std::endl;
+      }
+
+      // 11. Extract the inner "type" string
+      std::string inner_type_str;
+      if (attribute_obj.HasMember("type") && attribute_obj["type"].IsObject()) {
+        const rapidjson::Value& attr_type_obj = attribute_obj["type"];
+        if (attr_type_obj.HasMember("type") &&
+            attr_type_obj["type"].IsString()) {
+          inner_type_str = attr_type_obj["type"].GetString();
+        }
+      }
+
+      if (inner_type_str.empty()) {
+        LOG(FATAL)
+            << "Warning: Could not find inner type string for attribute '"
+            << attr_name << "' under key '" << key.GetString() << "'."
+            << std::endl;
+      }
+
+      // 12. Add to the map
+      attribute_map[rel_name + "." + attr_name] = inner_type_str;
+    }
+  }
+
+  return attribute_map;
+}
+
+size_t toProteusTypeSize(const std::string& proteus_type) {
+  if (proteus_type == "float") {
+    return 8;
+  } else if (proteus_type == "dstring") {
+    return 4;
+  } else if (proteus_type == "int") {
+    return 4;
+  } else if (proteus_type == "int64") {
+    return 4;
+  } else if (proteus_type == "datetime") {
+    return 8;
+  } else {
+    LOG(FATAL) << "unknown or unimplemented type: " << proteus_type;
+  }
+}
 
 namespace fs = std::filesystem;
 [[nodiscard]] int decompress_block(const std::vector<uint32_t>& chunk_sizes,
@@ -78,10 +240,16 @@ DEFINE_string(output_directories, "",
 // 512 is sufficient of IO_DIRECT
 static constexpr size_t kAlignment = 4 * 1024;
 
-std::vector<std::vector<char>> splitFileIntoBlocks(const fs::path& filePath,
+std::vector<std::vector<char>> splitFileIntoBlocks(fs::path filePath,
                                                    const size_t blockSize) {
+  CHECK_GT(blockSize, 0) << "block size must be greater than 0. blockSize: "
+                         << blockSize;
+  LOG(INFO) << "Splitting file: " << filePath.string()
+            << " into blocks of size: " << blockSize;
   std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+  PCHECK(file.is_open()) << "Failed to open file: " << filePath.string();
   std::streamsize fileSize = file.tellg();
+  CHECK_GE(fileSize, 0) << "error getting file size for " << filePath.string();
   file.seekg(0, std::ios::beg);
 
   std::vector<std::vector<char>> blocks;
@@ -90,16 +258,18 @@ std::vector<std::vector<char>> splitFileIntoBlocks(const fs::path& filePath,
   while (fileSize > blockSize) {
     std::vector<char> block(blockSize);
     if (!file.read(block.data(), blockSize)) {
-      LOG(FATAL) << "Failed to read block from file";
+      LOG(FATAL) << "Failed to read block from file: " << filePath.string()
+                 << ". blockSize: " << blockSize << " fileSize: " << fileSize;
     }
     blocks.push_back(std::move(block));
     fileSize -= blockSize;
   }
 
   if (fileSize > 0) {
-    CHECK_EQ(fileSize % 4, 0)
-        << "sub block size remainder is not a multiple of 4 bytes: " << fileSize
-        << "for file: " << filePath;
+    // CHECK_EQ(fileSize % 4, 0)
+    //     << "sub block size remainder is not a multiple of 4 bytes: " <<
+    //     fileSize
+    //     << "for file: " << filePath;
     std::vector<char> block(fileSize);
     if (file.read(block.data(), fileSize)) {
       blocks.push_back(std::move(block));
@@ -128,7 +298,7 @@ std::vector<std::vector<char>> splitFileIntoBlocks(const fs::path& filePath,
 void writeUncompressedChunksToFiles(
     const std::vector<std::vector<char>>& blocks,
     const std::vector<fs::path> output_directories,
-    const std::string& base_file_Name) {
+    const std::string& base_file_Name, size_t type_size) {
   // ceiling division
   const int numFiles = output_directories.size();
   const int blocksPerFile = (blocks.size() + numFiles - 1) / numFiles;
@@ -164,10 +334,11 @@ void writeUncompressedChunksToFiles(
       metadata["num_blocks"] = j + 1;
       block_sizes.PushBack(rapidjson::Value().SetUint(block.size()), allocator);
       block_offsets.PushBack(rapidjson::Value().SetUint64(offset), allocator);
-      // FIXME non 4 byte types
-      CHECK_EQ(block.size() % 4, 0) << "fixme only 4 byte types";
-      value_counts.PushBack(rapidjson::Value().SetUint(block.size() / 4),
-                            allocator);
+      CHECK_EQ(block.size() % type_size, 0)
+          << "block size is not a multiple of " << type_size
+          << " bytes: " << block.size();
+      value_counts.PushBack(
+          rapidjson::Value().SetUint(block.size() / type_size), allocator);
 
       // write padding to align to 4096
       if (block.size() % kAlignment != 0) {
@@ -478,22 +649,51 @@ int main(int argc, char* argv[]) {
   topology::init();
   auto& topo = topology::getInstance();
 
-  std::vector<fs::path> data_file_paths;
+  std::vector<std::pair<fs::path, size_t>> data_file_paths;
+  std::unordered_map<std::string, std::string> attribute_map;
+  for (const auto& entry : fs::directory_iterator(input_dir_path)) {
+    if (entry.path().string().find("catalog") != std::string::npos) {
+      LOG(INFO) << "found the catalog " << entry.path();
+      std::ifstream file_stream(entry.path());
+      if (!file_stream.is_open()) {
+        LOG(FATAL) << "Error: Could not open file: " << entry;
+      }
+      std::stringstream buffer;
+      buffer << file_stream.rdbuf();
+      std::string file_content = buffer.str();
+      if (file_content.empty()) {
+        LOG(FATAL) << "Error: File is empty or could not be read: " << entry;
+      }
+      attribute_map = parseAttributeTypes(file_content.c_str());
+    }
+  }
+  size_t maxDataTypeSize = 0;
   for (const auto& entry : fs::directory_iterator(input_dir_path)) {
     if (entry.is_regular_file() &&
         entry.path().string().find("dict") == std::string::npos &&
         entry.path().string().find("catalog") == std::string::npos) {
-      data_file_paths.push_back(entry.path());
+      size_t data_type_size =
+          toProteusTypeSize(attribute_map[entry.path().filename().string()]);
+      data_file_paths.push_back({entry.path(), data_type_size});
+      maxDataTypeSize = std::max(maxDataTypeSize, data_type_size);
     }
   }
-  constexpr size_t kBlockSize = 2 * 1024 * 1024;  // 2MiB
-  constexpr size_t kChunkSize = 16 * 1024;        // 16 KiB
+  CHECK_GT(maxDataTypeSize, 0) << "max data type size cannot be 0!";
+  constexpr size_t kMaxBlockSize = 2 * 1024 * 1024;  // 2MiB for 4 byte types
+  constexpr size_t kChunkSize = 16 * 1024;           // 16 KiB
 
   if (FLAGS_compress_data == true) {
     ThreadPool pool(topo.getCoreCount());
-    for (const auto& data_file_path : data_file_paths) {
-      LOG(INFO) << "Splitting file: " << data_file_path;
-      auto blocks = splitFileIntoBlocks(data_file_path, kBlockSize);
+    for (const auto& [data_file_path, data_type_size] : data_file_paths) {
+      CHECK_EQ(maxDataTypeSize % data_type_size, 0);
+      CHECK_GT(data_type_size, 0)
+          << "data type size must be greater than 0. data_file_path "
+          << data_file_path;
+      const int block_size = kMaxBlockSize / (maxDataTypeSize / data_type_size);
+      LOG(INFO) << "Splitting file: " << data_file_path
+                << " with data type size " << data_type_size
+                << " using block size " << block_size;
+      auto blocks = splitFileIntoBlocks(data_file_path, block_size);
       auto compressed_blocks = compressBlocks(pool, blocks, kChunkSize);
       CHECK_EQ(blocks.size(), compressed_blocks.size());
       writeCompressedBlocksToFiles(compressed_blocks, output_directories,
@@ -507,15 +707,28 @@ int main(int argc, char* argv[]) {
       }
     }
   } else {
-    ThreadPool pool(4);
+    ThreadPool pool(true);
     std::vector<std::future<void>> split_column_futures;
     split_column_futures.reserve(data_file_paths.size());
-    for (const auto& data_file_path : data_file_paths) {
-      split_column_futures.emplace_back(pool.enqueue([&]() {
-        LOG(INFO) << "Splitting file: " << data_file_path;
-        auto blocks = splitFileIntoBlocks(data_file_path, kBlockSize);
+    for (const auto& path_size_pair : data_file_paths) {
+      const fs::path data_file_path = path_size_pair.first;
+      const size_t data_type_size = path_size_pair.second;
+      CHECK_EQ(maxDataTypeSize % data_type_size, 0);
+      split_column_futures.emplace_back(pool.enqueue([=]() {
+        CHECK_EQ(maxDataTypeSize % data_type_size, 0);
+        CHECK_GT(data_type_size, 0)
+            << "data type size must be greater than 0. data_file_path "
+            << data_file_path;
+
+        const int block_size =
+            kMaxBlockSize / (maxDataTypeSize / data_type_size);
+        LOG(INFO) << "Splitting file: " << data_file_path
+                  << " with data type size " << data_type_size
+                  << " using block size " << block_size;
+        auto blocks = splitFileIntoBlocks(data_file_path, block_size);
         writeUncompressedChunksToFiles(blocks, output_directories,
-                                       data_file_path.filename().string());
+                                       data_file_path.filename().string(),
+                                       data_type_size);
         fs::path dict_path = data_file_path.string() + ".dict";
         if (fs::exists(dict_path)) {
           for (const auto& output_dir : output_directories) {
@@ -527,7 +740,7 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "waiting for futures to complete";
     CHECK_EQ(split_column_futures.size(), data_file_paths.size());
     for (int i = 0; i < data_file_paths.size(); i++) {
-      LOG(INFO) << "waiting for future " << data_file_paths[i];
+      LOG(INFO) << "waiting for future " << data_file_paths[i].first;
       split_column_futures[i].get();
     }
     LOG(INFO) << "done";

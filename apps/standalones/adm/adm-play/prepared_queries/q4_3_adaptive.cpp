@@ -30,7 +30,7 @@ constexpr auto query = "ssb100_Q4_3";
 
 constexpr int filter_id = 43;
 
-PreparedStatement prepare43_adaptive(SSBArgs args) {
+PreparedStatement prepare43_adaptive(QueryArgs args) {
   args.morph->setQueryName(query);
 
   auto &topo = topology::getInstance();

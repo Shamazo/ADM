@@ -560,6 +560,28 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_one(
   LOG(FATAL) << "not set up for this server: " << server_number;
 }
 
+std::vector<std::vector<std::string>> get_taxi_input_dirs_socket_one(int server_number) {
+  if (server_number == 49) {
+      std::vector<std::string> twelve_drives = {
+        "/nvme16/nicholso/data/taxi_0_12",   // node 4
+        "/nvme22/nicholso/data/taxi_1_12",   // node 5
+        "/nvme29/nicholso/data/taxi_2_12",   // node 6
+        "/nvme24/nicholso/data/taxi_3_12",   // node 7
+        "/nvme18/nicholso/data/taxi_4_12",   // node 4
+        "/nvme23/nicholso/data/taxi_5_12",   // node 5
+        "/nvme30/nicholso/data/taxi_6_12",   // node 6
+        "/nvme25/nicholso/data/taxi_7_12",   // node 7
+        "/nvme19/nicholso/data/taxi_8_12",   // node 4
+        "/nvme28/nicholso/data/taxi_9_12",   // node 6
+        "/nvme26/nicholso/data/taxi_10_12",  // node 7
+        "/nvme27/nicholso/data/taxi_11_12"   // node 7
+    };
+      check_vector_paths(twelve_drives);
+      return {twelve_drives};
+    }
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
 std::vector<std::vector<std::string>> get_input_dirs(int sf,
                                                      int server_number) {
   CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";

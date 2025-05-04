@@ -84,7 +84,7 @@ RelBuilder add_pushdown_path(SplitRelBuilder &split, size_t pushdown_dop,
       .pack();
 }
 
-PreparedStatement prepare11_adaptive(SSBArgs args) {
+PreparedStatement prepare11_adaptive(QueryArgs args) {
   args.morph->setQueryName(query);
   auto &topo = topology::getInstance();
   const auto compute_dop =

@@ -21,12 +21,14 @@
     DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
     RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-#ifndef PROTEUS_ADM_SSB_ADAPTIVE_BENCHMARKS_HPP
-#define PROTEUS_ADM_SSB_ADAPTIVE_BENCHMARKS_HPP
+
+#ifndef TAXI_BENCHMARKS_HPP
+#define TAXI_BENCHMARKS_HPP
 
 #include <magic_enum.hpp>
 #include <olap/plan/catalog-parser.hpp>
 #include <query-shaping/nvme-shapers.hpp>
+#include <taxi/query.hpp>
 
 #include "prepared_queries/prepared-queries.hpp"
 #include "util.hpp"
@@ -34,24 +36,18 @@
 std::vector<std::pair<decltype(&prepare11_adaptive), std::string>>
 grouter_ssb_queries() {
   return {
-      {prepare11_adaptive, "grouter_ssb_Q1.1"},
-      {prepare12_adaptive, "grouter_ssb_Q1.2"},
-      {prepare13_adaptive, "grouter_ssb_Q1.3"},
-      {prepare21_adaptive, "grouter_ssb_Q2.1"},
-      {prepare22_adaptive, "grouter_ssb_Q2.2"},
-      {prepare23_adaptive, "grouter_ssb_Q2.3"},
-      {prepare31_adaptive, "grouter_ssb_Q3.1"},
-      {prepare32_adaptive, "grouter_ssb_Q3.2"},
-      {prepare33_adaptive, "grouter_ssb_Q3.3"},
-      {prepare34_adaptive, "grouter_ssb_Q3.4"},
-      {prepare41_adaptive, "grouter_ssb_Q4.1"},
-      {prepare42_adaptive, "grouter_ssb_Q4.2"},
-      {prepare43_adaptive, "grouter_ssb_Q4.3"},
-  };
+    {prepare_taxi_11_adaptive, "taxi_Q1.1"},
+          {prepare_taxi_12_adaptive, "taxi_Q1.2"},
+          {prepare_taxi_13_adaptive, "taxi_Q1.3"},
+          {prepare_taxi_14_adaptive, "taxi_Q1.4"},
+          {prepare_taxi_21_adaptive, "taxi_Q2.1"},
+          {prepare_taxi_22_adaptive, "taxi_Q2.2"},
+          {prepare_taxi_23_adaptive, "taxi_Q2.3"},
+          {prepare_taxi_24_adaptive, "taxi_Q2.4"}};
 }
 
-struct SSBAdaptiveArgs {
-  QueryArgs ssb_query_args;
+struct TaxiAdaptiveArgs {
+  QueryArgs query_args;
   int server_number;
   std::pair<std::function<decltype(scan_sum_micro)>, std::string>
       prep_query_function = {scan_sum_micro, "random_ints_scan_sum"};
@@ -60,40 +56,23 @@ struct SSBAdaptiveArgs {
   /// should always be false for now, until compression support  is added in
   /// this function.
   bool compressed = false;
-  //  /// degree of parallelism for the pushed down operators
-  //  size_t pushdown_dop = 16;
-  //  int scan_slack = 24;
-  //  /// CPU NUMA Node IDs to affinitize the pushdown ops to.
-  //  std::vector<uint32_t> pushdown_numa_nodes =
-  //      get_default_pushdown_numa_nodes(server_number);
-  //  /// CPU NUMA Node IDs to affinitize the rest of the compute to. Only
-  //  /// applicable to shapers that use CPU (i.e.
-  //  CPUOnlyNvmeProbeFilterPushdown). std::vector<uint32_t> compute_numa_nodes
-  //  =
-  //      get_default_compute_numa_nodes(server_number);
-  //  GeneralizedRoutingPolicy policy =
-  //      GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL;
-  int scale_factor = 1000;
 
   std::string header() {
     return "server_number,shaper,compressed,pushdown_dop,scan_slack,bloom_"
-           "filter_size,policy,"
-           "scale_factor";
+           "filter_size,policy";
   }
 };
 
-std::ostream& operator<<(std::ostream& os, const SSBAdaptiveArgs& args) {
+std::ostream& operator<<(std::ostream& os, const TaxiAdaptiveArgs& args) {
   os << args.server_number << "," << magic_enum::enum_name(args.shaper_type)
      << "," << (args.compressed ? "true," : "false,")
-     << args.ssb_query_args.pushdown_dop << ","
-     << args.ssb_query_args.scan_slack << ","
-     << args.ssb_query_args.bloom_filter_size << ","
-     << magic_enum::enum_name(args.ssb_query_args.policy) << ","
-     << args.scale_factor;
+     << args.query_args.pushdown_dop << "," << args.query_args.scan_slack << ","
+     << args.query_args.bloom_filter_size << ","
+     << magic_enum::enum_name(args.query_args.policy);
   return os;
 }
 
-std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
+std::string bench_adaptive_taxi(TaxiAdaptiveArgs args) {
   std::stringstream result_string;
   result_string << "query,"
                 << "paths,"
@@ -105,10 +84,7 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
                 << "date," << args.header() << std::endl;
 
   CHECK(!args.compressed) << "todo";
-//  const auto all_md_dirs =
-//      get_input_dirs_socket_zero(args.scale_factor, args.server_number);
-  const auto all_md_dirs =
-      get_input_dirs_socket_one(args.scale_factor, args.server_number);
+  const auto all_md_dirs = get_taxi_input_dirs_socket_one(args.server_number);
 
   for (auto [query, query_name] : grouter_ssb_queries()) {
     for (const auto& md_dirs : all_md_dirs) {
@@ -119,16 +95,15 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
 
       // assuming all numa nodes have the same core count
       DegreeOfParallelism pushdown_dop_value =
-          DegreeOfParallelism{args.ssb_query_args.pushdown_dop};
+          DegreeOfParallelism{args.query_args.pushdown_dop};
 
       // Shaper is only used for the plan and to provide the SSB stats
       // no slacks or affinitizers are currently used from the shaper
       std::shared_ptr<proteus::CPUOnlyNVMeMorsel> shaper =
           std::make_shared<proteus::CPUOnlyNVMeMorsel>(
-              md_dirs, "inputs/ssbm100",
-              ssb::Query::getStats(args.scale_factor), true, 4, 24, 16);
+              md_dirs, "inputs/taxi", taxi::Query::getStats(), true, 4, 24, 16);
 
-      QueryArgs ssb_args = args.ssb_query_args;
+      QueryArgs ssb_args = args.query_args;
       ssb_args.morph = shaper;
       ssb_args.check();
 
@@ -156,17 +131,17 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
         result_string
             << bench_res.label << "," << paths << "," << md_dirs.size() << ","
             << query_time.count() << "," << std::boolalpha
-            << args.ssb_query_args.use_hyper_threads << ","
-            << (args.ssb_query_args.policy ==
+            << args.query_args.use_hyper_threads << ","
+            << (args.query_args.policy ==
                         GeneralizedRoutingPolicy::
                             DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.ssb_query_args.num_samples
+                    ? args.query_args.num_samples
                     : 0)
             << ","
-            << (args.ssb_query_args.policy ==
+            << (args.query_args.policy ==
                         GeneralizedRoutingPolicy::
                             DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.ssb_query_args.skip_first_samples
+                    ? args.query_args.skip_first_samples
                     : 0)
             << "," << get_current_date_str() << "," << args << std::endl;
       }
@@ -178,12 +153,4 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
   return result_string.str();
 }
 
-// std::string bench_ssb_adaptive(int sf, int server_number,
-//                                int num_iterations = 5,
-//                                bool compressed = false) {
-//   CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
-//   constexpr int num_sockets = 1;
-//   return bench_adaptive_ssb(sf, server_number, num_iterations, compressed);
-// }
-
-#endif  // PROTEUS_ADM_SSB_ADAPTIVE_BENCHMARKS_HPP
+#endif  // TAXI_BENCHMARKS_HPP

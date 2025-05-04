@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
     LOG(INFO) << "bench_vary_samples_ssb_q31";
     AdaptiveSSBArgs args = {
         .ssb_query_args =
-            SSBArgs{.do_staging = true,
+            QueryArgs{.do_staging = true,
                     .do_bloom_filter_build = true,
                     .do_bloom_filter_pushdown = true,
                     .do_filter_pushdown = true,

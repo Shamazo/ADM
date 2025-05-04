@@ -314,7 +314,7 @@ int main(int argc, char* argv[]) {
 
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
-             SSBArgs{.do_staging = true,
+             QueryArgs{.do_staging = true,
                      .do_bloom_filter_build = true,
                      .do_bloom_filter_pushdown = true,
                      .do_filter_pushdown = true,
@@ -346,7 +346,7 @@ int main(int argc, char* argv[]) {
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
-             SSBArgs{.do_staging = false,
+             QueryArgs{.do_staging = false,
                      .do_bloom_filter_build = false,
                      .do_bloom_filter_pushdown = false,
                      .do_filter_pushdown = false,
@@ -376,7 +376,7 @@ int main(int argc, char* argv[]) {
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
-             SSBArgs{.do_staging = false,
+             QueryArgs{.do_staging = false,
                      .do_bloom_filter_build = true,
                      .do_bloom_filter_pushdown = true,
                      .do_filter_pushdown = true,
@@ -406,7 +406,7 @@ int main(int argc, char* argv[]) {
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
-             SSBArgs{.do_staging = true,
+             QueryArgs{.do_staging = true,
                      .do_bloom_filter_build = false,
                      .do_bloom_filter_pushdown = false,
                      .do_filter_pushdown = false,
