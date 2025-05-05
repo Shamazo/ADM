@@ -55,7 +55,20 @@ HashJoinChained::HashJoinChained(std::vector<GpuMatExpr> build_mat_exprs,
       probe_keyexpr(std::move(probe_keyexpr)),
       hash_bits(hash_bits),
       maxBuildInputSize(maxBuildInputSize),
-      opLabel(std::move(opLabel)) {}
+      opLabel(std::move(opLabel)) {
+  // Initialize buildState with nullptr values - will be properly populated in
+  // open_build
+  std::vector<void *> empty_data_arrays;
+  auto *counter = new std::atomic<size_t>(0);
+  buildState = std::make_shared<HashJoinBuildState>(
+      nullptr, empty_data_arrays, counter, hash_bits, maxBuildInputSize);
+
+  // Store initial expressions and packet widths in buildState
+  // Note: packind values will be populated later in
+  // buildHashTableFormat/probeHashTableFormat
+  buildState->build_mat_exprs = this->build_mat_exprs;
+  buildState->build_packet_widths = this->build_packet_widths;
+}
 
 void HashJoinChained::produce_(OlapParallelContext *context) {
   context->pushPipeline();  // FIXME: find a better way to do this
@@ -108,10 +121,6 @@ void HashJoinChained::probeHashTableFormat(OlapParallelContext *context) {
   size_t i = 0;
 
   for (size_t p = 0; p < build_packet_widths.size(); ++p) {
-    // Type * t     =
-    // PointerType::get(IntegerType::getIntNTy(context->getLLVMContext(),
-    // build_packet_widths[p]), /* address space */ 1);
-
     size_t bindex = 0;
     size_t packind = 0;
 
@@ -148,17 +157,14 @@ void HashJoinChained::probeHashTableFormat(OlapParallelContext *context) {
 
     in_param_ids.push_back(context->appendStateVar(t_ptr));  //, true, true));
   }
-  assert(i == build_mat_exprs.size());
-
-  // build_mat_exprs.erase(build_mat_exprs.begin()); //erase dummy entry for
-  // next
-
-  // Type * t     = PointerType::get(((const PrimitiveType *)
-  // out_type)->getLLVMType(context->getLLVMContext()), /* address space */ 1);
-  // out_param_id = context->appendParameter(t    , true, false);
-
-  // Type * t_cnt = PointerType::get(int32_type, /* address space */ 1);
-  // cnt_param_id = context->appendParameter(t_cnt, true, false);
+  CHECK_EQ(i, build_mat_exprs.size());
+  
+  // Store the fully initialized build_mat_exprs in buildState for
+  // ProbeHashJoinChained to use
+  if (buildState) {
+    buildState->build_mat_exprs = build_mat_exprs;
+    buildState->build_packet_widths = build_packet_widths;
+  }
 }
 
 void HashJoinChained::buildHashTableFormat(OlapParallelContext *context) {
@@ -179,10 +185,6 @@ void HashJoinChained::buildHashTableFormat(OlapParallelContext *context) {
   size_t i = 0;
 
   for (size_t p = 0; p < build_packet_widths.size(); ++p) {
-    // Type * t     =
-    // PointerType::get(IntegerType::getIntNTy(context->getLLVMContext(),
-    // build_packet_widths[p]), /* address space */ 1);
-
     size_t bindex = 0;
     size_t packind = 0;
 
@@ -224,9 +226,6 @@ void HashJoinChained::buildHashTableFormat(OlapParallelContext *context) {
 
   build_mat_exprs.erase(build_mat_exprs.begin());  // erase dummy entry for next
 
-  // Type * t     = PointerType::get(((const PrimitiveType *)
-  // out_type)->getLLVMType(context->getLLVMContext()), /* address space */ 1);
-  // out_param_id = context->appendParameter(t    , true, false);
 
   Type *t_cnt = PointerType::getUnqual(int32_type);  //, /* address space */ 1);
   cnt_param_id = context->appendStateVar(t_cnt);     //, true, false);
@@ -568,14 +567,17 @@ void HashJoinChained::generate_probe(OlapParallelContext *context,
 }
 
 void HashJoinChained::open_build(Pipeline *pip) {
+  // build_complete may be true here if this operator is executed multiple times
+  if (buildState) {
+    buildState->build_complete.store(false);
+  }
+
   std::vector<void *> next_w_values;
 
   auto *head = (uint32_t *)MemoryManager::mallocPinned(
       sizeof(uint32_t) * (1 << hash_bits) + sizeof(int32_t));
   auto *cnt = (int32_t *)(head + (1 << hash_bits));
 
-  // cudaStream_t strm;
-  // gpu_run(cudaStreamCreateWithFlags(&strm, cudaStreamNonBlocking));
   memset(head, -1, sizeof(uint32_t) * (1 << hash_bits));
   memset(cnt, 0, sizeof(int32_t));
 
@@ -593,9 +595,23 @@ void HashJoinChained::open_build(Pipeline *pip) {
 
   next_w_values.emplace_back(head);
   confs[pip->getGroup()] = next_w_values;
-
-  // gpu_run(cudaStreamSynchronize(strm));
-  // gpu_run(cudaStreamDestroy(strm));
+  
+  // Update shared build state for potential probe-only operators
+  std::vector<void *> data_arrays(next_w_values.begin(),
+                                  next_w_values.end() - 1);
+  if (buildState) {
+    // Update the existing buildState with the real memory pointers
+    buildState->head_array = head;
+    buildState->data_arrays = data_arrays;
+    buildState->counter = reinterpret_cast<std::atomic<size_t> *>(cnt);
+  } else {
+    // This branch should not be reached since we initialize buildState in the
+    // constructor
+    LOG(WARNING) << "Build state was null in open_build, creating a new one";
+    buildState = std::make_shared<HashJoinBuildState>(
+        head, data_arrays, reinterpret_cast<std::atomic<size_t> *>(cnt),
+        hash_bits, maxBuildInputSize);
+  }
 }
 
 void HashJoinChained::open_probe(Pipeline *pip) {
@@ -620,6 +636,11 @@ void HashJoinChained::close_build(Pipeline *pip) {
       << h_cnt << " (capacity: " << maxBuildInputSize << ")";
   assert(((size_t)h_cnt) <= maxBuildInputSize &&
          "Build input sized exceeded given parameter");
+
+  // Signal that the build phase is complete so probe-only operators can proceed
+  if (buildState) {
+    buildState->build_complete.store(true);
+  }
 }
 
 void HashJoinChained::close_probe(Pipeline *pip) {

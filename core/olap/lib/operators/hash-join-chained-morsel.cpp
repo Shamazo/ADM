@@ -63,6 +63,12 @@ void HashJoinChainedMorsel::open_build(Pipeline *pip) {
   {
     std::lock_guard<std::mutex> lock(init_lock);
     if (workerCnt++ == 0) {
+      // build_complete may be true here if this operator is executed multiple
+      // times
+      if (buildState) {
+        buildState->build_complete.store(false);
+      }
+
       std::vector<void *> next_w_values;
 
       auto *head = (uint32_t *)MemoryManager::mallocPinned(
@@ -81,6 +87,21 @@ void HashJoinChainedMorsel::open_build(Pipeline *pip) {
 
       next_w_values.emplace_back(head);
       confs[0] = next_w_values;
+      std::vector<void *> data_arrays(next_w_values.begin(),
+                                      next_w_values.end() - 1);
+      if (buildState) {
+        buildState->head_array = head;
+        buildState->data_arrays = data_arrays;
+        buildState->counter = reinterpret_cast<std::atomic<size_t> *>(cnt);
+      } else {
+        // This branch should not be reached since we initialize buildState in
+        // the constructor
+        LOG(WARNING)
+            << "Build state was null in open_build, creating a new one";
+        buildState = std::make_shared<HashJoinBuildState>(
+            head, data_arrays, reinterpret_cast<std::atomic<size_t> *>(cnt),
+            hash_bits, maxBuildInputSize);
+      }
     }
   }
 
@@ -106,7 +127,12 @@ void HashJoinChainedMorsel::open_probe(Pipeline *pip) {
   }
 }
 
-void HashJoinChainedMorsel::close_build(Pipeline *pip) {}
+void HashJoinChainedMorsel::close_build(Pipeline *pip) {
+  // Signal that the build phase is complete so probe-only operators can proceed
+  if (buildState) {
+    buildState->build_complete.store(true);
+  }
+}
 
 void HashJoinChainedMorsel::close_probe(Pipeline *pip) {
   std::lock_guard<std::mutex> lock(init_lock);

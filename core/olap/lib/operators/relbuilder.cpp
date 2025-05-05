@@ -30,6 +30,7 @@
 #include <lib/operators/bloom-filter/bloom-filter-build.hpp>
 #include <lib/operators/bloom-filter/bloom-filter-probe.hpp>
 #include <lib/operators/bloom-filter/bloom-filter-repack.hpp>
+#include <lib/operators/probe-hash-join-chained.hpp>
 #include <lib/operators/router/generalized-router.hpp>
 #include <lib/plugins/vector/vector-plugin.hpp>
 #include <lib/util/flush-operator-tree.hpp>
@@ -56,6 +57,7 @@
 #include "lib/operators/router/router.hpp"
 #include "olap/plan/catalog-parser.hpp"
 #include "olap/util/parallel-context.hpp"
+#include "probe-hash-join-chained.hpp"
 #include "project.hpp"
 #include "reduce-opt.hpp"
 #include "scan.hpp"
@@ -714,6 +716,63 @@ RelBuilder RelBuilder::join(RelBuilder build, expression_t build_k,
 
   return join(build, std::move(build_k), std::move(probe_k),
               static_cast<int>(std::ceil(std::log2(expct))) + 1, bsize);
+}
+
+RelBuilder RelBuilder::probeJoin(const RelBuilder &buildSideJoin,
+                                 expression_t probe_k) const {
+  auto buildJoinOp = dynamic_cast<HashJoinChained *>(buildSideJoin.root.get());
+  if (!buildJoinOp) {
+    string error_msg(
+        "[probeJoin:] The provided buildSideJoin must have a HashJoinChained "
+        "operator as its root");
+    LOG(ERROR) << error_msg;
+    throw runtime_error(error_msg);
+  }
+
+  // Cast to shared_ptr<HashJoinChained> for the constructor
+  std::shared_ptr<HashJoinChained> buildJoin =
+      std::static_pointer_cast<HashJoinChained>(buildSideJoin.root);
+
+  // Verify that the buildJoin has a build state initialized
+  if (!buildJoin->getBuildState()) {
+    string error_msg(
+        "[probeJoin:] The provided HashJoinChained operator does not have an "
+        "initialized build state");
+    LOG(ERROR) << error_msg;
+    throw runtime_error(error_msg);
+  }
+
+  // Create probe materializer expressions and packet widths
+  auto &llvmContext = ctx->getLLVMContext();
+  std::vector<GpuMatExpr> probe_e;
+  std::vector<size_t> probe_w;
+
+  // Add slot for probe key (same format as in hash-join-chained.cpp)
+  probe_w.emplace_back(
+      32 +
+      ctx->getSizeOf(probe_k.getExpressionType()->getLLVMType(llvmContext)) *
+          8);
+
+  // Add probe side projections similar to what's done in the main join method
+  size_t ind = 1;
+  auto probe_arg = getOutputArg();
+  for (const auto &p : probe_arg.getProjections()) {
+    auto relName = probe_k.getRegisteredRelName();
+    auto e = probe_arg[p];
+
+    if (probe_k.isRegistered() &&
+        probe_k.getRegisteredAs() == e.getRegisteredAs())
+      continue;
+
+    probe_e.emplace_back(e, ind++, 0);
+    probe_w.emplace_back(
+        ctx->getSizeOf(e.getExpressionType()->getLLVMType(llvmContext)) * 8);
+  }
+
+  auto op = std::make_shared<ProbeHashJoinChained>(buildJoin, probe_e, probe_w,
+                                                   std::move(probe_k), root);
+
+  return apply(op);
 }
 
 RelBuilder RelBuilder::join(RelBuilder build, expression_t build_k,

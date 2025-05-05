@@ -42,6 +42,7 @@ set(olap_cxx
   lib/operators/hash-group-by-chained.cpp
   lib/operators/hash-join-chained.cpp
   lib/operators/hash-join-chained-morsel.cpp
+  lib/operators/probe-hash-join-chained.cpp
   lib/operators/hash-rearrange-buffered.cpp
   lib/operators/hash-rearrange.cpp
   lib/operators/join.cpp

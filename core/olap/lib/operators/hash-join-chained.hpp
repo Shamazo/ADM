@@ -25,11 +25,68 @@
 #ifndef HASH_JOIN_CHAINED_HPP_
 #define HASH_JOIN_CHAINED_HPP_
 
+#include <atomic>
+#include <memory>
 #include <unordered_map>
 
 #include "olap/operators/gpu/gpu-materializer-expr.hpp"
 #include "olap/util/parallel-context.hpp"
 #include "operators.hpp"
+
+/**
+ * @class HashJoinBuildState
+ *
+ * Shared state for hash join operations that need to be shared between
+ * different operators (e.g., HashJoinChained and ProbeHashJoinChained).
+ *
+ * This is used when multiple probe pipelines need to share the same build hash
+ * table. The class contains both runtime state (memory pointers, counters) and
+ * code generation state (materialization expressions with initialized packind
+ * values).
+ *
+ * This state is initially created by HashJoinChained with placeholder values,
+ * then fully populated during the build phase, and finally used by
+ * ProbeHashJoinChained instances to access the shared hash table.
+ */
+class HashJoinBuildState {
+ public:
+  HashJoinBuildState(uint32_t *head_array, std::vector<void *> data_arrays,
+                     std::atomic<size_t> *counter, int hash_bits,
+                     size_t max_build_size)
+      : head_array(head_array),
+        data_arrays(std::move(data_arrays)),
+        counter(counter),
+        hash_bits(hash_bits),
+        max_build_size(max_build_size),
+        build_complete(false),
+        ref_count(0) {}
+
+  ~HashJoinBuildState() {
+    // Memory is freed by the original HashJoinChained operator
+    // to avoid double-free issues
+  }
+
+  // State data
+  uint32_t *head_array;             // Hash table head pointers
+  std::vector<void *> data_arrays;  // Build record storage
+  std::atomic<size_t> *counter;     // Atomic counter for record allocation
+
+  // Configuration
+  int hash_bits;          // Number of hash bits used
+  size_t max_build_size;  // Maximum capacity of the build table
+
+  // Code generation state
+  std::vector<GpuMatExpr>
+      build_mat_exprs;  // Materialization expressions with initialized packind
+  std::vector<size_t> build_packet_widths;  // Width of each packet in bits
+
+  // Synchronization
+  std::atomic<bool> build_complete;  // Flag to indicate build phase completion
+  std::atomic<int> ref_count;        // Number of operators using this state
+};
+
+// Convenience typedef for shared pointers to HashJoinBuildState
+using HashJoinBuildStatePtr = std::shared_ptr<HashJoinBuildState>;
 
 class HashJoinChained : public BinaryOperator {
  public:
@@ -56,6 +113,11 @@ class HashJoinChained : public BinaryOperator {
   virtual void open_build(Pipeline *pip);
   virtual void close_probe(Pipeline *pip);
   virtual void close_build(Pipeline *pip);
+
+  // Get the shared build state for use by other probe operators
+  [[nodiscard]] HashJoinBuildStatePtr getBuildState() const {
+    return buildState;
+  }
 
   bool isFiltering() const override { return true; }
 
@@ -146,8 +208,14 @@ class HashJoinChained : public BinaryOperator {
 
   string opLabel;
 
+  // Shared build state
+  HashJoinBuildStatePtr buildState;
+
   // std::unordered_map<int32_t, std::vector<void *>> confs;
   std::vector<void *> confs[256];
+
+  // Make ProbeHashJoinChained a friend class to access protected members
+  friend class ProbeHashJoinChained;
 };
 
 #endif /* HASH_JOIN_CHAINED_HPP_ */

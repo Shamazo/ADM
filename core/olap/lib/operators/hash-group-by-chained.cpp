@@ -913,7 +913,7 @@ void HashGroupByChained::close(Pipeline *pip) {
   // cudaMemcpyDefault));
   int32_t h_cnt = *cnt_ptr;
 
-  LOG_IF(INFO, h_cnt < 0.5 * maxInputSize || h_cnt > maxInputSize)
+  LOG(INFO)
       << "Actual build input size: " << h_cnt << " (capacity: " << maxInputSize
       << ")";
 

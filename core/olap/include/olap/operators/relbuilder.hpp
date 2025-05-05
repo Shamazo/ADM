@@ -506,6 +506,28 @@ class RelBuilder {
                 probe_e(getOutputArg()), probe_w, hash_bits, maxBuildInputSize);
   }
 
+  /**
+   * Create a probe join that uses an existing build hash table.
+   *
+   * This allows reusing the hash table constructed by a previous
+   * HashJoinChained operator, avoiding the cost of rebuilding the hash table
+   * for multiple probe operations.
+   *
+   * @param     buildSideJoin  A RelBuilder that has a HashJoinChained operator
+   * at its root
+   * @param     probe_k        Probe key expression for the join
+   * @return    A new RelBuilder with a ProbeHashJoinChained operator at its
+   * root
+   */
+  template <typename Tpk>
+  [[nodiscard]] RelBuilder probeJoin(const RelBuilder& buildSideJoin,
+                                     Tpk probe_k) const {
+    return probeJoin(buildSideJoin, probe_k(getOutputArg()));
+  }
+
+  [[nodiscard]] RelBuilder probeJoin(const RelBuilder& buildSideJoin,
+                                     expression_t probe_k) const;
+
   [[nodiscard]] RelBuilder hintRowCount(double expectedRowCount) const;
 
   template <typename Tbk, typename Tpk>
