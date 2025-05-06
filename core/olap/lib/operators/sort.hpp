@@ -36,7 +36,7 @@ class Sort : public UnaryOperator {
        const std::vector<expression_t> &orderByFields,
        const std::vector<direction> &dirs);
 
-  ~Sort() override { LOG(INFO) << "Collapsing Sort operator"; }
+  ~Sort() override { DLOG(INFO) << "Collapsing Sort operator"; }
 
   void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,

@@ -35,7 +35,7 @@ class Project : public UnaryOperator {
  public:
   Project(std::vector<expression_t> outputExprs, string relName,
           std::shared_ptr<Operator> child, Context *context);
-  ~Project() override { LOG(INFO) << "Collapsing Project operator"; }
+  ~Project() override { DLOG(INFO) << "Collapsing Project operator"; }
   void produce_(OlapParallelContext *context) override;
   void consume(Context *const context,
                const OperatorState &childState) override;

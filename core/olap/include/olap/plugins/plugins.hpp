@@ -55,7 +55,7 @@ enum PluginType { PGCSV, PGJSON, PGBINARY };
  */
 class Plugin {
  public:
-  virtual ~Plugin() { LOG(INFO) << "[PLUGIN: ] Collapsing plug-in"; }
+  virtual ~Plugin() { DLOG(INFO) << "[PLUGIN: ] Collapsing plug-in"; }
   Plugin() : id(uuids::uuid_system_generator{}()) {}
   uuids::uuid getUUID() { return id; }
 

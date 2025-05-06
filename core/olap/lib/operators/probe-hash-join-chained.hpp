@@ -62,7 +62,7 @@ class ProbeHashJoinChained : public experimental::UnaryOperator {
                        std::shared_ptr<Operator> const probe_child,
                        string opLabel = "probe_hj_chained");
   ~ProbeHashJoinChained() override {
-    LOG(INFO) << "Collapsing ProbeHashJoinChained operator";
+    DLOG(INFO) << "Collapsing ProbeHashJoinChained operator";
 
     // Decrement reference count to the shared state
     if (buildState) {

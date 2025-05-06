@@ -597,7 +597,7 @@ class RelWithAttributes {
     std::vector<RecordAttribute *> recattrs;
     recattrs.reserve(attrs.size());
     for (const auto &x : attrs) {
-      LOG(INFO) << recattrs.size() << " " << ((std::string)r) << "."
+      DLOG(INFO) << recattrs.size() << " " << ((std::string)r) << "."
                 << x.getName() << *(x.getType());
       recattrs.emplace_back(new RecordAttribute(recattrs.size() + 1, r,
                                                 x.getName(), x.getType(),

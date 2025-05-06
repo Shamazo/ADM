@@ -100,7 +100,7 @@ class HashJoinChained : public BinaryOperator {
                   std::shared_ptr<Operator> const probe_child, int hash_bits,
                   size_t maxBuildInputSize, string opLabel = "hj_chained");
   ~HashJoinChained() override {
-    LOG(INFO) << "Collapsing HashJoinChained operator";
+    DLOG(INFO) << "Collapsing HashJoinChained operator";
   }
 
   void produce_(OlapParallelContext *context) override;

@@ -53,7 +53,7 @@ class UnionAll : public Router {
     remaining_producers = producers;
   }
 
-  ~UnionAll() override { LOG(INFO) << "Collapsing UnionAll operator"; }
+  ~UnionAll() override { DLOG(INFO) << "Collapsing UnionAll operator"; }
 
   void produce_(OlapParallelContext *context) override;
 
