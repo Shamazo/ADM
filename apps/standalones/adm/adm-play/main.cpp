@@ -303,11 +303,11 @@ int main(int argc, char* argv[]) {
     auto policy =
         magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
             .value();
-    uint64_t num_samples = 325;
-    uint32_t skip_first_samples = 200;
+    uint64_t num_samples = 150;
+    uint32_t skip_first_samples = 100;
     if (FLAGS_use_hyper_threads){
-        num_samples = 400;
-        skip_first_samples = 300;
+        num_samples = 200;
+        skip_first_samples = 150;
     }
 
 

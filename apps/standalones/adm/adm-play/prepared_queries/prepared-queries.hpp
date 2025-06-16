@@ -156,18 +156,31 @@ struct QueryArgs {
 };
 
 PreparedStatement prepare11_adaptive(QueryArgs);
+PreparedStatement prepare11_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare12_adaptive(QueryArgs);
+PreparedStatement prepare12_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare13_adaptive(QueryArgs);
+PreparedStatement prepare13_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare21_adaptive(QueryArgs);
+PreparedStatement prepare21_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare22_adaptive(QueryArgs);
+PreparedStatement prepare22_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare23_adaptive(QueryArgs);
+PreparedStatement prepare23_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare31_adaptive(QueryArgs);
+PreparedStatement prepare31_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare32_adaptive(QueryArgs);
+PreparedStatement prepare32_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare33_adaptive(QueryArgs);
+PreparedStatement prepare33_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare34_adaptive(QueryArgs);
+PreparedStatement prepare34_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare41_adaptive(QueryArgs);
+PreparedStatement prepare41_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare42_adaptive(QueryArgs);
+PreparedStatement prepare42_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare43_adaptive(QueryArgs);
+PreparedStatement prepare43_adaptive_shared_ht(QueryArgs);
 
 PreparedStatement prepare_taxi_1_adaptive(QueryArgs &, double trip_distance_min,
                                           double trip_distance_max);

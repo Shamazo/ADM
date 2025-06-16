@@ -36,14 +36,14 @@ RelBuilder add_direct_path(SplitRelBuilder &split, size_t compute_dop,
           DeviceType::CPU, DegreeOfParallelism{16},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
       .memmove(4, DeviceType::CPU);
-//      .unpack()
-//      .filter([&](const auto &arg) -> expression_t {
-//        return expressions::hint(ge(arg["lo_discount"], 1) &
-//                                     le(arg["lo_discount"], 3) &
-//                                     lt(arg["lo_quantity"], 25),
-//                                 expressions::Selectivity(0.5 * 3.0 / 11));
-//      })
-//      .pack();
+  //      .unpack()
+  //      .filter([&](const auto &arg) -> expression_t {
+  //        return expressions::hint(ge(arg["lo_discount"], 1) &
+  //                                     le(arg["lo_discount"], 3) &
+  //                                     lt(arg["lo_quantity"], 25),
+  //                                 expressions::Selectivity(0.5 * 3.0 / 11));
+  //      })
+  //      .pack();
 }
 
 RelBuilder add_staging_path(SplitRelBuilder &split, size_t compute_dop,
@@ -54,15 +54,15 @@ RelBuilder add_staging_path(SplitRelBuilder &split, size_t compute_dop,
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(compute_numa_nodes))
       .memmove(4, DeviceType::CPU,
                std::vector<bool>{false, false, false, false});
-//      .unpack()
-//
-//      .pack();
+  //      .unpack()
+  //
+  //      .pack();
 }
 
 RelBuilder add_pushdown_path(SplitRelBuilder &split, size_t pushdown_dop,
                              const std::vector<uint32_t> &pushdown_numa_nodes,
                              bool do_bloomfilter, size_t bloom_filter_size) {
-  const size_t mm_slack = std::max(4ul, 32/pushdown_dop);
+  const size_t mm_slack = std::max(4ul, 32 / pushdown_dop);
   auto filter = split
                     .path(DeviceType::CPU, DegreeOfParallelism{pushdown_dop},
                           std::make_unique<SpecificCpuNumaNodeAffinitizer>(
@@ -136,6 +136,7 @@ PreparedStatement prepare11_adaptive(QueryArgs args) {
       args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
 
   std::vector<RelBuilder> paths;
+  const size_t mm_slack = 96 / compute_dop;
   if (args.do_direct) {
     paths.emplace_back(
         add_direct_path(probe_split, compute_dop, args.compute_numa_nodes));
@@ -185,6 +186,166 @@ PreparedStatement prepare11_adaptive(QueryArgs args) {
       .router(DegreeOfParallelism{1}, 64, RoutingPolicy::LOCAL, DeviceType::CPU,
               std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                   args.compute_numa_nodes))
+      .reduce(
+          [&](const auto &arg) -> std::vector<expression_t> {
+            return {arg["revenue"]};
+          },
+          {SUM})
+      .print(pg{"pm-csv"})
+      .prepare();
+}
+
+PreparedStatement prepare11_adaptive_shared_ht(QueryArgs args) {
+  args.morph->setQueryName(query);
+  auto &topo = topology::getInstance();
+  const auto compute_dop =
+      args.compute_numa_nodes.size() *
+      topo.getCpuNumaNodeById(args.compute_numa_nodes.at(0))
+          .local_cores.size() /
+      (args.use_hyper_threads ? 1 : 2);
+  auto scan_build_date_initial =
+      args.morph->scan("date", {"d_datekey", "d_year"});
+
+  auto scan_build_date_processed =
+      scan_build_date_initial
+          .router(
+              DegreeOfParallelism{args.do_bloom_filter_build ? 1 : compute_dop},
+              args.morph->getSlack(), RoutingPolicy::LOCAL, DeviceType::CPU,
+              std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                  args.compute_numa_nodes))
+          .memmove(4, DeviceType::CPU)
+          .unpack()
+          .filter([&](const auto &arg) -> expression_t {
+            return expressions::hint(eq(arg["d_year"], 1993),
+                                     expressions::Selectivity(1.0 / 7));
+          })
+          .project([&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["d_datekey"])};
+          });
+
+  if (args.do_bloom_filter_build) {
+    scan_build_date_processed =
+        scan_build_date_processed
+            .bloomfilter_build(
+                [&](const auto &arg) -> expression_t {
+                  return arg["d_datekey"];
+                },
+                args.bloom_filter_size, filter_id, args.pushdown_numa_nodes)
+            .pack()
+            .router(DegreeOfParallelism{compute_dop}, 4, RoutingPolicy::LOCAL,
+                    DeviceType::CPU,
+                    std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                        args.compute_numa_nodes))
+            .unpack();
+  }
+  auto scan_probe = args.morph->scan(
+      "lineorder",
+      {"lo_orderdate", "lo_quantity", "lo_extendedprice", "lo_discount"});
+
+  std::optional<RelBuilder> date_join;
+
+  auto common_lineorder_filter = [&](const auto &arg) -> expression_t {
+    return expressions::hint(ge(arg["lo_discount"], 1) &
+                                 le(arg["lo_discount"], 3) &
+                                 lt(arg["lo_quantity"], 25),
+                             expressions::Selectivity(0.5 * 3.0 / 11));
+  };
+
+  auto processPathJoinsAndReductions =
+      [&](RelBuilder path_probe_data_filtered_unpacked) -> RelBuilder {
+    if (date_join.has_value()) {
+      return path_probe_data_filtered_unpacked
+          .probeJoin(date_join.value(),
+                     [&](const auto &probe_arg) -> expression_t {
+                       return probe_arg["lo_orderdate"];
+                     })
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {(arg["lo_extendedprice"] * arg["lo_discount"])
+                            .as("tmp", "revenue")};
+              },
+              {SUM});
+    } else {
+      date_join = path_probe_data_filtered_unpacked.join(
+          scan_build_date_processed,
+          [&](const auto &build_arg) -> expression_t {
+            return build_arg["d_datekey"];
+          },
+          [&](const auto &probe_arg) -> expression_t {
+            return probe_arg["lo_orderdate"];
+          });
+      return date_join.value().reduce(
+          [&](const auto &arg) -> std::vector<expression_t> {
+            return {(arg["lo_extendedprice"] * arg["lo_discount"])
+                        .as("tmp", "revenue")};
+          },
+          {SUM});
+    }
+  };
+  auto probe_split = scan_probe.gsplit(
+      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
+
+  std::vector<RelBuilder> paths;
+
+  const size_t mm_slack = 96 / compute_dop;
+  if (args.do_direct) {
+    auto direct_unpacked_filtered =
+        probe_split
+            .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                      args.compute_numa_nodes))
+            .memmove(mm_slack, DeviceType::CPU)
+            .unpack()
+            .filter(common_lineorder_filter);
+    paths.emplace_back(processPathJoinsAndReductions(direct_unpacked_filtered));
+  }
+
+  if (args.do_staging) {
+    auto staging_unpacked_filtered =
+        probe_split
+            .path(DeviceType::CPU, DegreeOfParallelism{compute_dop},
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                      args.compute_numa_nodes))
+            .memmove(mm_slack, DeviceType::CPU,
+                     std::vector<bool>{false, false, false, false})
+            .unpack()
+            .filter(common_lineorder_filter);
+    paths.emplace_back(
+        processPathJoinsAndReductions(staging_unpacked_filtered));
+  }
+
+  if (args.do_filter_pushdown) {
+    const size_t pd_mm_slack = std::max(4ul, 32 / args.pushdown_dop);
+    auto pd_path =
+        probe_split
+            .path(DeviceType::CPU, DegreeOfParallelism{args.pushdown_dop},
+                  std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                      args.pushdown_numa_nodes))
+            .memmove(pd_mm_slack, DeviceType::CPU)
+            .unpack();
+    if (args.do_bloom_filter_pushdown) {
+      pd_path = pd_path.bloomfilter_probe(
+          [&](const auto &arg) -> expression_t { return arg["lo_orderdate"]; },
+          args.bloom_filter_size, filter_id);
+    }
+    auto pd_path_filtered =
+        pd_path.filter(common_lineorder_filter)
+            .pack()
+            .router(DegreeOfParallelism{compute_dop}, 2, RoutingPolicy::RANDOM,
+                    DeviceType::CPU,
+                    std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                        args.compute_numa_nodes))
+            .unpack();
+    paths.emplace_back(processPathJoinsAndReductions(pd_path_filtered));
+  }
+
+  CHECK_GT(paths.size(), 0) << "Cannot have a plan with with no paths";
+  auto first_path = paths.front();
+  return first_path
+      .unionAll({paths.begin() + 1, paths.end()}, DegreeOfParallelism{1},
+                std::make_unique<SpecificCpuNumaNodeAffinitizer>(
+                    args.compute_numa_nodes),
+                64)
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {arg["revenue"]};
