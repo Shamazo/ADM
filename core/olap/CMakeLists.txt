@@ -38,6 +38,8 @@ set(olap_cxx
   lib/operators/router/generalized-router.cpp
   lib/operators/router/router.cpp
   lib/operators/router/router-scaleout.cpp
+  lib/operators/router/policies/round-robin-policy.cpp
+  lib/operators/router/policies/locality-aware-policy.cpp
   lib/operators/agg-t.cpp
   lib/operators/hash-group-by-chained.cpp
   lib/operators/hash-join-chained.cpp

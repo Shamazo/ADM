@@ -31,6 +31,7 @@
 #include <olap/plugins/plugins.hpp>
 #include <olap/routing/affinitizers.hpp>
 #include <olap/routing/degree-of-parallelism.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <olap/routing/routing-policy-types.hpp>
 #include <olap/values/types.hpp>
 #include <platform/util/sort/sort-direction.hpp>
@@ -429,6 +430,10 @@ class RelBuilder {
       size_t slack, GeneralizedRoutingPolicy p,
       uint64_t throughput_sample_size = 350,
       uint32_t throughput_skip_samples = 250) const;
+
+  [[nodiscard]] SplitRelBuilder gsplit_v2(
+      size_t slack,
+      proteus::routing::GeneralizedRoutingPolicyV2 policy_v2) const;
 
   /**
    * Union the items from the current flow and the others

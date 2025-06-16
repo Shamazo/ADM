@@ -26,6 +26,7 @@
 #define PROTEUS_GENERALIZED_ROUTER_HPP
 
 #include <olap/routing/affinitizers.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <platform/memory/managed-pointer.hpp>
 #include <platform/threadpool/threadvector.hpp>
 #include <platform/util/datastructures/threadsafe-set.hpp>
@@ -33,16 +34,70 @@
 
 #include "lib/operators/operators.hpp"
 #include "lib/operators/router/routing-policy.hpp"
+#include "routing-policy-v2.hpp"
 
 namespace proteus {
 
+/**
+ * @brief Primary FFI entry point for V2 routing policies
+ *
+ * Called from JIT-generated code to route a single tuple through the C++
+ * policy system. This function encapsulates the complete routing pipeline:
+ * policy decision, buffer acquisition, data copy, and enqueue.
+ *
+ * @param router Pointer to the GeneralizedRouter instance managing this routing
+ * @param jit_routing_keys_payload Extracted routing keys (policy-specific
+ * format)
+ * @param jit_routing_keys_size Size of the keys payload in bytes
+ * @param jit_full_payload Complete tuple data to be routed
+ * @param full_payload_size Size of the full payload in bytes
+ * @param group_id Pipeline group identifier for tracing and debugging
+ *
+ * Routing Process:
+ * 1. Creates RoutingContext with keys, timestamp, and system state
+ * 2. Calls policy->getTargetChannel() for routing decision
+ * 3. Acquires buffer from appropriate free pool (policy-determined)
+ * 4. Copies payload data to buffer
+ * 5. Enqueues buffer to target consumer queue
+ * 6. Notifies policy of successful routing
+ *
+ */
+extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
+                                          const void *jit_routing_keys_payload,
+                                          size_t jit_routing_keys_size,
+                                          const void *jit_full_payload,
+                                          size_t full_payload_size,
+                                          int64_t group_id);
+
 class GeneralizedRouter;
 
+/**
+ * Blocking
+ */
 [[nodiscard]] void *acquireBufferGeneralized(int target, GeneralizedRouter *xch,
                                              int64_t groupId);
+/**
+ * non-blocking. Returns nullptr if no buffer is available.
+ */
 [[nodiscard]] void *try_acquireBufferGeneralized(int target,
                                                  GeneralizedRouter *xch,
                                                  int64_t groupId);
+
+/**
+ * @brief Release buffer to consumer's ready queue
+ *
+ * Enqueues a filled buffer to the specified consumer's ready queue,
+ * making it available for consumption. This completes the routing
+ * pipeline by delivering the tuple to its target consumer.
+ *
+ * @param target Target queue index (consumer-specific)
+ * @param xch GeneralizedRouter instance managing the queues
+ * @param buff Pointer to the filled buffer
+ *
+ * Buffer Lifecycle:
+ * After release, the buffer is owned by the consumer until it
+ * calls freeBufferGeneralized() to return it to the free pool.
+ */
 void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff);
 
 class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
@@ -83,8 +138,7 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
 
  protected:
   void produce_(OlapParallelContext *context) override;
-  virtual void spawnWorker(const void *session, size_t queue_offset,
-                           threadvector &firers,
+  virtual void spawnWorker(const void *session, threadvector &firers,
                            std::unordered_set<int> &allocated_pools);
   virtual void fire(int target_queue, int local_target, int source_free_pool,
                     PipelineGen *pipGen, const void *session,
@@ -143,15 +197,18 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   //          AsyncQueueMPMC<void *>>{1}};
   //  //  threadsafe_set<void *> *free_pool = nullptr;
 
-  const GeneralizedRoutingPolicy policy_type;
-  std::unique_ptr<routing::RoutingPolicy> routing;
   std::weak_ptr<GeneralizedRouter> self_ptr;
-  /// When using the throughput split policies, the number of rowgroups to test
-  /// each consumer with
-  const uint64_t sample_size;
-  /// When using the throughput split policies, skip the first
-  /// count_skip_samples rowgroups when evaluating throughput
-  const uint32_t count_skip_samples;
+
+  // V2 Policy System Members
+  proteus::routing::GeneralizedRoutingPolicyV2 policy_type_v2_;
+  std::unique_ptr<proteus::routing::RoutingPolicyV2> routing_policy_v2_;
+  // Policy state management
+  void *policy_state_ = nullptr;
+  size_t policy_state_size_ = 0;
+
+ public:
+  // Access for FFI if needed
+  void *getPolicyState() const { return policy_state_; }
 
  protected:
   struct ConstructorGuard {
@@ -163,13 +220,9 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
     std::shared_ptr<Operator> child;
     size_t slack;
     std::vector<RecordAttribute *> attrs;
-    GeneralizedRoutingPolicy policy_type;
-    /// When using the throughput split policies, the number of rowgroups to
-    /// test each consumer with
-    uint64_t sample_size = 350;
-    /// When using the throughput split policies, skip the first
-    /// count_skip_samples rowgroups when evaluating throughput
-    uint32_t count_skip_samples = 250;
+    // V2 Policy System
+    proteus::routing::GeneralizedRoutingPolicyV2 policy_type_v2 =
+        proteus::routing::GeneralizedRoutingPolicyV2::ROUND_ROBIN;
   };
 
   static std::shared_ptr<GeneralizedRouter> create(Args args) {
@@ -188,13 +241,16 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   explicit GeneralizedRouter([[maybe_unused]] ConstructorGuard guard, Args args)
       : experimental::UnaryOperator(std::move(args.child)),
         slack(args.slack),
-        producers(getChild()->getDOP()),
+        producers(0),  // Will be set in constructor body
         wantedFields(std::move(args.attrs)),
-        policy_type(args.policy_type),
+        policy_type_v2_(args.policy_type_v2),
         params_type(nullptr),
-        buf_size(0),
-        sample_size(args.sample_size),
-        count_skip_samples(args.count_skip_samples) {}
+        buf_size(0) {
+    producers = getChild()->getDOP();
+  }
+
+  // Custom destructor to handle incomplete type in unique_ptr
+  ~GeneralizedRouter() override;
 
   void consume(OlapParallelContext *context,
                const OperatorState &childState) override;
@@ -208,6 +264,38 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
   std::shared_ptr<GeneralizedRouterConsumer> appendConsumer(
       DeviceType target_device, DegreeOfParallelism dop,
       std::unique_ptr<Affinitizer> aff);
+
+  // V2 Policy System Helper Methods
+  proteus::routing::PolicyDataRequirements getRoutingDataRequirements() const;
+  size_t getRoutingKeysSize() const;
+  proteus::routing::RoutingPolicyV2 *get_policy() {
+    return routing_policy_v2_.get();
+  }
+  proteus::routing::GeneralizedRoutingPolicyV2 get_policy_type() const {
+    return policy_type_v2_;
+  }
+  int getFanoutDOP_for_policy() { return static_cast<int>(consumers.size()); }
+  size_t get_cpp_buf_size() { return buf_size; }
+  // Removed getTupleCount() - access through policy state now
+  size_t getQueueDepth(int channel) const {
+    if (channel >= 0 && channel < static_cast<int>(ready_fifo.size())) {
+      return ready_fifo.at(channel).size_unsafe();
+    }
+    return 0;
+  }
+
+  // Get variant-based policy configuration
+  proteus::routing::PolicyConfigVariant createPolicyConfig() const;
+
+ public:
+  // Make generateDynamicKeyExtraction accessible to policy classes
+  void generateDynamicKeyExtraction(OlapParallelContext *context,
+                                    const OperatorState &childState,
+                                    llvm::Value *&keys_ptr_out,
+                                    llvm::Value *&keys_size_out);
+
+  // Accessor methods for policy classes
+  size_t get_cpp_buf_size() const { return buf_size; }
 
  protected:
   void setSelfPtr(const std::shared_ptr<GeneralizedRouter> &self) {
@@ -259,12 +347,10 @@ class GeneralizedRouter final : public experimental::UnaryOperator {
 
   virtual llvm::Value *createTaskDescription(OlapParallelContext *context,
                                              const OperatorState &childState);
+public:
+  // TODO make route_and_enqueue_via_cpp a friend or a method
+ [[nodiscard]] virtual size_t getNumberOfQueues() const;
 
-  [[nodiscard]] virtual size_t getNumberOfQueues() const;
-
-  std::unique_ptr<routing::RoutingPolicy> getPolicy(
-      GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
-      const std::vector<RecordAttribute *> &wantedFields);
 
   friend class GeneralizedRouterConsumer;
 };

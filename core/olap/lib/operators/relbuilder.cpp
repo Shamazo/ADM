@@ -1068,6 +1068,13 @@ RelBuilder RelBuilder::split(size_t alternatives, size_t slack, RoutingPolicy p,
 SplitRelBuilder RelBuilder::gsplit(size_t slack, GeneralizedRoutingPolicy p,
                                    uint64_t throughput_sample_size,
                                    uint32_t throughput_skip_samples) const {
+  LOG(FATAL) << "Legacy gsplit() method is no longer supported. "
+             << "GeneralizedRouter has been migrated to V2-only policy system. "
+             << "Use gsplit_v2() with GeneralizedRoutingPolicyV2 enum instead.";
+}
+
+SplitRelBuilder RelBuilder::gsplit_v2(
+    size_t slack, proteus::routing::GeneralizedRoutingPolicyV2 policy_v2) const {
   return SplitRelBuilder{apply(proteus::GeneralizedRouter::create(
       {.child = root,
        .slack = slack,
@@ -1075,17 +1082,14 @@ SplitRelBuilder RelBuilder::gsplit(size_t slack, GeneralizedRoutingPolicy p,
            [&] {
              std::vector<RecordAttribute *> attrs;
              for (const auto &attr : getOutputArg().getProjections()) {
-               if (p == GeneralizedRoutingPolicy::SHARED_HASH_BASED &&
-                   attr.getAttrName() == "__broadcastTarget") {
-                 continue;
-               }
+               // For V2 policies, skip hash-specific attributes for now
+               // TODO: Add proper handling when HASH_BASED V2 policy is implemented
                attrs.emplace_back(new RecordAttribute{attr});
              }
              return attrs;
            }(),
-       .policy_type = p,
-       .sample_size = throughput_sample_size,
-       .count_skip_samples = throughput_skip_samples}))};
+       // Note: V2-only GeneralizedRouter only needs policy_type_v2
+       .policy_type_v2 = policy_v2}))};
 }
 
 RelBuilder RelBuilder::unionAll(const std::vector<RelBuilder> &children,

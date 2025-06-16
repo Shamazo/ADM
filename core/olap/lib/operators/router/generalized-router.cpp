@@ -24,19 +24,23 @@
 
 #include "generalized-router.hpp"
 
+#include <chrono>
 #include <codegen/jit/pipeline.hpp>
 #include <lib/expressions/expressions-generator.hpp>
 #include <lib/util/catalog.hpp>
+#include <magic_enum.hpp>
 #include <platform/network/infiniband/infiniband-manager.hpp>
-#include <platform/util/demangle.hpp>
 #include <platform/util/timing.hpp>
 
 #include "lib/operators/router/routing-policy.hpp"
 #include "router.hpp"
+#include "routing-policy-factory.hpp"
+#include "routing-policy-v2.hpp"
 
 namespace proteus {
 
 int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
+
 
 [[nodiscard]] void *acquireBufferGeneralized(int free_pool_idx,
                                              GeneralizedRouter *xch,
@@ -62,18 +66,135 @@ void releaseBufferGeneralized(int target, GeneralizedRouter *xch, void *buff) {
   xch->releaseBufferGeneralized(target, proteus::managed_ptr{buff});
 }
 
+/**
+ * FFI shim function for V2 routing policies.
+ * Called from JIT code to route tuples using C++ policy decisions.
+ */
+extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
+                                          const void *jit_routing_keys_payload,
+                                          size_t jit_routing_keys_size,
+                                          const void *jit_full_payload,
+                                          size_t full_payload_size,
+                                          int64_t group_id) {
+  // Get the V2 policy instance
+  auto *policy = router->get_policy();
+  DCHECK(policy) << "route_and_enqueue_via_cpp: No V2 policy found";
+
+  // Create routing context
+  routing::RoutingContext context{
+      .keys_payload = jit_routing_keys_payload,
+      .keys_payload_size = jit_routing_keys_size,
+      .current_timestamp = static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::system_clock::now().time_since_epoch())
+              .count()),
+      .tuple_count = 0,   // Policy will manage its own tuple counting
+      .queue_depths = {}  // TODO: Populate queue depths
+  };
+
+  // Get total consumer count
+  int num_consumers = router->getFanoutDOP_for_policy();
+  DCHECK_GT(num_consumers, 0)
+      << "route_and_enqueue_via_cpp: Invalid consumer count: " << num_consumers;
+
+  // Retry loop implementation
+  std::vector<int> failed_channels;
+  int retry_count = 0;
+  const int max_retries =
+      3;  // Maximum retry attempts before falling back to blocking
+
+  while (retry_count <= max_retries) {
+    // Make routing decision with current retry count
+    auto decision = policy->getTargetChannel(router, context, num_consumers,
+                                             retry_count, failed_channels);
+
+    // Validate channel - use total number of queues for validation
+    int total_queues = static_cast<int>(router->getNumberOfQueues());
+    DCHECK_GE(decision.target_channel, 0)
+        << "route_and_enqueue_via_cpp: Invalid target channel "
+        << decision.target_channel;
+    DCHECK_LT(decision.target_channel, total_queues)
+        << "route_and_enqueue_via_cpp: Target channel "
+        << decision.target_channel << " >= total_queues " << total_queues;
+
+    // Try to acquire buffer
+    void *buffer = nullptr;
+
+    if (decision.supports_retry && retry_count < max_retries) {
+      // Use non-blocking try_acquire for policies that support retry
+      buffer = try_acquireBufferGeneralized(decision.free_pool_index, router,
+                                            group_id);
+    } else {
+      // Use blocking acquire for policies without retry support or on final
+      // attempt
+      buffer =
+          acquireBufferGeneralized(decision.free_pool_index, router, group_id);
+    }
+
+    if (buffer) {
+      // Success - copy data to buffer
+      size_t buf_size = router->get_cpp_buf_size();
+      DCHECK_LE(full_payload_size, buf_size)
+          << "route_and_enqueue_via_cpp: Payload size " << full_payload_size
+          << " exceeds buffer size " << buf_size;
+
+      memcpy(buffer, jit_full_payload, full_payload_size);
+
+      // Release buffer to target channel
+      releaseBufferGeneralized(decision.target_channel, router, buffer);
+
+      // Notify policy of successful routing
+      policy->onTupleRouted(decision.target_channel, true);
+      return;
+    }
+
+    // Buffer acquisition failed
+    if (!decision.supports_retry) {
+      // Policy doesn't support retry - this should not happen as we used
+      // blocking acquire
+      LOG(FATAL) << "route_and_enqueue_via_cpp: Buffer acquisition failed for "
+                    "non-retry policy";
+    }
+
+    // Track failed channel and notify policy
+    failed_channels.push_back(decision.target_channel);
+    policy->onChannelBackPressure(decision.target_channel);
+
+    retry_count++;
+
+    // // Small delay to avoid busy spinning
+    // if (retry_count < max_retries) {
+    //   std::this_thread::sleep_for(std::chrono::microseconds(100));
+    // }
+  }
+
+  // Should not reach here - final blocking acquire should have succeeded
+  LOG(FATAL) << "route_and_enqueue_via_cpp: Failed to acquire buffer after all "
+                "retries";
+
+  // static std::atomic<uint64_t> call_counter{0};
+  // uint64_t current_call = call_counter.fetch_add(1,
+  // std::memory_order_relaxed); if (current_call % 100 == 0) {
+  //   LOG(INFO) << "route_and_enqueue_via_cpp: Successfully routed to channel "
+  //             << decision.target_channel;
+  // }
+}
+
 GeneralizedRouterConsumer::GeneralizedRouterConsumer(
     std::shared_ptr<GeneralizedRouter> producer, DegreeOfParallelism fanout,
     std::unique_ptr<Affinitizer> aff, DeviceType target_device,
     int consumer_index)
-    : experimental::UnaryOperator(producer),
+    : experimental::UnaryOperator(std::static_pointer_cast<Operator>(producer)),
       producer(producer.get()),
       fanout(fanout),
       aff(std::move(aff)),
       aff_policy(std::make_unique<AffinityPolicy>(this->aff->countAffCUs(),
                                                   this->aff.get())),
       target_device(target_device),
-      consumer_index(consumer_index) {}
+      consumer_index(consumer_index),
+      consumed_count(0) {}
+
+GeneralizedRouter::~GeneralizedRouter() = default;
 
 void GeneralizedRouterConsumer::produce_(OlapParallelContext *context) {
   consume(context, {*this, {}});
@@ -205,82 +326,8 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
   Builder->CreateBr(mainBB);
 
   Builder->SetInsertPoint(context->getEndingBlock());
-  // Builder->CreateRetVoid();
 }
 
-std::unique_ptr<routing::RoutingPolicy> GeneralizedRouter::getPolicy(
-    GeneralizedRoutingPolicy p, DegreeOfParallelism dop,
-    const std::vector<RecordAttribute *> &_wantedFields) {
-  switch (p) {
-      //    case RoutingPolicy::HASH_BASED: {
-      //      assert(hashExpr.has_value());
-      //      return std::make_unique<routing::HashBased>(fanout,
-      //      hashExpr.value());
-      //    }
-      //      //    case RoutingPolicy::LOCAL: {
-      //      //      return std::make_unique<routing::Local>(
-      //      //          fanout, wantedFields, new AffinityPolicy(fanout,
-      //      //          aff.get()));
-      //      //      //      return std::make_unique<routing::PreferLocal>(
-      //      //      //          fanout, wantedFields, new
-      //      AffinityPolicy(fanout,
-      //      //      aff.get()));
-      //      //    }
-      //      //    case RoutingPolicy::FORCE_LOCAL: {
-      //      //      return std::make_unique<routing::Local>(
-      //      //          fanout, wantedFields, new AffinityPolicy(fanout,
-      //      //          aff.get()));
-      //      //    }
-    case GeneralizedRoutingPolicy::SHARED_LOCAL:  // FIXME: add the flexible
-                                                  // version
-    case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
-      return std::make_unique<routing::Local>(
-          dop, _wantedFields,
-          new AffinityPolicy(dop, new CpuNumaNodeAffinitizer()));
-    }
-    case GeneralizedRoutingPolicy::SHARED_RANDOM: {
-      // TODO getPolicy isn't used for SHARED_RANDOM
-      return std::make_unique<routing::Random>(dop);
-    }
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL: {
-      std::vector<Affinitizer *> affs;
-      std::vector<DeviceType> device_types;
-      for (auto &consumer : consumers) {
-        auto c_ptr = consumer.lock();
-        affs.emplace_back(c_ptr->aff.get());
-        device_types.emplace_back(c_ptr->target_device);
-      }
-      return std::make_unique<routing::RandomSplitForceDataLocal>(
-          _wantedFields, affs, device_types);
-    }
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
-      std::vector<Affinitizer *> affs;
-      std::vector<DeviceType> device_types;
-      for (auto &consumer : consumers) {
-        auto c_ptr = consumer.lock();
-        affs.emplace_back(c_ptr->aff.get());
-        device_types.emplace_back(c_ptr->target_device);
-      }
-      return std::make_unique<routing::RandomSplitPreferDataLocal>(
-          _wantedFields, affs, device_types);
-    }
-    case GeneralizedRoutingPolicy::
-        DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL: {
-      std::vector<Affinitizer *> affs;
-      std::vector<DeviceType> device_types;
-      for (auto &consumer : consumers) {
-        auto c_ptr = consumer.lock();
-        affs.emplace_back(c_ptr->aff.get());
-        device_types.emplace_back(c_ptr->target_device);
-      }
-      return std::make_unique<routing::ThroughputSplitPreferDataLocal>(
-          _wantedFields, affs, device_types, sample_size, count_skip_samples);
-    }
-    default: {
-      CHECK(false) << "Unimplemented";  // FIXME: rest of the policies
-    }
-  }
-}
 
 void GeneralizedRouter::produceForConsumer(
     const GeneralizedRouterConsumer &cons, OlapParallelContext *context) {
@@ -304,25 +351,23 @@ void GeneralizedRouter::produce_(OlapParallelContext *context) {
    * into. So we construct the routing policy here to enable policies that wish
    * to use that the number of split pipelines.
    */
-  DCHECK_EQ(routing, nullptr);
-  routing = getPolicy(
-      policy_type,
-      DegreeOfParallelism{topology::getInstance().getCpuNumaNodes().size()},
-      wantedFields);
+  // Initialize V2 Policy System using variant-based configuration
+  auto config = createPolicyConfig();
+  routing_policy_v2_ =
+      routing::RoutingPolicyFactory::getInstance().createPolicy(policy_type_v2_,
+                                                                config);
 
-  routing::ThroughputSplitPreferDataLocal *stateful_policy =
-      dynamic_cast<routing::ThroughputSplitPreferDataLocal *>(routing.get());
+  DCHECK(routing_policy_v2_)
+      << "Failed to create V2 policy: " << static_cast<int>(policy_type_v2_);
 
-  if (stateful_policy != nullptr) {
-    stateful_policy->generateStateInit(context);
-  }
+  // LOG(INFO) << "GeneralizedRouter: Initialized V2 "
+  //           << magic_enum::enum_name(policy_type_v2_)
+  //           << " policy with " << consumers.size() << " consumers";
 
   groupVar = context->appendStateVar(
       llvm::IntegerType::getIntNTy(context->getLLVMContext(),
                                    sizeof(int64_t) * 8),
-      [=](llvm::Value *pip) {
-        return context->gen_call(proteus::getGroupId, {pip});
-      },
+      [=](llvm::Value *pip) { return context->gen_call(getGroupId, {pip}); },
       [=](llvm::Value *, llvm::Value *s) {});
 
   getChild()->produce(context);
@@ -410,9 +455,6 @@ llvm::Value *GeneralizedRouter::createTaskDescription(
       }
       if (have_tuple_count) {
         ProteusValueMemory mem_realTupleCntWrapper = childState[realTupleCnt];
-        //        context->log(Builder->CreateLoad(
-        //            mem_realTupleCntWrapper.mem->getType()->getPointerElementType(),
-        //            mem_realTupleCntWrapper.mem));
         params = Builder->CreateInsertValue(
             params,
             Builder->CreateLoad(
@@ -438,182 +480,19 @@ void GeneralizedRouter::consume(OlapParallelContext *context,
   for (auto &t : firers) t.get();
   firers.clear();
 
-  llvm::LLVMContext &llvmContext = context->getLLVMContext();
-  llvm::IRBuilder<> *Builder = context->getBuilder();
-
-  llvm::PointerType *charPtrType = llvm::Type::getInt8PtrTy(llvmContext);
   auto groupId = context->getStateVar(groupVar);
-
   auto params = createTaskDescription(context, childState);
 
-  llvm::Value *exchangePtr =
-      llvm::ConstantInt::get(llvmContext, llvm::APInt(64, ((uint64_t)this)));
-  llvm::Value *exchange = Builder->CreateIntToPtr(exchangePtr, charPtrType);
-
-  auto retry_cnt =
-      context->toMem(context->createInt32(0), context->createFalse());
-
-  llvm::Value *param_ptr;
-  llvm::Value *target;
-  llvm::Value *source_free_pool;
-  context
-      ->gen_do([&]() {
-        // FIXME: rest of policies
-        switch (policy_type) {
-          case GeneralizedRoutingPolicy::SHARED_RANDOM: {
-            DCHECK_EQ(getNumberOfQueues(), 1);
-            target = context->createInt32(0);
-            source_free_pool = context->createInt32(0);
-            param_ptr =
-                context->gen_call(proteus::acquireBufferGeneralized,
-                                  {source_free_pool, exchange, groupId});
-            break;
-          }
-          default: {
-            //        TODO: handle remote and local routing difference
-            //        For now commenting out remote to enable re-try for local
-            //        routing
-            //            auto srcServer = [&]() -> llvm::Value * {
-            //              try {
-            //                return Builder->CreateLoad(
-            //                    childState[{wantedFields[0]->getRelationName(),
-            //                    "srcServer",
-            //                                new Int64Type()}]
-            //                        .mem->getType()
-            //                        ->getPointerElementType(),
-            //                    childState[{wantedFields[0]->getRelationName(),
-            //                    "srcServer",
-            //                                new Int64Type()}]
-            //                        .mem);
-            //              } catch (const std::out_of_range &) {
-            //                return
-            //                context->createInt64(InfiniBandManager::server_id());
-            //              }
-            //            }();
-            //
-            //                        bool may_retry = false;
-            //
-            //            auto phi_type =
-            //                llvm::IntegerType::getInt32Ty(context->getLLVMContext());
-            //            llvm::BasicBlock *b1;
-            //            llvm::BasicBlock *b2;
-            //                        llvm::Value *p1;
-            //                        llvm::Value *p2;
-            //                        context
-            //                            ->gen_if({Builder->CreateICmpEQ(
-            //                                          srcServer,
-            //                                          context->createInt64(
-            //                                                         InfiniBandManager::server_id())),
-            //                                      context->createFalse()})([&]()
-            //                                      {
-            auto &x = *routing;
-            LOG(INFO) << demangle(typeid(x).name());
-            auto r = routing->evaluate(context, childState, retry_cnt);
-
-            r.target->setName("target");
-            target = Builder->CreateTruncOrBitCast(
-                r.target, llvm::Type::getInt32Ty(llvmContext));
-            source_free_pool = Builder->CreateTruncOrBitCast(
-                r.source_pool, llvm::Type::getInt32Ty(llvmContext));
-            //                  may_retry = r.may_retry;
-
-            //                  b1 = Builder->GetInsertBlock();
-            //                })
-            //                .gen_else([&]() {
-            //                  p2 = Builder->CreateURem(
-            //                      Builder->CreateTruncOrBitCast(
-            //                          context->gen_call(rand, {}),
-            //                          llvm::Type::getInt32Ty(llvmContext)),
-            //                      context->createInt32(
-            //                          topology::getInstance()
-            //                              .getCpuNumaNodeCount()));  // TODO
-            //                              assumes CPU
-            //                                                         // NUMA
-            //                                                         affinitization
-            //                                                         // only
-            //                                                         for now
-            //                  may_retry = false;
-            //
-            //                  b2 = Builder->GetInsertBlock();
-            //                });
-            //
-            //            auto phi = Builder->CreatePHI(phi_type, 2);
-            //            phi->addIncoming(p1, b1);
-            //            phi->addIncoming(p2, b2);
-            //            target = phi;
-
-            //            assert(!may_retry &&
-            //                   "Unimplemented, needs to take another path
-            //                   above due to the " "mismatch of the two
-            //                   may_retry paths");
-
-            // currently always retry, ignore the routing policy
-            param_ptr = context->gen_call(
-                proteus::try_acquireBufferGeneralized /* FIXME */,
-                {source_free_pool, exchange, groupId});
-
-            break;
-          }
-        }
-
-        Builder->CreateStore(
-            Builder->CreateAdd(
-                Builder->CreateLoad(
-                    retry_cnt.mem->getType()->getPointerElementType(),
-                    retry_cnt.mem),
-                context->createInt32(1)),
-            retry_cnt.mem);
-      })
-      .gen_while([&]() {
-        llvm::Value *null_ptr = llvm::ConstantPointerNull::get(
-            ((llvm::PointerType *)param_ptr->getType()));
-        llvm::Value *is_null = Builder->CreateICmpEQ(param_ptr, null_ptr);
-
-        return ProteusValue{is_null, context->createFalse()};
-      });
-
-  param_ptr = Builder->CreateBitCast(
-      param_ptr, llvm::PointerType::getUnqual(params->getType()));
-
-  Builder->CreateStore(params, param_ptr);
-
-  context->gen_call(
-      proteus::releaseBufferGeneralized,
-      {target, exchange, Builder->CreateBitCast(param_ptr, charPtrType)});
+  // V2 Policy System: Delegate LLVM code generation to the policy
+  CHECK(routing_policy_v2_) << "No routing policy configured";
+  routing_policy_v2_->generateConsumeLogic(context, childState, params, groupId,
+                                           this);
 }
 
 size_t GeneralizedRouter::getNumberOfQueues() const {
-  switch (policy_type) {
-    case GeneralizedRoutingPolicy::SHARED_LOCAL:  // FIMXE
-    case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL: {
-      auto &topo = topology::getInstance();
-      return topo.getCpuNumaNodeCount() + topo.getGpuCount();
-    }
-    case GeneralizedRoutingPolicy::SHARED_RANDOM: {
-      return 1;
-    }
-    case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
-      // Note: code path is not tested at the moment
-      size_t consumer_dop = consumers.front().lock()->getDOP();
-      for (const auto &cons : consumers) {
-        auto c_ptr = cons.lock();
-        CHECK_EQ(c_ptr->getDOP(), consumer_dop)
-            << "All consumers must have the "
-               "same DOP for SHARED_HASH_BASED";
-      }
-      return consumer_dop;
-    }
-    case GeneralizedRoutingPolicy::DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
-    case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
-      auto &topo = topology::getInstance();
-      return consumers.size() *
-             (topo.getCpuNumaNodeCount() + topo.getGpuCount());
-    }
-    default: {
-      LOG(FATAL) << "Unimplemented";
-    }
-  }
+  CHECK(routing_policy_v2_) << "No routing policy configured";
+  return routing_policy_v2_->getQueueConfiguration(consumers.size())
+      .total_queues;
 }
 
 DegreeOfParallelism GeneralizedRouter::getDOP() const {
@@ -639,17 +518,29 @@ void *GeneralizedRouter::allocate_buffers_for_free_pool(size_t free_pool_idx) {
 }
 
 void GeneralizedRouter::create_queues() {
-  const auto queueCnt = getNumberOfQueues();
+  CHECK(routing_policy_v2_) << "Cannot create queues without routing policy";
+
+  const auto config =
+      routing_policy_v2_->getQueueConfiguration(consumers.size());
+  const auto queueCnt = config.total_queues;
+
   if (free_pool.size() != queueCnt) {
     free_pool.clear();
     ready_fifo.clear();
-    for (size_t i = 0; i < queueCnt; ++i) {
-      // note, queues currently don't use numa affinity for memory allocation
-      // note, we may create more free_pools than necessary. This depends on the
-      // policy. but the distinct policies have distinct queues, but shared free
-      // pools per numa node
+
+    // Create queues and pools based on policy configuration
+    if (config.shared_free_pools) {
+      // Create minimal free pools (e.g., just pool 0 for round-robin)
       free_pool.emplace_back(1);
-      ready_fifo.emplace_back();
+      for (size_t i = 0; i < queueCnt; ++i) {
+        ready_fifo.emplace_back();
+      }
+    } else {
+      // Create pool per queue (e.g., locality-aware)
+      for (size_t i = 0; i < queueCnt; ++i) {
+        free_pool.emplace_back(1);
+        ready_fifo.emplace_back();
+      }
     }
   } else {
     for (auto &f2 : free_pool) f2.reset();
@@ -669,40 +560,29 @@ void GeneralizedRouter::open(Pipeline *pip) {
           m_id, pip->getGeneratorUUID()};
       create_queues();
     }
-    remaining_producers = producers;
-    auto &topo = topology::getInstance();
-    auto queue_offset = [policy = policy_type,
-                         num_numa_nodes =
-                             topo.getCpuNumaNodeCount() + topo.getGpuCount()](
-                            size_t consumer_index) -> size_t {
-      switch (policy) {
-        case GeneralizedRoutingPolicy::SHARED_LOCAL:
-        case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL:
-        case GeneralizedRoutingPolicy::SHARED_RANDOM:
-        case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
-          return 0;
-        }
-        case GeneralizedRoutingPolicy::
-            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
-        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
-        case GeneralizedRoutingPolicy::
-            DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
-          return consumer_index * num_numa_nodes;
-        }
-        default: {
-          LOG(FATAL) << "Unimplemented";
-        }
+
+    // Allocate and initialize policy state
+    if (routing_policy_v2_) {
+      policy_state_size_ = routing_policy_v2_->getStateSize();
+      if (policy_state_size_ > 0) {
+        // Allocate aligned memory for atomic operations
+        policy_state_ =
+            std::aligned_alloc(alignof(std::max_align_t), policy_state_size_);
+        CHECK(policy_state_) << "Failed to allocate policy state";
+
+        routing_policy_v2_->initializeState(policy_state_);
+        routing_policy_v2_->setState(policy_state_);
       }
-    };
-    size_t consumer_index = 0;
+    }
+    remaining_producers = producers;
+    DLOG(INFO) << "GeneralizedRouter initialized with " << producers
+               << " expected producers";
     std::unordered_set<int> allocated_pools{};
     for (auto &cons : consumers) {
       auto c_ptr = cons.lock();
       event_range<range_log_op::GROUTER_INIT_CONS> e{
           m_id, c_ptr->catch_pip->getUUID()};
-      c_ptr->spawnWorker(pip->getSession(), queue_offset(consumer_index),
-                         firers, allocated_pools);
-      consumer_index += 1;
+      c_ptr->spawnWorker(pip->getSession(), firers, allocated_pools);
     }
   }
 }
@@ -721,25 +601,29 @@ void GeneralizedRouter::close(Pipeline *pip) {
     }
 
     nvtxRangePushA("Exchange_waiting_to_close");
-    for (auto &thread : firers) thread.get();
+    for (auto &thread : firers) {
+      if (thread.valid()) {
+        thread.get();
+      }
+    }
     nvtxRangePop();
     firers.clear();
     for (auto &r : free_pool) r.close();
+    
+    // Clean up policy state
+    if (routing_policy_v2_ && policy_state_) {
+      routing_policy_v2_->cleanupState(policy_state_);
+      std::free(policy_state_);
+      policy_state_ = nullptr;
+      routing_policy_v2_->setState(nullptr);
+    }
   }
 }
 
 std::shared_ptr<GeneralizedRouterConsumer> GeneralizedRouter::appendConsumer(
     DeviceType target_device, DegreeOfParallelism dop,
     std::unique_ptr<Affinitizer> aff) {
-  if (dop < aff->countAffCUs()) {
-    if (policy_type == GeneralizedRoutingPolicy::SHARED_LOCAL ||
-        policy_type == GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL) {
-      LOG(WARNING) << "Degree of parallelism of this consumer is less than the "
-                      "number of available CUs in the affinitizer. This may "
-                      "lead to data being  routed to a queue which no workers "
-                      "are consuming from.";
-    }
-  }
+  // TODO: Add V2 policy-specific warnings when locality-aware policies are implemented
 
   auto new_consumer = std::make_shared<GeneralizedRouterConsumer>(
       getSelfPtr(), dop, std::move(aff), target_device, consumers.size());
@@ -868,155 +752,75 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
 }
 
 void GeneralizedRouterConsumer::spawnWorker(
-    const void *session, size_t queue_offset, threadvector &firers,
+    const void *session, threadvector &firers,
     std::unordered_set<int> &allocated_pools) {
-  /// local_targets holds the offsets for the target queues (i.e numa
-  /// nodes/gpus) ignoring which consumer this is which is then accounted for by
-  /// the queue_offset. When the target queues are shared between consumers
-  /// queue_offset will be 0. When the queues are distinct queue_offset will be
-  /// a multiple of the total number of CPU numa nodes + gpus in the system.
-  /// This is important for the case where a consumer may only run on a subset
-  /// of nodes/gpus
-  /// This has been updated to separately consider the source freepool and the
-  /// target queue. Now freepools are always shared between consumers.
-  const std::vector<int> local_targets =
-      [dop = getDOP(), routing_policy = producer->policy_type,
-       device_type = target_device,
-       affinitizer = aff.get()]() -> std::vector<int> {
-    if (routing_policy == GeneralizedRoutingPolicy::SHARED_RANDOM) {
-      return {0};
-    }
-    std::vector<int> temp_local_targets;
-    if (routing_policy == GeneralizedRoutingPolicy::SHARED_HASH_BASED) {
-      // note: not a tested code path
-      for (int i = 0; i < dop; ++i) {
-        temp_local_targets.emplace_back(i);
-      }
-      return temp_local_targets;
-    }
+  // Get policy from producer
+  auto *policy = producer->routing_policy_v2_.get();
+  CHECK(policy);
 
-    // This handles SHARED_LOCAL and DISTINCT_RANDOM_SPLIT_DATA_LOCAL as later
-    // we account for the difference with queue_offset
-    switch (device_type) {
-      case DeviceType::CPU: {
-        for (int i = 0; i < affinitizer->countAffCUs(); i++) {
-          const auto *node = dynamic_cast<const topology::cpunumanode *>(
-              &affinitizer->getAvailableCU(i));
-          CHECK_NE(node, nullptr)
-              << "Affinitizer for a consumer targeting DeviceType::CPU must "
-                 "affinitize to a topology::cpunumanode";
-          temp_local_targets.emplace_back(node->index_in_topo);
-        }
-        return temp_local_targets;
-      }
-      case DeviceType::GPU: {
-        const auto cpu_node_count =
-            topology::getInstance().getCpuNumaNodeCount();
-        for (int i = 0; i < affinitizer->countAffCUs(); i++) {
-          const auto *node = dynamic_cast<const topology::gpunode *>(
-              &affinitizer->getAvailableCU(i));
-          CHECK_NE(node, nullptr)
-              << "Affinitizer for a consumer targeting DeviceType::GPU must "
-                 "affinitize to a topology::cpunode";
-          temp_local_targets.emplace_back(node->index_in_topo + cpu_node_count);
-          CHECK_LE(temp_local_targets.back(),
-                   topology::getInstance().getGpuCount() + cpu_node_count);
-        }
-        return temp_local_targets;
-      }
-      default: {
-        LOG(FATAL) << "Unimplemented";
-      }
-    }
-  }();
+  // Get queue configuration from policy
+  size_t queue_offset = policy->getQueueOffsetForConsumer(consumer_index);
+  std::vector<int> local_targets =
+      policy->getLocalQueuesForConsumer(consumer_index, aff.get());
+
+  CHECK(!local_targets.empty())
+      << "Consumer " << consumer_index << " has no local targets";
 
   for (size_t i = 0; i < fanout; ++i) {
-    // The firers allocate buffers so that open can be parallelized
-    const bool alloc_buffers = [&]() -> bool {
-      switch (producer->policy_type) {
-        case GeneralizedRoutingPolicy::SHARED_RANDOM: {
-          return firers.empty();
-        }
-        case GeneralizedRoutingPolicy::SHARED_HASH_BASED: {
-          /// Untested code path
-          return firers.size() < fanout;
-        }
-        case GeneralizedRoutingPolicy::SHARED_FORCE_LOCAL:
-        case GeneralizedRoutingPolicy::SHARED_LOCAL: {
-          // this _may_ be a race condition
-          int potential_target = local_targets[i % local_targets.size()];
-          if (allocated_pools.find(potential_target) == allocated_pools.end()) {
-            allocated_pools.insert(potential_target);
-            return true;
-          } else {
-            return false;
-          }
-        }
-        case GeneralizedRoutingPolicy::
-            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL:
-        case GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_FORCE_DATA_LOCAL:
-        case GeneralizedRoutingPolicy::
-            DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL: {
-          int potential_target = local_targets[i % local_targets.size()];
-          if (allocated_pools.find(potential_target) == allocated_pools.end()) {
-            allocated_pools.insert(potential_target);
-            return true;
-          } else {
-            return false;
-          }
-        }
-        default:
-          return false;
-      }
-    }();
+    int local_target_idx = local_targets[i % local_targets.size()];
+    int target_queue = queue_offset + local_target_idx;
 
-    if (alloc_buffers) {
-      LOG(INFO) << "Will allcoate buffer for consumer " << consumer_index
-                << " target queue "
-                << queue_offset + local_targets[i % local_targets.size()]
-                << " source free pool "
-                << local_targets[i % local_targets.size()] << " i: " << i;
+    // Get the free pool for this queue from policy
+    int source_free_pool = policy->getFreepoolForQueue(target_queue);
+
+    // Determine if we should allocate buffers
+    bool alloc_buffers = false;
+    if (allocated_pools.find(source_free_pool) == allocated_pools.end()) {
+      allocated_pools.insert(source_free_pool);
+      alloc_buffers = true;
     }
 
-    firers.emplace_back(&GeneralizedRouterConsumer::fire, this,
-                        queue_offset + local_targets[i % local_targets.size()],
-                        i, local_targets[i % local_targets.size()], catch_pip,
-                        session, alloc_buffers);
+    // if (alloc_buffers) {
+    //   LOG(INFO) << "Will allocate buffer for consumer " << consumer_index
+    //             << " target queue " << target_queue
+    //             << " source free pool " << source_free_pool
+    //             << " i: " << i;
+    // }
+
+    firers.emplace_back(&GeneralizedRouterConsumer::fire, this, target_queue, i,
+                        source_free_pool, catch_pip, session, alloc_buffers);
   }
 }
 
 proteus::managed_ptr GeneralizedRouter::acquireBufferGeneralized(
     int free_pool_idx, bool polling, int64_t groupId) {
-  DCHECK_LT(free_pool_idx, free_pool.size());
-//  if (free_pool_idx < 4) {
-//    free_pool_idx += 4;
-//  }
-//  free_pool_idx = 0;
+  CHECK_GE(free_pool_idx, 0) << "Invalid negative free pool index";
+  CHECK_LT(free_pool_idx, free_pool.size())
+      << "Free pool index " << free_pool_idx << " out of range";
+
   if (free_pool.at(free_pool_idx).empty_unsafe() && polling) {
-    nvtxRangePop();
     return nullptr;
   }
   void *buff = nullptr;
-  DCHECK_LE(free_pool_idx, ready_fifo.size());
   auto x = free_pool.at(free_pool_idx).pop(buff);
-  DCHECK(x);
+  CHECK(x) << "Failed to acquire buffer from pool " << free_pool_idx;
 
   return proteus::managed_ptr{buff};
 }
 
 void GeneralizedRouter::releaseBufferGeneralized(int target,
                                                  proteus::managed_ptr buff) {
-  DCHECK_LE(target, ready_fifo.size()) << "invalid target fifo queue";
+  CHECK_GE(target, 0) << "Invalid negative target queue";
+  DCHECK_LT(target, ready_fifo.size())
+      << "Target queue " << target << " out of range";
   ready_fifo.at(target).push(buff.release());
 }
 
 void GeneralizedRouter::freeBufferGeneralized(int free_pool_idx,
                                               proteus::managed_ptr buff) {
-  DCHECK_LE(free_pool_idx, free_pool.size()) << "invalid target free pool";
-//  if (free_pool_idx < 4) {
-//    free_pool_idx += 4;
-//  }
-//  free_pool_idx = 0;
+  DCHECK_GE(free_pool_idx, 0) << "Invalid negative free pool index";
+  DCHECK_LT(free_pool_idx, free_pool.size())
+      << "Free pool index " << free_pool_idx << " out of range";
   free_pool.at(free_pool_idx).emplace(buff.release());
 }
 
@@ -1028,6 +832,151 @@ bool GeneralizedRouter::get_readyGeneralized(int target,
   bool r = ready_fifo.at(target).pop2(ptr);
   if (r) buff = proteus::managed_ptr{ptr};
   return r;
+}
+
+// V2 Policy System Helper Method Implementations
+
+routing::PolicyDataRequirements GeneralizedRouter::getRoutingDataRequirements() const {
+  if (routing_policy_v2_) {
+    return routing_policy_v2_->getDataRequirements();
+  }
+  // Return empty requirements for no policy
+  return {{}, 0};
+}
+
+size_t GeneralizedRouter::getRoutingKeysSize() const {
+  return getRoutingDataRequirements().total_size;
+}
+
+void GeneralizedRouter::generateDynamicKeyExtraction(
+    OlapParallelContext *context, const OperatorState &childState,
+    llvm::Value *&keys_ptr_out, llvm::Value *&keys_size_out) {
+  auto requirements = getRoutingDataRequirements();
+  llvm::LLVMContext &llvmContext = context->getLLVMContext();
+  llvm::IRBuilder<> *Builder = context->getBuilder();
+
+  if (requirements.total_size == 0) {
+    // Round-robin case - no keys needed
+    keys_ptr_out =
+        llvm::ConstantPointerNull::get(llvm::Type::getInt8PtrTy(llvmContext));
+    keys_size_out = context->createInt64(0);
+    return;
+  }
+
+  // Allocate space for keys
+  llvm::AllocaInst *keys_alloca = Builder->CreateAlloca(llvm::ArrayType::get(
+      llvm::Type::getInt8Ty(llvmContext), requirements.total_size));
+  keys_ptr_out = Builder->CreateBitCast(keys_alloca,
+                                        llvm::Type::getInt8PtrTy(llvmContext));
+  keys_size_out = context->createInt64(requirements.total_size);
+
+  // Extract each required field
+  for (const auto &field : requirements.required_keys) {
+    llvm::Value *value = nullptr;
+
+    switch (field.source) {
+      case routing::PolicyDataRequirements::FieldSource::FIRST_DATA_FIELD: {
+        // Extract first field from wantedFields (data pointer)
+        CHECK(!wantedFields.empty())
+            << "No data fields available for locality routing";
+
+        auto rec = childState.getProducer().getRowType();
+        ExpressionGeneratorVisitor vis{context, childState};
+        value = expressions::InputArgument{&rec}[*wantedFields[0]]
+                    .accept(vis)
+                    .value;
+
+        // NUMA detection expects void*, ensure proper type
+        CHECK(value->getType()->isPointerTy())
+            << "First data field must be a pointer for locality routing";
+
+        break;
+      }
+
+      case routing::PolicyDataRequirements::FieldSource::TUPLE_IDENTIFIER: {
+        // Extract tuple identifier (OID)
+        std::shared_ptr<Plugin> pg = Catalog::getInstance().getPlugin(
+            wantedFields[0]->getRelationName());
+        RecordAttribute tupleIdentifier(wantedFields[0]->getRelationName(),
+                                        activeLoop, pg->getOIDType());
+        ProteusValueMemory mem_oidWrapper = childState[tupleIdentifier];
+        value = Builder->CreateLoad(
+            mem_oidWrapper.mem->getType()->getPointerElementType(),
+            mem_oidWrapper.mem);
+        break;
+      }
+
+      case routing::PolicyDataRequirements::FieldSource::SOURCE_SERVER: {
+        // Extract source server ID
+        try {
+          value = Builder->CreateLoad(
+              childState[{wantedFields[0]->getRelationName(), "srcServer",
+                          new Int64Type()}]
+                  .mem->getType()
+                  ->getPointerElementType(),
+              childState[{wantedFields[0]->getRelationName(), "srcServer",
+                          new Int64Type()}]
+                  .mem);
+        } catch (const std::out_of_range &) {
+          value = context->createInt64(InfiniBandManager::server_id());
+        }
+        break;
+      }
+
+      case routing::PolicyDataRequirements::FieldSource::CUSTOM_HASH: {
+        // TODO: Implement custom hash extraction
+        CHECK(false) << "CUSTOM_HASH field source not implemented yet";
+      }
+
+      default:
+        CHECK(false) << "Unknown field source: "
+                     << static_cast<int>(field.source);
+    }
+
+    // Store the extracted value at the correct offset
+    if (value) {
+      llvm::Value *field_ptr = Builder->CreateInBoundsGEP(
+          keys_alloca->getAllocatedType(), keys_alloca,
+          {context->createInt32(0), context->createInt64(field.offset)});
+
+      // Cast to appropriate pointer type and store
+      llvm::Type *field_type = value->getType();
+      llvm::PointerType *store_ptr_type = llvm::PointerType::get(field_type, 0);
+      llvm::Value *typed_ptr =
+          Builder->CreateBitCast(field_ptr, store_ptr_type);
+      Builder->CreateStore(value, typed_ptr);
+    }
+  }
+}
+
+// Variant-based policy configuration
+routing::PolicyConfigVariant GeneralizedRouter::createPolicyConfig() const {
+  switch (policy_type_v2_) {
+    case routing::GeneralizedRoutingPolicyV2::ROUND_ROBIN:
+      return std::monostate{};
+
+    case routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE: {
+      routing::LocalityAwarePolicyConfig config;
+
+      // Extract affinitizers and device types from consumers
+      for (const auto &weak_consumer : consumers) {
+        auto consumer = weak_consumer.lock();
+        CHECK(consumer) << "Consumer expired during config creation";
+
+        // Access protected members (we're a friend class)
+        config.consumer_affinitizers.push_back(consumer->aff.get());
+        config.consumer_device_types.push_back(consumer->target_device);
+      }
+
+      // Validate before returning
+      config.validate();
+      return config;
+    }
+
+    default:
+      CHECK(false) << "Unsupported routing policy: "
+                   << static_cast<int>(policy_type_v2_);
+  }
 }
 
 }  // namespace proteus
