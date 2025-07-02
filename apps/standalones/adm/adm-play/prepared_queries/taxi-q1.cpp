@@ -37,8 +37,7 @@ PreparedStatement prepare_taxi_1_adaptive(QueryArgs &args,
   auto scan = args.morph->scan("yellow_tripdata",
                                {"tpep_pickup_datetime", "trip_distance"});
 
-  auto split = scan.gsplit(args.scan_slack, args.policy, args.num_samples,
-                           args.skip_first_samples);
+  auto split = scan.gsplit_v2(args.scan_slack, args.policy);
   std::vector<RelBuilder> paths;
 
   if (args.do_staging) {

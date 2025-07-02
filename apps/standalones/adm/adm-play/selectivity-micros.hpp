@@ -29,6 +29,7 @@
 
 #include <magic_enum.hpp>
 #include <olap/plan/catalog-parser.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <optional>
 #include <query-shaping/nvme-shapers.hpp>
 #include <vector>
@@ -200,8 +201,8 @@ struct VarySelMicroAdaptiveArgs {
                                        0.8, 0.85,
                                        0.9, 0.95,
                                        1.0};
-  GeneralizedRoutingPolicy policy =
-      GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL;
+  proteus::routing::GeneralizedRoutingPolicyV2 policy =
+      proteus::routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE;
 
   std::string header() {
     return "server_number,shaper,compressed,pushdown_dop,scan_slack,policy";

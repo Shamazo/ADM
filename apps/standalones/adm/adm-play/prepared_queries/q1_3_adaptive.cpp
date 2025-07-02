@@ -142,8 +142,8 @@ PreparedStatement prepare13_adaptive(QueryArgs args) {
             .unpack();
   }
 
-  auto probe_split = scan_probe.gsplit(
-      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
+  auto probe_split = scan_probe.gsplit_v2(
+      args.scan_slack, args.policy);
 
   std::vector<RelBuilder> paths;
 
@@ -303,8 +303,8 @@ PreparedStatement prepare13_adaptive_shared_ht(QueryArgs args) {
     }
   };
 
-  auto probe_split = scan_probe.gsplit(
-      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
+  auto probe_split = scan_probe.gsplit_v2(
+      args.scan_slack, args.policy);
 
   std::vector<RelBuilder> paths;
 

@@ -33,6 +33,7 @@
 #include <query-shaping/nvme-shapers.hpp>
 #include <ssb/query.hpp>
 #include <vector>
+#include <olap/routing/routing-policy-types-v2.hpp>
 
 #include "common-flags.hpp"
 #include "microbenchmarks.hpp"
@@ -127,7 +128,7 @@ DEFINE_bool(bench_grouter_pushdown_ssb, false,
             "on NVMe drives on socket 0.");
 
 DECLARE_string(grouter_policy);
-DEFINE_string(grouter_policy, "DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+DEFINE_string(grouter_policy, "LOCALITY_AWARE",
               "grouter policy to use.");
 
 DECLARE_int32(pushdown_dop);
@@ -301,14 +302,8 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_adaptive_ssb) {
     LOG(INFO) << " running bench_adaptive_ssb";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
-    uint64_t num_samples = 150;
-    uint32_t skip_first_samples = 100;
-    if (FLAGS_use_hyper_threads){
-        num_samples = 200;
-        skip_first_samples = 150;
-    }
 
 
 
@@ -321,8 +316,6 @@ int main(int argc, char* argv[]) {
                      .do_direct = true,
                      .policy = policy,
                      .scan_slack = 12,
-                     .num_samples = num_samples,
-                     .skip_first_samples = skip_first_samples,
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
@@ -342,7 +335,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_grouter_direct_ssb) {
     LOG(INFO) << " running bench_grouter_direct_ssb";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
@@ -372,7 +365,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_grouter_pushdown_ssb) {
     LOG(INFO) << " running bench_grouter_pushdown_ssb";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =
@@ -402,7 +395,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_grouter_staging_ssb) {
     LOG(INFO) << " running bench_grouter_staging_ssb";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_ssb(
         {.ssb_query_args =

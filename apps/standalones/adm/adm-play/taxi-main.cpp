@@ -32,13 +32,14 @@
 #include <platform/util/profiling.hpp>
 #include <query-shaping/nvme-shapers.hpp>
 #include <vector>
+#include <olap/routing/routing-policy-types-v2.hpp>
 
 #include "common-flags.hpp"
 #include "taxi-benchmarks.hpp"
 #include "util.hpp"
 
 DECLARE_string(grouter_policy);
-DEFINE_string(grouter_policy, "DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+DEFINE_string(grouter_policy, "LOCALITY_AWARE",
               "grouter policy to use.");
 
 DECLARE_int32(pushdown_dop);
@@ -89,7 +90,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_direct_taxi) {
     LOG(INFO) << "running bench_direct_ssb";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_taxi(
         {.query_args =
@@ -120,7 +121,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_staging_taxi) {
     LOG(INFO) << "running bench_staging_taxi";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_taxi(
         {.query_args =
@@ -151,7 +152,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_pushdown_taxi) {
     LOG(INFO) << "running bench_pushdown_taxi";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_taxi(
         {.query_args =
@@ -182,7 +183,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_adaptive_taxi) {
     LOG(INFO) << "running bench_adaptive_taxi";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     auto res = bench_adaptive_taxi(
         {.query_args =

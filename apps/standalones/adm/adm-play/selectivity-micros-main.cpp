@@ -24,6 +24,7 @@
 
 #include <cli-flags.hpp>
 #include <vector>
+#include <olap/routing/routing-policy-types-v2.hpp>
 
 #include "common-flags.hpp"
 #include "selectivity-micros.hpp"
@@ -87,7 +88,7 @@ DECLARE_string(selectivities);
 DEFINE_string(selectivities, "", "Comma-separated list of doubles in [0,1]");
 
 DECLARE_string(grouter_policy);
-DEFINE_string(grouter_policy, "DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL",
+DEFINE_string(grouter_policy, "LOCALITY_AWARE",
               "Comma-separated list of doubles in [0,1]");
 
 DECLARE_bool(exit_loop);
@@ -336,7 +337,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_micro_cpu_socket_adaptive) {
     LOG(INFO) << "bench_micro_cpu_socket_adaptive";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
 
     VarySelMicroAdaptiveArgs args = {
@@ -358,7 +359,7 @@ int main(int argc, char* argv[]) {
   if (FLAGS_bench_micro_cpu_socket_grouter_pd) {
     LOG(INFO) << "FLAGS_bench_micro_cpu_socket_grouter_pd";
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
     VarySelMicroAdaptiveArgs args = {
         .server_number = FLAGS_server_number,
@@ -378,7 +379,7 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_grouter_stage_both) {
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
 
     VarySelMicroAdaptiveArgs args = {
@@ -401,7 +402,7 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_grouter_direct) {
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
 
     VarySelMicroAdaptiveArgs args = {
@@ -424,7 +425,7 @@ int main(int argc, char* argv[]) {
 
   if (FLAGS_bench_micro_cpu_socket_grouter_stage_both_partial_sum) {
     auto policy =
-        magic_enum::enum_cast<GeneralizedRoutingPolicy>(FLAGS_grouter_policy)
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(FLAGS_grouter_policy)
             .value();
 
     VarySelMicroAdaptiveArgs args = {

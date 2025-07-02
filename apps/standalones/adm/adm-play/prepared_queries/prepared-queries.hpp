@@ -26,7 +26,7 @@
 #define PROTEUS_ADM_PREPARED_QUERIES_HPP
 
 #include <olap/plan/prepared-statement.hpp>
-#include <olap/routing/routing-policy-types.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <query-shaping/nvme-shapers.hpp>
 #include <query-shaping/query-shaper.hpp>
 
@@ -58,14 +58,14 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
                                           double selectivity,
                                           DegreeOfParallelism pushdown_dop,
                                           int scan_slack,
-                                          GeneralizedRoutingPolicy policy,
+                                          proteus::routing::GeneralizedRoutingPolicyV2 policy,
                                           uint64_t throughput_sample_size = 500,
                                           uint32_t skip_samples = 0);
 
 PreparedStatement scan_sum_micro_grouter_staging(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy);
+    proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 /**
  * Partial reduction before the union all in the same compiled pipeline as the
@@ -74,23 +74,23 @@ PreparedStatement scan_sum_micro_grouter_staging(
 PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy);
+    proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 PreparedStatement scan_sum_micro_grouter_pushdown(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy);
+    proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 PreparedStatement scan_sum_micro_grouter_direct(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy);
+    proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
                                             double selectivity,
                                             DegreeOfParallelism pushdown_dop,
                                             int scan_slack,
-                                            GeneralizedRoutingPolicy policy);
+                                            proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 /**
  * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter
@@ -128,8 +128,8 @@ struct QueryArgs {
   std::shared_ptr<proteus::CPUOnlyNVMeMorsel> morph = nullptr;
   DegreeOfParallelism pushdown_dop = DegreeOfParallelism{4};
   int scan_slack = 24;
-  GeneralizedRoutingPolicy policy =
-      GeneralizedRoutingPolicy::DISTINCT_RANDOM_SPLIT_PREFER_DATA_LOCAL;
+  proteus::routing::GeneralizedRoutingPolicyV2 policy =
+      proteus::routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE;
   std::vector<uint32_t> pushdown_numa_nodes = {};
   std::vector<uint32_t> compute_numa_nodes = {};
   bool do_direct = true;
@@ -138,8 +138,6 @@ struct QueryArgs {
   bool do_bloom_filter_build = false;
   bool do_bloom_filter_pushdown = false;
   size_t bloom_filter_size = 1_M;     // in bits
-  uint64_t num_samples = 350;         // for throughput policy only
-  uint32_t skip_first_samples = 250;  // for throughput policy only
   bool use_hyper_threads = false;
   inline void check() {
     CHECK_NE(morph, nullptr);
@@ -150,7 +148,6 @@ struct QueryArgs {
     CHECK_GE(compute_numa_nodes.size(), 0);
     CHECK_EQ(do_bloom_filter_pushdown, do_bloom_filter_build);
     CHECK_GT(scan_slack, 0);
-    CHECK_GT(num_samples, skip_first_samples);
     CHECK(!compute_numa_nodes.empty());
   }
 };

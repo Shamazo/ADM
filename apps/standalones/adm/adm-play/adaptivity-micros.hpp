@@ -9,6 +9,7 @@
 
 #include <magic_enum.hpp>
 #include <olap/plan/catalog-parser.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <optional>
 #include <query-shaping/nvme-shapers.hpp>
 #include <ssb/query.hpp>
@@ -35,8 +36,8 @@ struct AdaptiveMicroArgs {
   /// applicable to shapers that use CPU (i.e. CPUOnlyNvmeProbeFilterPushdown).
   std::vector<uint32_t> compute_numa_nodes =
       get_default_compute_numa_nodes(server_number);
-  GeneralizedRoutingPolicy policy =
-      GeneralizedRoutingPolicy::DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL;
+  proteus::routing::GeneralizedRoutingPolicyV2 policy =
+      proteus::routing::GeneralizedRoutingPolicyV2::THROUGHPUT_BASED;
 
   std::string header() {
     return "server_number,shaper,compressed,pushdown_dop,scan_slack,policy";
@@ -159,6 +160,7 @@ struct AdaptiveSSBArgs {
   /// this function.
   bool compressed = false;
   int scale_factor = 1000;
+  int skip_samples = 0;
 
   std::string header() {
     return "server_number,shaper,compressed,pushdown_dop,scan_slack,bloom_"
@@ -206,14 +208,14 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
     for (uint64_t samples : {20, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 350, 400, 500, 600,700,800,900,1000}) {
 
 //    for (uint64_t samples : {20, 225, 1500, 2000, 2500, 3000}) {
-    if (samples <= args.ssb_query_args.skip_first_samples){
+    if (samples <= args.skip_samples){
       LOG(INFO) << "skipping samples " << samples;
       continue;
     }
 //  for (uint64_t samples : {250, 300, 400, 500}) {
     QueryArgs ssb_args = args.ssb_query_args;
     ssb_args.morph = shaper;
-    ssb_args.num_samples = samples;
+    // num_samples removed in V2 - samples parameter handled directly by adaptive functions
     ssb_args.check();
 
     auto query = prepare31_adaptive(ssb_args);
@@ -224,7 +226,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
       result_string << bench_res.label << "," << md_dirs.size() << ","
                     << per_query_time.count() << ","  << std::boolalpha
                     << args.ssb_query_args.use_hyper_threads << "," << samples << "," <<
-          ssb_args.skip_first_samples << "," <<
+          args.skip_samples << "," <<
           get_current_date_str()
                     << "," << args << std::endl;
     }
@@ -239,7 +241,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
 ////  for (uint64_t samples : {250, 300, 400, 500}) {
 //    SSBArgs ssb_args = args.ssb_query_args;
 //    ssb_args.morph = shaper;
-//    ssb_args.num_samples = samples;
+//    // num_samples removed in V2 - samples parameter handled directly by adaptive functions
 //    ssb_args.check();
 //
 //    auto query = prepare34_adaptive(ssb_args);
@@ -250,7 +252,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
 //      result_string << bench_res.label << "," << md_dirs.size() << ","
 //                    << per_query_time.count() << ","  << std::boolalpha
 //                    << args.ssb_query_args.use_hyper_threads << "," << samples << "," <<
-//          ssb_args.skip_first_samples << "," <<
+//          0 << "," <<
 //          get_current_date_str()
 //                    << "," << args << std::endl;
 //    }
@@ -258,14 +260,14 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
 
   for (uint64_t samples : {20, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 350, 400, 500}) {
     //  for (uint64_t samples : {20, 225, 1500, 2000, 2500, 3000}) {
-    if (samples <= args.ssb_query_args.skip_first_samples){
+    if (samples <= args.skip_samples){
       LOG(INFO) << "skipping samples " << samples;
       continue;
     }
     //  for (uint64_t samples : {250, 300, 400, 500}) {
     QueryArgs ssb_args = args.ssb_query_args;
     ssb_args.morph = shaper;
-    ssb_args.num_samples = samples;
+    // num_samples removed in V2 - samples parameter handled directly by adaptive functions
     ssb_args.check();
 
     auto query = prepare11_adaptive(ssb_args);
@@ -276,7 +278,7 @@ std::string bench_adaptive_ssb31(AdaptiveSSBArgs args) {
       result_string << bench_res.label << "," << md_dirs.size() << ","
                     << per_query_time.count() << ","  << std::boolalpha
                     << args.ssb_query_args.use_hyper_threads << "," << samples << "," <<
-          ssb_args.skip_first_samples << "," <<
+          0 << "," <<
           get_current_date_str()
                     << "," << args << std::endl;
     }

@@ -170,17 +170,7 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
             << bench_res.label << "," << paths << "," << md_dirs.size() << ","
             << query_time.count() << "," << std::boolalpha
             << args.ssb_query_args.use_hyper_threads << ","
-            << (args.ssb_query_args.policy ==
-                        GeneralizedRoutingPolicy::
-                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.ssb_query_args.num_samples
-                    : 0)
-            << ","
-            << (args.ssb_query_args.policy ==
-                        GeneralizedRoutingPolicy::
-                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.ssb_query_args.skip_first_samples
-                    : 0)
+            << "0,0"
             << "," << get_current_date_str() << "," << args << std::endl;
       }
       LOG(INFO) << bench_res.label

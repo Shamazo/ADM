@@ -98,8 +98,8 @@ PreparedStatement prepare23_adaptive(QueryArgs args) {
   auto scan_probe = args.morph->scan(
       "lineorder", {"lo_partkey", "lo_suppkey", "lo_orderdate", "lo_revenue"});
 
-  auto probe_split = scan_probe.gsplit(
-      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
+  auto probe_split = scan_probe.gsplit_v2(
+      args.scan_slack, args.policy);
   std::vector<RelBuilder> paths;
 
   if (args.do_staging) {
@@ -365,8 +365,8 @@ PreparedStatement prepare23_adaptive_shared_ht(QueryArgs args) {
     }
   };
 
-  auto probe_split = scan_probe.gsplit(
-      args.scan_slack, args.policy, args.num_samples, args.skip_first_samples);
+  auto probe_split = scan_probe.gsplit_v2(
+      args.scan_slack, args.policy);
   std::vector<RelBuilder> paths;
 
   const size_t mm_slack = 96 / compute_dop;

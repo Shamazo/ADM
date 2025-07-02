@@ -24,6 +24,7 @@
 
 #include <cli-flags.hpp>
 #include <vector>
+#include <olap/routing/routing-policy-types-v2.hpp>
 
 #include "adaptivity-micros.hpp"
 #include "common-flags.hpp"
@@ -109,10 +110,9 @@ int main(int argc, char* argv[]) {
                     .do_bloom_filter_pushdown = true,
                     .do_filter_pushdown = true,
                     .do_direct = true,
-                    .policy = GeneralizedRoutingPolicy::
-                        DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL,
+                    .policy = proteus::routing::GeneralizedRoutingPolicyV2::
+                        LOCALITY_AWARE,
                     .scan_slack = FLAGS_scan_slack,
-                    .skip_first_samples = skip_samples,
                     .use_hyper_threads = FLAGS_use_hyper_threads,
                     .pushdown_numa_nodes =
                         get_default_pushdown_numa_nodes(FLAGS_server_number),

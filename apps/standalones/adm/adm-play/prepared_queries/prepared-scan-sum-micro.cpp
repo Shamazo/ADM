@@ -118,7 +118,7 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
                                           double selectivity,
                                           DegreeOfParallelism pushdown_dop,
                                           int scan_slack,
-                                          GeneralizedRoutingPolicy policy,
+                                          proteus::routing::GeneralizedRoutingPolicyV2 policy,
                                           uint64_t throughput_sample_size,
                                           uint32_t skip_samples) {
   CHECK_GT(selectivity, 0.0);
@@ -134,8 +134,7 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split =
-      scan.gsplit(scan_slack, policy, throughput_sample_size, skip_samples);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -230,7 +229,7 @@ PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
 PreparedStatement scan_sum_micro_grouter_staging(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy) {
+    proteus::routing::GeneralizedRoutingPolicyV2 policy) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -244,7 +243,7 @@ PreparedStatement scan_sum_micro_grouter_staging(
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -308,7 +307,7 @@ PreparedStatement scan_sum_micro_grouter_staging(
 PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy) {
+    proteus::routing::GeneralizedRoutingPolicyV2 policy) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -322,7 +321,7 @@ PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -386,7 +385,7 @@ PreparedStatement scan_sum_micro_grouter_staging_partial_reduction(
 PreparedStatement scan_sum_micro_grouter_pushdown(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy) {
+    proteus::routing::GeneralizedRoutingPolicyV2 policy) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -400,7 +399,7 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -463,7 +462,7 @@ PreparedStatement scan_sum_micro_grouter_pushdown(
 PreparedStatement scan_sum_micro_grouter_direct(
     proteus::QueryShaper &morph, double selectivity,
     DegreeOfParallelism pushdown_dop, int scan_slack,
-    GeneralizedRoutingPolicy policy) {
+    proteus::routing::GeneralizedRoutingPolicyV2 policy) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -477,7 +476,7 @@ PreparedStatement scan_sum_micro_grouter_direct(
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());
@@ -542,7 +541,7 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
                                             double selectivity,
                                             DegreeOfParallelism pushdown_dop,
                                             int scan_slack,
-                                            GeneralizedRoutingPolicy policy) {
+                                            proteus::routing::GeneralizedRoutingPolicyV2 policy) {
   CHECK_GT(selectivity, 0.0);
   CHECK_LE(selectivity, 1.0);
   morph.setQueryName("scan_sum_micro_adaptive");
@@ -556,7 +555,7 @@ PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
   CHECK_GT(pushdown_dop, 0);
 
   auto scan = morph.scan("random_ints_100GB_10000", {"col1", "col2"});
-  auto split = scan.gsplit(scan_slack, policy);
+  auto split = scan.gsplit_v2(scan_slack, policy);
   auto &topo = topology::getInstance();
   auto socket_1_nodes = topo.getCpuNumaNodesByPackageId(1);
   std::vector<uint32_t> socket_1_node_ids(socket_1_nodes.size());

@@ -27,6 +27,7 @@
 
 #include <magic_enum.hpp>
 #include <olap/plan/catalog-parser.hpp>
+#include <olap/routing/routing-policy-types-v2.hpp>
 #include <query-shaping/nvme-shapers.hpp>
 #include <taxi/query.hpp>
 
@@ -133,15 +134,15 @@ std::string bench_adaptive_taxi(TaxiAdaptiveArgs args) {
             << query_time.count() << "," << std::boolalpha
             << args.query_args.use_hyper_threads << ","
             << (args.query_args.policy ==
-                        GeneralizedRoutingPolicy::
-                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.query_args.num_samples
+                        proteus::routing::GeneralizedRoutingPolicyV2::
+                            THROUGHPUT_BASED
+                    ? 0  // Sampling parameters removed in V2
                     : 0)
             << ","
             << (args.query_args.policy ==
-                        GeneralizedRoutingPolicy::
-                            DISTINCT_THROUGHPUT_SPLIT_PREFER_DATA_LOCAL
-                    ? args.query_args.skip_first_samples
+                        proteus::routing::GeneralizedRoutingPolicyV2::
+                            THROUGHPUT_BASED
+                    ? 0  // Sampling parameters removed in V2
                     : 0)
             << "," << get_current_date_str() << "," << args << std::endl;
       }
