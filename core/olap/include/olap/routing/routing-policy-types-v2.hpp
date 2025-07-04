@@ -33,8 +33,9 @@ namespace proteus::routing {
  */
 enum class GeneralizedRoutingPolicyV2 {
     ROUND_ROBIN,
-    HASH_BASED, /// not implemented
     LOCALITY_AWARE,
+    LOCALITY_AWARE_WITH_RANDOM_CONS_RETRY,
+    LOCALITY_AWARE_BACKPRESSURE_AWARE,
     RANDOM_SPLIT, /// not implemented
     THROUGHPUT_BASED, /// not implemented
     ML_BASED /// not implemented

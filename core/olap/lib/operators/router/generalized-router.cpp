@@ -41,7 +41,6 @@ namespace proteus {
 
 int64_t getGroupId(Pipeline *pip) { return pip->getGroup(); }
 
-
 [[nodiscard]] void *acquireBufferGeneralized(int free_pool_idx,
                                              GeneralizedRouter *xch,
                                              int64_t groupId) {
@@ -101,7 +100,7 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
   std::vector<int> failed_channels;
   int retry_count = 0;
   const int max_retries =
-      3;  // Maximum retry attempts before falling back to blocking
+      5;  // Maximum retry attempts before falling back to blocking
 
   while (retry_count <= max_retries) {
     // Make routing decision with current retry count
@@ -162,10 +161,10 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
 
     retry_count++;
 
-    // // Small delay to avoid busy spinning
-    // if (retry_count < max_retries) {
-    //   std::this_thread::sleep_for(std::chrono::microseconds(100));
-    // }
+    // Small delay to avoid busy spinning
+    if (retry_count < max_retries) {
+      std::this_thread::sleep_for(std::chrono::microseconds(10));
+    }
   }
 
   // Should not reach here - final blocking acquire should have succeeded
@@ -327,7 +326,6 @@ void GeneralizedRouterConsumer::consume(OlapParallelContext *context,
 
   Builder->SetInsertPoint(context->getEndingBlock());
 }
-
 
 void GeneralizedRouter::produceForConsumer(
     const GeneralizedRouterConsumer &cons, OlapParallelContext *context) {
@@ -569,10 +567,9 @@ void GeneralizedRouter::open(Pipeline *pip) {
         policy_state_ =
             std::aligned_alloc(alignof(std::max_align_t), policy_state_size_);
         CHECK(policy_state_) << "Failed to allocate policy state";
-
-        routing_policy_v2_->initializeState(policy_state_);
         routing_policy_v2_->setState(policy_state_);
       }
+      routing_policy_v2_->initializeState(policy_state_);
     }
     remaining_producers = producers;
     DLOG(INFO) << "GeneralizedRouter initialized with " << producers
@@ -609,7 +606,7 @@ void GeneralizedRouter::close(Pipeline *pip) {
     nvtxRangePop();
     firers.clear();
     for (auto &r : free_pool) r.close();
-    
+
     // Clean up policy state
     if (routing_policy_v2_ && policy_state_) {
       routing_policy_v2_->cleanupState(policy_state_);
@@ -623,7 +620,8 @@ void GeneralizedRouter::close(Pipeline *pip) {
 std::shared_ptr<GeneralizedRouterConsumer> GeneralizedRouter::appendConsumer(
     DeviceType target_device, DegreeOfParallelism dop,
     std::unique_ptr<Affinitizer> aff) {
-  // TODO: Add V2 policy-specific warnings when locality-aware policies are implemented
+  // TODO: Add V2 policy-specific warnings when locality-aware policies are
+  // implemented
 
   auto new_consumer = std::make_shared<GeneralizedRouterConsumer>(
       getSelfPtr(), dop, std::move(aff), target_device, consumers.size());
@@ -713,6 +711,14 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
                       ":" + std::to_string(target_queue))
                          .c_str());
   auto &cu = aff->getAvailableCU(local_target);
+  const topology::cpunumanode *node =
+      dynamic_cast<const topology::cpunumanode *>(&cu);
+  // LOG(INFO) << "GeneralizedRouterConsumer::fire: "
+  //           << "target_queue: " << target_queue
+  //           << ", local_target: " << local_target
+  //           << ", source_free_pool: " << source_free_pool
+  //           << ", consumer_index: " << consumer_index
+  //           << ", numa idx: " << node->index_in_topo;
 
   auto exec_affinity = cu.set_on_scope();
   auto pip = pipGen->getPipeline(local_target);
@@ -836,7 +842,8 @@ bool GeneralizedRouter::get_readyGeneralized(int target,
 
 // V2 Policy System Helper Method Implementations
 
-routing::PolicyDataRequirements GeneralizedRouter::getRoutingDataRequirements() const {
+routing::PolicyDataRequirements GeneralizedRouter::getRoutingDataRequirements()
+    const {
   if (routing_policy_v2_) {
     return routing_policy_v2_->getDataRequirements();
   }
@@ -955,7 +962,11 @@ routing::PolicyConfigVariant GeneralizedRouter::createPolicyConfig() const {
     case routing::GeneralizedRoutingPolicyV2::ROUND_ROBIN:
       return std::monostate{};
 
-    case routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE: {
+    case routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE:
+    case routing::GeneralizedRoutingPolicyV2::
+        LOCALITY_AWARE_WITH_RANDOM_CONS_RETRY:
+    case routing::GeneralizedRoutingPolicyV2::
+        LOCALITY_AWARE_BACKPRESSURE_AWARE: {
       routing::LocalityAwarePolicyConfig config;
 
       // Extract affinitizers and device types from consumers

@@ -50,36 +50,17 @@ namespace proteus {
 namespace routing {
 
 size_t LocalityAwarePolicy::getStateSize() const {
-  return statsArraySize * sizeof(uint32_t);
+  return 0;  // No state needed for LocalityAwarePolicy
 }
 
 void LocalityAwarePolicy::initializeState(void* state) {
-  std::array<uint32_t, statsArraySize>* stats_array_ =
-      reinterpret_cast<std::array<uint32_t, statsArraySize>*>(state);
-  stats_array = stats_array_;
-  for (size_t i = 0; i < statsArraySize; ++i) {
-    (*stats_array_)[i] = 0;  // Initialize all stats to zero
-  }
+  stats_.reset();
+  LOG(INFO) << "LocalityAwarePolicy: Reset statistics for new query";
 }
 
 void LocalityAwarePolicy::cleanupState(void* state) {
-  size_t num_used_queues = system_cu_count_ * consumer_affs_.size();
-  // Print indices on the first line
-  std::stringstream line1;
-  line1 << "idx:    ";
-  for (size_t i = 0; i < num_used_queues; ++i) {
-    line1 << std::setw(6) << i << ", ";
-  }
-  LOG(INFO) << line1.str();
-
-  // Print counts on the second line
-  std::stringstream line2;
-  line2 << "count:  ";
-  for (size_t i = 0; i < num_used_queues; ++i) {
-    line2 << std::setw(6) << (*stats_array)[i] << ", ";
-  }
-  LOG(INFO) << line2.str();
-  stats_array = nullptr;
+  LOG(INFO) << "=== Final Routing Stats for Query ===";
+  stats_.log_stats();
 }
 
 LocalityAwarePolicy::LocalityAwarePolicy(const PolicyConfigVariant& config)
@@ -105,8 +86,6 @@ void LocalityAwarePolicy::initializeFromConfig(
   // Get topology information
   const auto& topo = topology::getInstance();
   system_cu_count_ = topo.getCpuNumaNodeCount() + topo.getGpuCount();
-
-  DCHECK_LT(statsArraySize, system_cu_count_ * consumer_affs_.size());
 
   // Calculate consumer offsets and domains
   for (size_t i = 0; i < consumer_affs_.size(); i++) {
@@ -134,14 +113,17 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
     int num_total_consumers, int retry_count,
     const std::vector<int>& failed_channels) {
   // Check initialization
-  CHECK(initialized_) << "LocalityAwarePolicy used before initialization";
+  DCHECK(initialized_) << "LocalityAwarePolicy used before initialization";
 
   // Validate context
-  CHECK_GE(context.keys_payload_size, sizeof(void*))
+  DCHECK_GE(context.keys_payload_size, sizeof(void*))
       << "Invalid keys payload for locality-aware routing";
 
   size_t target_consumer;
   size_t absolute_cu_idx;
+
+  // Track total calls and log periodically
+  logStatsIfNeeded();
 
   if (retry_count == 0) {
     // PHASE 1: Locality-aware routing (first attempt)
@@ -151,27 +133,23 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
     rand_val = hash_combine(rand_val);  // Simple hash for better distribution
     target_consumer = rand_val % consumer_affs_.size();
 
+    // Track initial consumer selection
+    trackInitialConsumerSelection(target_consumer);
+
     // Extract data pointer
     void* data_ptr = *static_cast<void* const*>(context.keys_payload);
 
-    // Get local NUMA node for this data
-    // This returns the actual NUMA node index where the data resides
-    size_t detected_cu_idx = random_local_cu_index_in_topo(
+    // Get the closest NUMA node for this data
+    absolute_cu_idx = random_local_cu_index_in_topo(
         data_ptr, consumer_affs_[target_consumer]);
 
+#ifndef NDEBUG
     // Find this CU in the consumer's accessible domain
     const auto& cu_domain = consumer_cu_domains_[target_consumer];
     auto it = std::find(cu_domain.begin(), cu_domain.end(), detected_cu_idx);
-
-    if (it != cu_domain.end()) {
-      // Data is on an accessible CU, use it directly
-      absolute_cu_idx = detected_cu_idx;
-    } else {
-      // Data is not on an accessible CU, use the first accessible CU as
-      // fallback In a real implementation, this would find the closest
-      // accessible CU
-      absolute_cu_idx = cu_domain[0];
-    }
+    DCHECK_NE(it, cu_domain.end()) << "affinitizer returned a CU "
+                                      "not in the consumer's accessible domain";
+#endif
   } else {
     // PHASE 2: Random selection from consumer's accessible CUs (retry)
 
@@ -185,6 +163,9 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
       rand_val = hash_combine(rand_val);
       target_consumer = rand_val % consumer_affs_.size();
     }
+
+    // Track retry consumer selection
+    trackRetryConsumerSelection(target_consumer);
 
     // Get the accessible CUs for this consumer
     const auto& cu_domain = consumer_cu_domains_[target_consumer];
@@ -207,11 +188,32 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
 }
 
 void LocalityAwarePolicy::onChannelBackPressure(int channel) {
-  // Future: Track back pressure per NUMA node for adaptive behavior
+  stats_.queue_failures[channel].fetch_add(1);
 }
 
 void LocalityAwarePolicy::onTupleRouted(int channel, bool success) {
-  (*stats_array)[channel] += 1;
+  if (success) {
+    int consumer_idx = channel / system_cu_count_;
+    stats_.successful_routes[consumer_idx].fetch_add(1);
+  }
+}
+
+void LocalityAwarePolicy::trackInitialConsumerSelection(
+    size_t consumer_idx) const {
+  stats_.initial_consumer_attempts[consumer_idx].fetch_add(1);
+}
+
+void LocalityAwarePolicy::trackRetryConsumerSelection(
+    size_t consumer_idx) const {
+  stats_.consumer_selected_on_retry[consumer_idx].fetch_add(1);
+}
+
+void LocalityAwarePolicy::logStatsIfNeeded() const {
+  uint64_t call_count = stats_.total_calls.fetch_add(1);
+  if (call_count > 0 && call_count % 1000 == 0 &&
+      stats_.last_log_call.exchange(call_count) != call_count) {
+    stats_.log_stats();
+  }
 }
 
 QueueConfiguration LocalityAwarePolicy::getQueueConfiguration(
