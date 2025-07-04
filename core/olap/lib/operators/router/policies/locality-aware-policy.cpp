@@ -45,6 +45,13 @@ extern "C" size_t random_local_cu_index_in_topo(void* ptr, Affinitizer* aff);
 namespace proteus {
 namespace routing {
 
+/**
+ * With a single consumer, try to route to the closest NUMA node. On retry, use
+ * a random NUMA node from the consumer's accessible domains. With multiple
+ * consumers, randomly select a consumer and then route to the closest NUMA node
+ * for that consumer. On retry, use the same consumer and a random NUMA node
+ * from its accessible domains.
+ */
 class LocalityAwarePolicy : public RoutingPolicyV2 {
  private:
   std::vector<Affinitizer*> consumer_affs_;  // Affinitizers per consumer
@@ -55,8 +62,42 @@ class LocalityAwarePolicy : public RoutingPolicyV2 {
   size_t system_cu_count_ = 0;  // Total CUs in system
   mutable std::atomic<uint64_t> random_state_{0};
   bool initialized_ = false;  // Track initialization state
+  static constexpr size_t statsArraySize = 100;
+  std::array<uint32_t, statsArraySize>* stats_array =
+      nullptr;  // state managed by grouter
 
  public:
+  size_t getStateSize() const override {
+    return statsArraySize * sizeof(uint32_t);
+  }
+  void initializeState(void* state) override {
+    std::array<uint32_t, statsArraySize>* stats_array_ =
+        reinterpret_cast<std::array<uint32_t, statsArraySize>*>(state);
+    stats_array = stats_array_;
+    for (size_t i = 0; i < statsArraySize; ++i) {
+      (*stats_array_)[i] = 0;  // Initialize all stats to zero
+    }
+  }
+  void cleanupState(void* state) override {
+    size_t num_used_queues = system_cu_count_ * consumer_affs_.size();
+    // Print indices on the first line
+    std::stringstream line1;
+    line1 << "idx:    ";
+    for (size_t i = 0; i < num_used_queues; ++i) {
+      line1 << std::setw(6) << i << ", ";
+    }
+    LOG(INFO) << line1.str();
+
+    // Print counts on the second line
+    std::stringstream line2;
+    line2 << "count:  ";
+    for (size_t i = 0; i < num_used_queues; ++i) {
+      line2 << std::setw(6) << (*stats_array)[i] << ", ";
+    }
+    LOG(INFO) << line2.str();
+    stats_array = nullptr;
+  }
+
   // Constructor that accepts variant configuration
   explicit LocalityAwarePolicy(const PolicyConfigVariant& config)
       : random_state_{0} {
@@ -81,6 +122,8 @@ class LocalityAwarePolicy : public RoutingPolicyV2 {
     // Get topology information
     const auto& topo = topology::getInstance();
     system_cu_count_ = topo.getCpuNumaNodeCount() + topo.getGpuCount();
+
+    DCHECK_LT(statsArraySize, system_cu_count_ * consumer_affs_.size());
 
     // Calculate consumer offsets and domains
     for (size_t i = 0; i < consumer_affs_.size(); i++) {
@@ -185,6 +228,9 @@ class LocalityAwarePolicy : public RoutingPolicyV2 {
 
   void onChannelBackPressure(int channel) override {
     // Future: Track back pressure per NUMA node for adaptive behavior
+  }
+  void onTupleRouted(int channel, bool success) override {
+    (*stats_array)[channel] += 1;
   }
 
   // Queue Management Interface Implementation
