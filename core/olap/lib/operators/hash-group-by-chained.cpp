@@ -100,7 +100,7 @@ void HashGroupByChained::prepareDescription(OlapParallelContext *context) {
       agg_exprs[i].packet++;
       if (agg_exprs[i].bitoffset != bindex) {
         // insert space
-        assert(agg_exprs[i].bitoffset > bindex);
+        CHECK_GT(agg_exprs[i].bitoffset, bindex);
         body.push_back(Type::getIntNTy(context->getLLVMContext(),
                                        (agg_exprs[i].bitoffset - bindex)));
         ++packind;
@@ -138,7 +138,7 @@ void HashGroupByChained::prepareDescription(OlapParallelContext *context) {
     ptr_types.push_back(t_ptr);
     ++p;
   }
-  assert(i == agg_exprs.size());
+  CHECK_EQ(i, agg_exprs.size());
 
   agg_exprs.erase(agg_exprs.begin());  // erase dummy entry for next
 }
@@ -917,7 +917,7 @@ void HashGroupByChained::close(Pipeline *pip) {
       << "Actual build input size: " << h_cnt << " (capacity: " << maxInputSize
       << ")";
 
-  assert(h_cnt <= maxInputSize);
+  CHECK_LE(h_cnt, maxInputSize);
 
   // for (int32_t i = 0 ; i < cnt ; ++i){
   //     if (h_next[i].index != i){
@@ -989,7 +989,7 @@ void HashGroupByChained::close(Pipeline *pip) {
   v.emplace_back(pip->getStateVar<int32_t *>(cnt_param_id));
   v.emplace_back(pip->getStateVar<int32_t *>(head_param_id));
 
-  assert(out_param_ids.size() == packet_widths.size());
+  CHECK_EQ(out_param_ids.size(), packet_widths.size());
   for (auto &out_param_id : out_param_ids) {
     v.emplace_back(pip->getStateVar<void *>(out_param_id));
   }
