@@ -27,12 +27,21 @@
 #include <codegen/expressions/expressions.hpp>
 #include <olap/operators/monoids.hpp>
 
+/**
+ * @class GpuAggrMatExpr
+ *
+ * @brief encapsulates an expression along with metadata about how that
+ * expression should be materialized and aggregated.
+ * @details a packet represents an indexed chunk of memory or a structure that
+ * can contain multiple fields. Each packet can hold multiple expressions or
+ * values that are materialized together.
+ */
 class GpuAggrMatExpr {
  public:
-  expression_t expr;
-  size_t packet;
-  size_t bitoffset;
-  size_t packind;
+  expression_t expr;  /// The expression to evaluate
+  size_t packet;      /// Packet/structure index
+  size_t bitoffset;   /// Bit offset within packet
+  size_t packind;     /// Field index within packet
   Monoid m;
   bool is_m;
 
