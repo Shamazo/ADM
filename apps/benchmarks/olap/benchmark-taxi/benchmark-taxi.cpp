@@ -153,12 +153,63 @@ std::vector<std::chrono::milliseconds> bench_query(PreparedStatement &query) {
   return times;
 }
 
+FileRecord loadToCpuSocket0(const std::string &name, size_t type_size) {
+  size_t psize = ::getFileSize(name.c_str());
+  size_t offset = 0;
+  time_block t("Topen (" + name + "): ",
+               TimeRegistry::Key{"Data loading (CPUs)"});
+  const auto &topo = topology::getInstance();
+
+  size_t factor = type_size / sizeof(int32_t);
+
+  auto devices = topo.getCpuNumaNodesByPackageId(0).size();
+
+  size_t filesize = psize / factor;
+
+  size_t pack_alignment = sysconf(_SC_PAGE_SIZE);  // required by mmap
+  // in order to do that without the schema, we have to take the worst case
+  // of a file with a single-byte column and a 64bit column and align based
+  // on that. Otherwise, the segments may be misaligned
+  pack_alignment = std::max(pack_alignment, BlockManager::block_size);
+
+  size_t part_size =
+      (((filesize + pack_alignment - 1) / pack_alignment + devices - 1) /
+       devices) *
+      pack_alignment;  // FIXME: assumes maximum record size of 128Bytes
+
+  decltype(FileRecord::data) partitions;
+  partitions.reserve(devices);
+  int d = 0;
+  for (const auto &cpu : topo.getCpuNumaNodesByPackageId(0)) {
+    if (part_size * d < filesize) {
+      set_exec_location_on_scope cd(cpu);
+      partitions.emplace_back(std::make_unique<mmap_file>(
+          name, PINNED, std::min(part_size, filesize - part_size * d) * factor,
+          part_size * d * factor + offset));
+    }
+    ++d;
+  }
+  return FileRecord{std::move(partitions)};
+}
+
 int main(int argc, char **argv) {
   LOG(INFO) << "Running taxi benchmark";
 
   auto olap = proteus::from_cli::olap("Benchmark taxi", &argc, &argv);
   LOG(INFO) << "Finished initialization";
   LOG(INFO) << "Running in: " << std::filesystem::current_path() << " \n";
+
+  // replace CPUOnlySingleServer with this if you want to run on a single socket
+  auto& sm = StorageManager::getInstance();
+  // StorageManager::Loader socket_0_loader =
+  //     [](StorageManager& sm, const std::string &name, size_t type_size) {
+  //       return loadToCpuSocket0(name, type_size);
+  // };
+  // sm.setDefaultLoader(socket_0_loader);
+  //
+  // std::shared_ptr<proteus::CPUOnlySingleServerSingleSocket> shaper =
+  //     std::make_shared<proteus::CPUOnlySingleServerSingleSocket>(
+  //         "inputs/taxi/", taxi::Query::getStats(), false, 16);
 
   std::shared_ptr<proteus::CPUOnlySingleServer> shaper =
       std::make_shared<proteus::CPUOnlySingleServer>(
@@ -192,7 +243,6 @@ int main(int argc, char **argv) {
     }
   }
 
-  auto &sm = StorageManager::getInstance();
   sm.unloadAll();
   sm.dropAllCustomLoaders();
 }
