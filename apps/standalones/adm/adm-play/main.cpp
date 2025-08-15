@@ -127,6 +127,15 @@ DEFINE_bool(bench_grouter_pushdown_ssb, false,
             "SSB with pushdown. Using the CPU NUMA nodes of socket 1 and data "
             "on NVMe drives on socket 0.");
 
+DECLARE_bool(bench_randomseq_direct_ssb);
+DEFINE_bool(bench_randomseq_direct_ssb, false, "");
+
+DECLARE_bool(bench_randomseq_adaptive_ssb);
+DEFINE_bool(bench_randomseq_adaptive_ssb, false, "");
+
+DECLARE_bool(bench_randomseq_pushdown_ssb);
+DEFINE_bool(bench_randomseq_pushdown_ssb, false, "");
+
 DECLARE_string(grouter_policy);
 DEFINE_string(grouter_policy, "LOCALITY_AWARE",
               "grouter policy to use.");
@@ -409,6 +418,99 @@ int main(int argc, char* argv[]) {
                      .use_hyper_threads = FLAGS_use_hyper_threads,
                      .pushdown_numa_nodes =
                          get_default_pushdown_numa_nodes(FLAGS_server_number),
+                 .compute_numa_nodes =
+                     get_default_compute_numa_nodes(FLAGS_server_number),
+                 .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                     FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_randomseq_direct_ssb) {
+    LOG(INFO) << " running bench_randomseq_direct_ssb";
+    auto res = bench_adaptive_ssb_random_sequence(
+        {.ssb_query_args =
+             QueryArgs{
+                 .do_staging = false,
+                 .do_bloom_filter_build = false,
+                 .do_bloom_filter_pushdown = false,
+                 .do_filter_pushdown = false,
+                 .do_direct = true,
+                 .policy = proteus::routing::GeneralizedRoutingPolicyV2::
+                     LOCALITY_AWARE,
+                 .scan_slack = 12,
+                 .use_hyper_threads = FLAGS_use_hyper_threads,
+                 .pushdown_numa_nodes =
+                     get_default_pushdown_numa_nodes(FLAGS_server_number),
+                 .compute_numa_nodes =
+                     get_default_compute_numa_nodes(FLAGS_server_number),
+                 .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                     FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_randomseq_adaptive_ssb) {
+    LOG(INFO) << " running bench_randomseq_direct_ssb";
+    auto policy =
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(
+            FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb_random_sequence(
+        {.ssb_query_args =
+             QueryArgs{
+                 .do_staging = true,
+                 .do_bloom_filter_build = true,
+                 .do_bloom_filter_pushdown = true,
+                 .do_filter_pushdown = true,
+                 .do_direct = true,
+                 .policy = policy,
+                 .scan_slack = 12,
+                 .use_hyper_threads = FLAGS_use_hyper_threads,
+                 .pushdown_numa_nodes =
+                     get_default_pushdown_numa_nodes(FLAGS_server_number),
+                 .compute_numa_nodes =
+                     get_default_compute_numa_nodes(FLAGS_server_number),
+                 .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(
+                     FLAGS_pushdown_dop != -1 ? FLAGS_pushdown_dop : 16)}},
+         .server_number = FLAGS_server_number,
+         .num_iterations = FLAGS_num_iterations});
+    ss << res;
+    ss << std::endl;
+    if (out.has_value()) {
+      *out << res << std::endl;
+    }
+  }
+
+  if (FLAGS_bench_randomseq_pushdown_ssb) {
+    LOG(INFO) << " running bench_randomseq_direct_ssb";
+    auto policy =
+        magic_enum::enum_cast<proteus::routing::GeneralizedRoutingPolicyV2>(
+            FLAGS_grouter_policy)
+            .value();
+    auto res = bench_adaptive_ssb_random_sequence(
+        {.ssb_query_args =
+             QueryArgs{
+                 .do_staging = false,
+                 .do_bloom_filter_build = true,
+                 .do_bloom_filter_pushdown = true,
+                 .do_filter_pushdown = true,
+                 .do_direct = false,
+                 .policy = policy,
+                 .scan_slack = 12,
+                 .use_hyper_threads = FLAGS_use_hyper_threads,
+                 .pushdown_numa_nodes =
+                     get_default_pushdown_numa_nodes(FLAGS_server_number),
                      .compute_numa_nodes =
                          get_default_compute_numa_nodes(FLAGS_server_number),
                      .pushdown_dop = DegreeOfParallelism{static_cast<size_t>(

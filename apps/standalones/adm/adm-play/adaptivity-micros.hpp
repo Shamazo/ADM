@@ -37,7 +37,7 @@ struct AdaptiveMicroArgs {
   std::vector<uint32_t> compute_numa_nodes =
       get_default_compute_numa_nodes(server_number);
   proteus::routing::GeneralizedRoutingPolicyV2 policy =
-      proteus::routing::GeneralizedRoutingPolicyV2::THROUGHPUT_BASED;
+      proteus::routing::GeneralizedRoutingPolicyV2::ADAPTIVE_THROUGHPUT_BASED;
 
   std::string header() {
     return "server_number,shaper,compressed,pushdown_dop,scan_slack,policy";

@@ -111,7 +111,7 @@ void IoUringThreadUnsafe::submit() {
 }
 
 void IoUringThreadUnsafe::poll() {
-  nvtxRangePushA("IoUringThreadUnsafe-poll");
+  // nvtxRangePushA("IoUringThreadUnsafe-poll");
   struct io_uring_cqe *cqe;
   unsigned head;
   unsigned i = 0;
@@ -152,7 +152,7 @@ void IoUringThreadUnsafe::poll() {
   auto get_events_status = io_uring_get_events(&m_ring);
   CHECK(get_events_status == 0)
       << "Failed to get events with: " << strerror(-get_events_status);
-  nvtxRangePop();
+  // nvtxRangePop();
 }
 
 void IoUringThreadUnsafe::poll_until_requests_can_be_made() {

@@ -275,26 +275,18 @@ PreparedStatement scan_sum_micro_grouter_staging(
             return expressions::hint(lt(arg["col1"], query_upperbound),
                                      expressions::Selectivity(selectivity));
           })
-          .project([&](const auto &arg) -> std::vector<expression_t> {
-            return {(arg["col2"])};
-          })
-          .pack();
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg["col2"]};
+              },
+              {SUM});
+  // .pack();
 
   return staging_path
       .unionAll(
-          {},
-          DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
+          {}, DegreeOfParallelism{1},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          2)
-      .unpack()
-      .reduce(
-          [&](const auto &arg) -> std::vector<expression_t> {
-            return {arg["col2"]};
-          },
-          {SUM})
-      .router(
-          DegreeOfParallelism{1}, 128, RoutingPolicy::RANDOM, DeviceType::CPU,
-          std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids))
+          128)
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {arg["col2"]};
@@ -511,23 +503,20 @@ PreparedStatement scan_sum_micro_grouter_direct(
           .project([&](const auto &arg) -> std::vector<expression_t> {
             return {(arg["col2"])};
           })
+          .reduce(
+              [&](const auto &arg) -> std::vector<expression_t> {
+                return {arg["col2"]};
+              },
+          {SUM})
           .pack();
 
   return standard_path
       .unionAll(
           {},
-          DegreeOfParallelism{count_per_numa_cores * socket_1_node_ids.size()},
+          DegreeOfParallelism{1},
           std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids),
-          2)
+          128)
       .unpack()
-      .reduce(
-          [&](const auto &arg) -> std::vector<expression_t> {
-            return {arg["col2"]};
-          },
-          {SUM})
-      .router(
-          DegreeOfParallelism{1}, 64, RoutingPolicy::LOCAL, DeviceType::CPU,
-          std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_1_node_ids))
       .reduce(
           [&](const auto &arg) -> std::vector<expression_t> {
             return {arg["col2"]};

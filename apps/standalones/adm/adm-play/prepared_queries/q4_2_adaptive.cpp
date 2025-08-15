@@ -463,7 +463,7 @@ PreparedStatement prepare42_adaptive_shared_ht(QueryArgs args) {
   }
 
   if (args.do_bloom_filter_pushdown) {
-    const size_t pd_mm_slack = std::max(4ul, 32 / args.pushdown_dop);
+    const size_t pd_mm_slack = std::max(3ul, 32 / args.pushdown_dop);
     auto pd = probe_split
                   .path(DeviceType::CPU, DegreeOfParallelism{args.pushdown_dop},
                         std::make_unique<SpecificCpuNumaNodeAffinitizer>(
@@ -476,7 +476,7 @@ PreparedStatement prepare42_adaptive_shared_ht(QueryArgs args) {
                       },
                       args.bloom_filter_size, filter_id)
                   .pack()
-                  .router(DegreeOfParallelism{compute_dop}, 2,
+                  .router(DegreeOfParallelism{compute_dop}, 1,
                           RoutingPolicy::RANDOM, DeviceType::CPU,
                           std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                               args.compute_numa_nodes))

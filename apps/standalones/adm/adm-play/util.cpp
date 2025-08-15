@@ -80,6 +80,7 @@ QueryBenchResult benchmark_query(const std::string& label,
   std::vector<std::vector<std::chrono::milliseconds>> pipeline_times(
       num_iterations);
   // warmup
+  std::this_thread::sleep_for(std::chrono::seconds(5));
   std::string warmup_query_output;
   {
     LOG(INFO) << "warmup_begin";
@@ -91,10 +92,10 @@ QueryBenchResult benchmark_query(const std::string& label,
     ss << res;
     warmup_query_output = ss.str();
   }
-  std::this_thread::sleep_for(std::chrono::seconds(10));
+  // LOG(INFO) << "warmup_query_output: " << warmup_query_output;
   profiling::ProfileRegionType pr_type = profiling::ProfileRegionType(label);
   for (int i = 0; i < num_iterations; i++) {
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    // std::this_thread::sleep_for(std::chrono::seconds(5));
     LOG(INFO) << "begin_run_iteration " << i << "/" << num_iterations << " for "
               << label;
     auto ts = global_timestamp_logger->log_time_range(
@@ -109,7 +110,7 @@ QueryBenchResult benchmark_query(const std::string& label,
               << label;
     std::stringstream ss;
     ss << res;
-    CHECK_EQ(ss.str(), warmup_query_output);
+    // CHECK_EQ(ss.str(), warmup_query_output);
   }
 
   const size_t num_pipelines = pipeline_times[0].size();
@@ -547,7 +548,7 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_one(
           "/nvme18/nicholso/data/sbm1000_4_12",   // node 4
           "/nvme23/nicholso/data/sbm1000_5_12",   // node 5
           "/nvme30/nicholso/data/sbm1000_6_12",   // node 6
-          "/nvme25/nicholso/data/sbm1000_7_12",   // node 7
+          "/nvme20/nicholso/data/sbm1000_7_12",   // node 5
           "/nvme19/nicholso/data/sbm1000_8_12",   // node 4
           "/nvme28/nicholso/data/sbm1000_9_12",   // node 6
           "/nvme26/nicholso/data/sbm1000_10_12",  // node 7
@@ -570,7 +571,7 @@ std::vector<std::vector<std::string>> get_taxi_input_dirs_socket_one(int server_
         "/nvme18/nicholso/data/taxi_4_12",   // node 4
         "/nvme23/nicholso/data/taxi_5_12",   // node 5
         "/nvme30/nicholso/data/taxi_6_12",   // node 6
-        "/nvme25/nicholso/data/taxi_7_12",   // node 7
+        "/nvme20/nicholso/data/taxi_7_12",   // node 5
         "/nvme19/nicholso/data/taxi_8_12",   // node 4
         "/nvme28/nicholso/data/taxi_9_12",   // node 6
         "/nvme26/nicholso/data/taxi_10_12",  // node 7

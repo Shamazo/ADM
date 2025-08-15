@@ -181,12 +181,109 @@ std::string bench_adaptive_ssb(SSBAdaptiveArgs args) {
   return result_string.str();
 }
 
-// std::string bench_ssb_adaptive(int sf, int server_number,
-//                                int num_iterations = 5,
-//                                bool compressed = false) {
-//   CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
-//   constexpr int num_sockets = 1;
-//   return bench_adaptive_ssb(sf, server_number, num_iterations, compressed);
-// }
+std::string bench_adaptive_ssb_random_sequence(SSBAdaptiveArgs args) {
+  std::stringstream result_string;
+  result_string << "query,"
+                << "paths,"
+                << "num_drives,"
+                << "time_ms,"
+                << "using_hyperthreading,"
+                << "samples,"
+                << "skip_samples,"
+                << "date," << args.header() << std::endl;
+
+  CHECK(!args.compressed) << "todo";
+  //  const auto all_md_dirs =
+  //      get_input_dirs_socket_zero(args.scale_factor, args.server_number);
+  const auto all_md_dirs =
+      get_input_dirs_socket_one(args.scale_factor, args.server_number);
+
+  std::vector<PreparedStatement> statements;
+  statements.reserve(grouter_ssb_queries().size());
+
+  const int num_queries_to_execute = 50;
+  std::vector<int> random_query_idx(num_queries_to_execute);
+  std::random_device rd;
+  std::mt19937 gen(42);  // Seed with a fixed value for reproducibility
+  std::uniform_int_distribution<> dis(
+      0, grouter_ssb_queries().size() - 1);  // Range of random values
+  for (int& value : random_query_idx) {
+    value = dis(gen);
+  }
+
+  /// important, because the relations are all the same from the point of
+  /// view of the catalog we need to drop the catalog to ensure we use the
+  /// right plugin instance for each configurations of md files
+  CatalogParser::getInstance().clear();
+
+  std::string paths = "";
+
+  if (args.ssb_query_args.do_bloom_filter_build) {
+    paths += "_bf_build";
+  }
+  if (args.ssb_query_args.do_bloom_filter_pushdown) {
+    paths += "_bf_pushdown";
+  }
+  if (args.ssb_query_args.do_filter_pushdown) {
+    paths += "_filter_pushdown";
+  }
+  if (args.ssb_query_args.do_direct) {
+    paths += "_direct";
+  }
+  if (args.ssb_query_args.do_staging) {
+    paths += "_staging";
+  }
+
+  for (auto [query, query_name] : grouter_ssb_queries()) {
+    for (const auto& md_dirs : all_md_dirs) {
+      // assuming all numa nodes have the same core count
+      DegreeOfParallelism pushdown_dop_value =
+          DegreeOfParallelism{args.ssb_query_args.pushdown_dop};
+
+      // Shaper is only used for the plan and to provide the SSB stats
+      // no slacks or affinitizers are currently used from the shaper
+      std::shared_ptr<proteus::CPUOnlyNVMeMorsel> shaper =
+          std::make_shared<proteus::CPUOnlyNVMeMorsel>(
+              md_dirs, "inputs/ssbm100",
+              ssb::Query::getStats(args.scale_factor), true, 4, 24, 16);
+
+      QueryArgs ssb_args = args.ssb_query_args;
+      ssb_args.morph = shaper;
+      ssb_args.check();
+      statements.emplace_back(query(ssb_args));
+    }
+  }
+
+  LOG(INFO) << "Prepared " << statements.size()
+            << " queries for random sequence execution. Will execute "
+            << num_queries_to_execute;
+  std::string input;
+  std::cout << "Blocking on input to start random sequence of queries. "
+            << "Press Enter to continue..." << std::endl;
+  std::getline(std::cin, input);
+
+  LOG(INFO) << "starting random sequence of queries";
+  std::stringstream query_string;
+  std::vector<std::chrono::milliseconds> times;
+  for (int idx : random_query_idx) {
+    auto& query = statements[idx];
+    time_block t{[&](auto tms) { times.emplace_back(tms); }};
+    LOG(INFO) << "Executing query: " << grouter_ssb_queries()[idx].second;
+    query_string << grouter_ssb_queries()[idx].second << ",";
+    query.execute();
+  }
+  LOG(INFO) << "ended random sequence of queries";
+  query_string << std::endl;
+  std::chrono::milliseconds total_time{0};
+  for (auto& time : times) {
+    result_string << time.count() << ",";
+    query_string << time.count() << ",";
+    total_time += time;
+  }
+  LOG(INFO) << "Random sequence of queries: \n" << query_string.str();
+  LOG(INFO) << "Total time for random sequence: " << total_time.count()
+            << " ms";
+  return result_string.str();
+}
 
 #endif  // PROTEUS_ADM_SSB_ADAPTIVE_BENCHMARKS_HPP

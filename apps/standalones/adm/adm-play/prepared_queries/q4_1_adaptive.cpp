@@ -144,13 +144,13 @@ PreparedStatement prepare41_adaptive(QueryArgs args) {
   }
 
   if (args.do_bloom_filter_pushdown) {
-    const size_t mm_slack = std::max(4ul, 32/args.pushdown_dop);
+    const size_t pd_mm_slack = std::max(4ul, 32/args.pushdown_dop);
     paths.emplace_back(
         probe_split
             .path(DeviceType::CPU, DegreeOfParallelism{args.pushdown_dop},
                   std::make_unique<SpecificCpuNumaNodeAffinitizer>(
                       args.pushdown_numa_nodes))
-            .memmove(mm_slack, DeviceType::CPU)
+            .memmove(pd_mm_slack, DeviceType::CPU)
             .unpack()
             .bloomfilter_probe(
                 [&](const auto &arg) -> expression_t {

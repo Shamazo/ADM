@@ -139,13 +139,13 @@ std::string bench_adaptive_taxi(TaxiAdaptiveArgs args) {
                       << ","
                       << (args.query_args.policy ==
                                   proteus::routing::GeneralizedRoutingPolicyV2::
-                                      THROUGHPUT_BASED
+                                      ADAPTIVE_THROUGHPUT_BASED
                               ? 0  // Sampling parameters removed in V2
                               : 0)
                       << ","
                       << (args.query_args.policy ==
                                   proteus::routing::GeneralizedRoutingPolicyV2::
-                                      THROUGHPUT_BASED
+                                  ADAPTIVE_THROUGHPUT_BASED
                               ? 0  // Sampling parameters removed in V2
                               : 0)
                       << "," << get_current_date_str() << "," << args
