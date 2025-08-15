@@ -36,8 +36,8 @@ enum class GeneralizedRoutingPolicyV2 {
     LOCALITY_AWARE,
     LOCALITY_AWARE_WITH_RANDOM_CONS_RETRY,
     LOCALITY_AWARE_BACKPRESSURE_AWARE,
+    THROUGHPUT_BASED,
     RANDOM_SPLIT, /// not implemented
-    THROUGHPUT_BASED, /// not implemented
     ML_BASED /// not implemented
 };
 

@@ -79,6 +79,31 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
   auto *policy = router->get_policy();
   DCHECK(policy) << "route_and_enqueue_via_cpp: No V2 policy found";
 
+  // Gather consumer throughput data
+  std::vector<double> consumer_throughputs;
+  consumer_throughputs.reserve(router->consumers.size());
+
+  thread_local uint64_t trace_counter = 0;
+  trace_counter += 1;
+  for (size_t i = 0; i < router->consumers.size(); i++) {
+    const auto &weak_consumer = router->consumers[i];
+    auto consumer = weak_consumer.lock();
+    if (consumer) {
+      const auto tp = consumer->getThroughputInfo();
+      consumer_throughputs.push_back(tp);
+      if (trace_counter % 9 == 0) {
+        counterlogger.log(router->getUUID(),
+                          counter_type::GROUTER_CONS_THROUGHPUT, tp, i);
+      }
+    } else {
+      // Consumer has been destroyed, use 0 throughput
+      consumer_throughputs.push_back(0.0);
+    }
+  }
+
+  // LOG_EVERY_N(INFO, 50) << "route_and_enqueue_via_cpp: "
+  // << "Consumer throughputs: " << consumer_throughputs[0] << ", " <<
+  // consumer_throughputs[1] << ", " << consumer_throughputs[2];
   // Create routing context
   routing::RoutingContext context{
       .keys_payload = jit_routing_keys_payload,
@@ -87,9 +112,10 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
           std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::system_clock::now().time_since_epoch())
               .count()),
-      .tuple_count = 0,   // Policy will manage its own tuple counting
-      .queue_depths = {}  // TODO: Populate queue depths
-  };
+      .tuple_count =
+          0,  // TODO: remove unused Policy will manage its own tuple counting
+      .queue_depths = {},  // TODO: remove unused
+      .consumer_throughput = std::move(consumer_throughputs)};
 
   // Get total consumer count
   int num_consumers = router->getFanoutDOP_for_policy();
@@ -100,7 +126,7 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
   std::vector<int> failed_channels;
   int retry_count = 0;
   const int max_retries =
-      5;  // Maximum retry attempts before falling back to blocking
+      10;  // Maximum retry attempts before falling back to blocking
 
   while (retry_count <= max_retries) {
     // Make routing decision with current retry count
@@ -163,7 +189,7 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
 
     // Small delay to avoid busy spinning
     if (retry_count < max_retries) {
-      std::this_thread::sleep_for(std::chrono::microseconds(10));
+      std::this_thread::sleep_for(std::chrono::microseconds(20));
     }
   }
 
@@ -179,6 +205,30 @@ extern "C" void route_and_enqueue_via_cpp(GeneralizedRouter *router,
   // }
 }
 
+double GeneralizedRouterConsumer::getThroughputInfo() const {
+  if (thread_throughput_trackers_.empty()) {
+    return 0.0;
+  }
+
+  // Aggregate throughput across all threads
+  double total_throughput = 0.0;
+  static int64_t log_count = 0;
+  log_count++;
+  for (const auto &tracker : thread_throughput_trackers_) {
+    double thread_throughput = tracker.getThroughput();
+    // if (fanout == 4 && log_count % 99 == 0) {
+    //   LOG(INFO) << "Thread throughput: " << thread_throughput
+    //             << " TPS for consumer index: " << consumer_index;
+    // }
+    if (thread_throughput > 0.0) {
+      total_throughput += thread_throughput;
+    }
+  }
+
+  // Return total throughput (sum of all threads)
+  return total_throughput;
+}
+
 GeneralizedRouterConsumer::GeneralizedRouterConsumer(
     std::shared_ptr<GeneralizedRouter> producer, DegreeOfParallelism fanout,
     std::unique_ptr<Affinitizer> aff, DeviceType target_device,
@@ -191,7 +241,8 @@ GeneralizedRouterConsumer::GeneralizedRouterConsumer(
                                                   this->aff.get())),
       target_device(target_device),
       consumer_index(consumer_index),
-      consumed_count(0) {}
+      consumed_count(0),
+      thread_throughput_trackers_(fanout) {}
 
 GeneralizedRouter::~GeneralizedRouter() = default;
 
@@ -551,6 +602,10 @@ void GeneralizedRouter::open(Pipeline *pip) {
   event_range<range_log_op::GROUTER_OPEN> er{m_id, pip->getGeneratorUUID(),
                                              pip->getGroup()};
   std::lock_guard<std::mutex> guard(init_mutex);
+  auto config = createPolicyConfig();
+  routing_policy_v2_ =
+      routing::RoutingPolicyFactory::getInstance().createPolicy(policy_type_v2_,
+                                                                config);
 
   if (firers.empty()) {
     {
@@ -608,7 +663,7 @@ void GeneralizedRouter::close(Pipeline *pip) {
     for (auto &r : free_pool) r.close();
 
     // Clean up policy state
-    if (routing_policy_v2_ && policy_state_) {
+    if (routing_policy_v2_) {
       routing_policy_v2_->cleanupState(policy_state_);
       std::free(policy_state_);
       policy_state_ = nullptr;
@@ -654,11 +709,9 @@ proteus::traits::HomReplication GeneralizedRouterConsumer::getHomReplication()
   return producer->getHomReplication();
 }
 
-void GeneralizedRouterConsumer::foreachTaskDo(int target_queue,
-                                              int source_free_pool,
-                                              Pipeline *pip,
-                                              PipelineGen *pipGen,
-                                              std::function<void(void *)> f) {
+void GeneralizedRouterConsumer::foreachTaskDo(
+    int target_queue, int source_free_pool, Pipeline *pip, PipelineGen *pipGen,
+    std::function<void(void *)> f, int thread_index) {
   DCHECK_LE(target_queue, producer->ready_fifo.size());
   producer->ready_fifo.at(target_queue)
       .foreachItemDo(
@@ -692,7 +745,18 @@ void GeneralizedRouterConsumer::foreachTaskDo(int target_queue,
                                 counter_type::GROUTER_CONSUME_COUNT, curr_count,
                                 consumer_index);
             }
+            // Measure processing time
+            auto start_time = std::chrono::high_resolution_clock::now();
             f(ptr);
+            auto end_time = std::chrono::high_resolution_clock::now();
+
+            // Update throughput tracking
+            auto elapsed_ns =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(end_time -
+                                                                     start_time)
+                    .count();
+            thread_throughput_trackers_[thread_index].updateThroughputTracking(
+                elapsed_ns);
 
             {
               producer->freeBufferGeneralized(source_free_pool,
@@ -719,13 +783,15 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
   //           << ", source_free_pool: " << source_free_pool
   //           << ", consumer_index: " << consumer_index
   //           << ", numa idx: " << node->index_in_topo;
-
   auto exec_affinity = cu.set_on_scope();
-  auto pip = pipGen->getPipeline(local_target);
-  event_range<range_log_op::GROUTER_CONS_FIRE> er{m_id, pip->getGeneratorUUID(),
-                                                  pip->getGroup()};
   // if we remove that, following opens may allocate memory to wrong socket!
   std::this_thread::yield();
+
+  auto pip = pipGen->getPipeline(local_target);
+  thread_throughput_trackers_[local_target].reset();
+  event_range<range_log_op::GROUTER_CONS_FIRE> er{m_id, pip->getGeneratorUUID(),
+                                                  pip->getGroup()};
+
   void *buffer_mem = nullptr;
   if (should_allocate_queue_buffs) {
     event_range<range_log_op::GROUTER_ALLOC_QUEUE_BUFFS> er2{
@@ -735,12 +801,14 @@ void GeneralizedRouterConsumer::fire(int target_queue, int local_target,
 
   pip->open(session);
   {
-    foreachTaskDo(target_queue, source_free_pool, pip.get(), pipGen,
-                  [&](void *ptr) {
-                    event_range<range_log_op::GROUTER_CONSUME> er2{
-                        m_id, pip->getGeneratorUUID(), pip->getGroup()};
-                    pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
-                  });
+    foreachTaskDo(
+        target_queue, source_free_pool, pip.get(), pipGen,
+        [&](void *ptr) {
+          event_range<range_log_op::GROUTER_CONSUME> er2{
+              m_id, pip->getGeneratorUUID(), pip->getGroup()};
+          pip->consume((void *)(((uintptr_t)ptr) & ~uintptr_t(1)));
+        },
+        local_target);
   }
 
   pip->close();
@@ -968,6 +1036,24 @@ routing::PolicyConfigVariant GeneralizedRouter::createPolicyConfig() const {
     case routing::GeneralizedRoutingPolicyV2::
         LOCALITY_AWARE_BACKPRESSURE_AWARE: {
       routing::LocalityAwarePolicyConfig config;
+
+      // Extract affinitizers and device types from consumers
+      for (const auto &weak_consumer : consumers) {
+        auto consumer = weak_consumer.lock();
+        CHECK(consumer) << "Consumer expired during config creation";
+
+        // Access protected members (we're a friend class)
+        config.consumer_affinitizers.push_back(consumer->aff.get());
+        config.consumer_device_types.push_back(consumer->target_device);
+      }
+
+      // Validate before returning
+      config.validate();
+      return config;
+    }
+
+    case routing::GeneralizedRoutingPolicyV2::ADAPTIVE_THROUGHPUT_BASED: {
+      routing::AdaptiveThroughputBasedConfig config;
 
       // Extract affinitizers and device types from consumers
       for (const auto &weak_consumer : consumers) {

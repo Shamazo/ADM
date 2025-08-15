@@ -84,6 +84,8 @@ struct RoutingContext {
   uint64_t tuple_count;   // Total tuples processed by this router instance
   std::map<int, size_t>
       queue_depths;  // Current queue depth per consumer channel
+  std::vector<double>
+      consumer_throughput;  // Throughput (tuples/sec) per consumer
 };
 
 /**
@@ -126,13 +128,79 @@ struct LocalityAwarePolicyConfig : PolicyConfig {
   }
 };
 
+// Configuration for adaptive throughput based policy
+struct AdaptiveThroughputBasedConfig : PolicyConfig {
+  std::vector<Affinitizer*> consumer_affinitizers;
+  std::vector<DeviceType> consumer_device_types;
+
+  // Configurable parameters with defaults
+  uint64_t evaluation_batch_size = 350;
+  uint64_t monitoring_batch_size = 500;
+  double degradation_threshold = 0.2;
+  double switch_improvement_threshold = 0.1;
+  uint64_t sub_batch_size = 5;  // Record measurements every N tuples
+  double decay_factor =
+      0.99;  // Exponential decay factor (higher = slower decay)
+
+  // Constructor that loads from environment variables
+  AdaptiveThroughputBasedConfig() {
+    // Load from environment variables if available
+    if (const char* env_eval_batch =
+            std::getenv("ADAPTIVE_THROUGHPUT_EVALUATION_BATCH_SIZE")) {
+      evaluation_batch_size = std::stoull(env_eval_batch);
+    }
+    if (const char* env_mon_batch =
+            std::getenv("ADAPTIVE_THROUGHPUT_MONITORING_BATCH_SIZE")) {
+      monitoring_batch_size = std::stoull(env_mon_batch);
+    }
+    if (const char* env_deg_thresh =
+            std::getenv("ADAPTIVE_THROUGHPUT_DEGRADATION_THRESHOLD")) {
+      degradation_threshold = std::stod(env_deg_thresh);
+    }
+    if (const char* env_switch_thresh =
+            std::getenv("ADAPTIVE_THROUGHPUT_SWITCH_IMPROVEMENT_THRESHOLD")) {
+      switch_improvement_threshold = std::stod(env_switch_thresh);
+    }
+    if (const char* env_sub_batch =
+            std::getenv("ADAPTIVE_THROUGHPUT_SUB_BATCH_SIZE")) {
+      sub_batch_size = std::stoull(env_sub_batch);
+    }
+    if (const char* env_decay =
+            std::getenv("ADAPTIVE_THROUGHPUT_DECAY_FACTOR")) {
+      decay_factor = std::stod(env_decay);
+    }
+  }
+
+  void validate() const {
+    CHECK(!consumer_affinitizers.empty())
+        << "AdaptiveThroughputBasedPolicy requires consumer affinitizers";
+    CHECK_EQ(consumer_affinitizers.size(), consumer_device_types.size())
+        << "Mismatch between affinitizers and device types count";
+    CHECK_GT(evaluation_batch_size, 0)
+        << "Evaluation batch size must be positive";
+    CHECK_GT(monitoring_batch_size, 0)
+        << "Monitoring batch size must be positive";
+    CHECK_GE(degradation_threshold, 0.0)
+        << "Degradation threshold must be non-negative";
+    CHECK_LE(degradation_threshold, 1.0)
+        << "Degradation threshold must be <= 1.0";
+    CHECK_GE(switch_improvement_threshold, 0.0)
+        << "Switch improvement threshold must be non-negative";
+    CHECK_GT(sub_batch_size, 0) << "Sub-batch size must be positive";
+    CHECK_GT(decay_factor, 0.0) << "Decay factor must be positive";
+    CHECK_LE(decay_factor, 1.0) << "Decay factor must be <= 1.0";
+  }
+};
+
 /**
  * Variant-based configuration system for routing policies.
  * Type-safe alternative to std::unordered_map<std::string, std::any>
  */
 using PolicyConfigVariant =
     std::variant<std::monostate,  // No config needed (e.g., ROUND_ROBIN)
-                 LocalityAwarePolicyConfig  // LOCALITY_AWARE config
+                 LocalityAwarePolicyConfig,     // LOCALITY_AWARE config
+                 AdaptiveThroughputBasedConfig  // ADAPTIVE_THROUGHPUT_BASED
+                                                // config
                  >;
 
 /**

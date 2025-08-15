@@ -31,12 +31,84 @@
 #include <platform/threadpool/threadvector.hpp>
 #include <platform/util/datastructures/threadsafe-set.hpp>
 #include <unordered_set>
+#include <chrono>
+#include <deque>
+#include <atomic>
 
 #include "lib/operators/operators.hpp"
 #include "lib/operators/router/routing-policy.hpp"
 #include "routing-policy-v2.hpp"
 
 namespace proteus {
+
+/**
+ * @brief Tracks throughput metrics for a single consumer thread
+ * 
+ * Uses a sliding window approach to calculate throughput based on recent
+ * processing times. Thread-safe for concurrent access.
+ */
+struct ThroughputTracker {
+  static constexpr size_t WINDOW_SIZE = 8;  // Number of samples to keep
+  
+  // Circular buffer for storing processing times in nanoseconds
+  std::deque<uint64_t> processing_times;
+
+  // Running statistics
+  std::atomic<uint64_t> total_tuples{0};
+  std::atomic<uint64_t> total_time_ns{0};
+
+  void reset() {
+    processing_times.clear();
+    total_tuples.store(0, std::memory_order_relaxed);
+    total_time_ns.store(0, std::memory_order_relaxed);
+  }
+  /**
+   * Update throughput tracking with a new measurement
+   * @param elapsed_ns Time taken to process the tuple in nanoseconds
+   */
+  void updateThroughputTracking(uint64_t elapsed_ns) {
+    if (elapsed_ns < 200000) {
+      // Ignore very small processing times, pipeline not filled yet
+      return;
+    }
+
+    // Add to circular buffer
+    processing_times.push_back(elapsed_ns);
+    if (processing_times.size() > WINDOW_SIZE) {
+      // Remove oldest entry
+      uint64_t old_time = processing_times.front();
+      processing_times.pop_front();
+      
+      // Update running totals
+      total_time_ns.fetch_sub(old_time, std::memory_order_relaxed);
+    } else {
+      // total tuples in window.
+      total_tuples.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // thread_local static uint64_t log_counter = 0;
+    // log_counter++;
+    // if (log_counter % 100 == 0) {
+    //   LOG(INFO) << "ThroughputTracker: total_tuples=" << total_tuples
+    //             << ", total_time_s=" << ((double) total_time_ns) / 1e9 << " " << processing_times[0] << ", " << processing_times[1] << ", " << processing_times[2] << ", " << processing_times[3] << ", ";
+    // }
+
+    total_time_ns.fetch_add(elapsed_ns, std::memory_order_relaxed);
+  }
+  
+  /**
+   * Get current throughput in tuples per second
+   * @return Current throughput based on sliding window
+   */
+  double getThroughput() const {
+    if (total_time_ns == 0) {
+      return 0.0;
+    }
+    // Calculate throughput: tuples/second
+    double throughput = (total_tuples* 1e9 ) / (total_time_ns);
+    return throughput;
+  }
+};
 
 /**
  * @brief Primary FFI entry point for V2 routing policies
@@ -114,6 +186,9 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
   const int consumer_index;
   /// Count of rowgroups/items that this consumer has consumed
   alignas(64) std::atomic<int> consumed_count;
+  
+  /// Throughput trackers for each thread
+  std::vector<ThroughputTracker> thread_throughput_trackers_;
 
  public:
   GeneralizedRouterConsumer(std::shared_ptr<GeneralizedRouter> producer,
@@ -135,6 +210,17 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
   [[nodiscard]] bool isPacked() const override;
   [[nodiscard]] proteus::traits::HomReplication getHomReplication()
       const override;
+  
+  /**
+   * @brief Get aggregated throughput information for this consumer
+   * 
+   * Returns the average throughput across all threads of this consumer.
+   * Used by routing policies to make informed decisions based on actual
+   * processing performance.
+   * 
+   * @return Average throughput in tuples per second
+   */
+  double getThroughputInfo() const;
 
  protected:
   void produce_(OlapParallelContext *context) override;
@@ -145,7 +231,7 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
                     bool should_allocate_free_pool_buffs);
   virtual void foreachTaskDo(int target, int source_free_pool, Pipeline *pip,
                              PipelineGen *pipGen,
-                             std::function<void(void *)> f);
+                             std::function<void(void *)> f, int thread_index);
 
   friend class GeneralizedRouter;
 };
@@ -153,8 +239,9 @@ class GeneralizedRouterConsumer final : public experimental::UnaryOperator {
 class GeneralizedRouter final : public experimental::UnaryOperator {
   // weak_ptr because consumers are parent operators who have an owning
   // shared_ptr to this GeneralizedRouter
+public:
   std::vector<std::weak_ptr<GeneralizedRouterConsumer>> consumers;
-
+private:
   threadvector firers;
 
   const size_t slack;

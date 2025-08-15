@@ -42,6 +42,7 @@ set(olap_cxx
   lib/operators/router/policies/locality-aware-policy.cpp
   lib/operators/router/policies/locality-aware-random-cons-retry.cpp
   lib/operators/router/policies/locality-aware-backpressure-aware.cpp
+  lib/operators/router/policies/locality-aware-throughput-based.cpp
   lib/operators/agg-t.cpp
   lib/operators/hash-group-by-chained.cpp
   lib/operators/hash-join-chained.cpp
