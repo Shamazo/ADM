@@ -104,6 +104,7 @@ add_executable(taxi-adm
   taxi-main.cpp
   prepared_queries/taxi-q1.cpp
   prepared_queries/taxi-q2.cpp
+  prepared_queries/taxi-q3.cpp
   util.cpp
   prepared_queries/prepared-scans.cpp
   prepared_queries/prepared-scan-sum-micro.cpp

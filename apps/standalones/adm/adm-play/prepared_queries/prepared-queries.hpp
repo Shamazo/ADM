@@ -54,13 +54,11 @@ PreparedStatement scan_sum_micro_pushdown(proteus::QueryShaper &morph,
  * @param throughput_sample_size number of samples to use in the throughput
  * policy
  */
-PreparedStatement scan_sum_micro_adaptive(proteus::QueryShaper &morph,
-                                          double selectivity,
-                                          DegreeOfParallelism pushdown_dop,
-                                          int scan_slack,
-                                          proteus::routing::GeneralizedRoutingPolicyV2 policy,
-                                          uint64_t throughput_sample_size = 500,
-                                          uint32_t skip_samples = 0);
+PreparedStatement scan_sum_micro_adaptive(
+    proteus::QueryShaper &morph, double selectivity,
+    DegreeOfParallelism pushdown_dop, int scan_slack,
+    proteus::routing::GeneralizedRoutingPolicyV2 policy,
+    uint64_t throughput_sample_size = 500, uint32_t skip_samples = 0);
 
 PreparedStatement scan_sum_micro_grouter_staging(
     proteus::QueryShaper &morph, double selectivity,
@@ -86,11 +84,10 @@ PreparedStatement scan_sum_micro_grouter_direct(
     DegreeOfParallelism pushdown_dop, int scan_slack,
     proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
-PreparedStatement scan_sum_micro_adaptivev2(proteus::QueryShaper &morph,
-                                            double selectivity,
-                                            DegreeOfParallelism pushdown_dop,
-                                            int scan_slack,
-                                            proteus::routing::GeneralizedRoutingPolicyV2 policy);
+PreparedStatement scan_sum_micro_adaptivev2(
+    proteus::QueryShaper &morph, double selectivity,
+    DegreeOfParallelism pushdown_dop, int scan_slack,
+    proteus::routing::GeneralizedRoutingPolicyV2 policy);
 
 /**
  * The same query as scan_sum_micro_pushdown, but with no pushdown. The filter
@@ -137,7 +134,7 @@ struct QueryArgs {
   bool do_filter_pushdown = false;
   bool do_bloom_filter_build = false;
   bool do_bloom_filter_pushdown = false;
-  size_t bloom_filter_size = 1_M;     // in bits
+  size_t bloom_filter_size = 256_K;  // in bits
   bool use_hyper_threads = false;
   inline void check() {
     CHECK_NE(morph, nullptr);
@@ -179,6 +176,9 @@ PreparedStatement prepare42_adaptive_shared_ht(QueryArgs);
 PreparedStatement prepare43_adaptive(QueryArgs);
 PreparedStatement prepare43_adaptive_shared_ht(QueryArgs);
 
+expression_t time_delta_seconds(const expression_t &lhs,
+                                const expression_t &rhs);
+
 PreparedStatement prepare_taxi_1_adaptive(QueryArgs &, double trip_distance_min,
                                           double trip_distance_max);
 inline PreparedStatement prepare_taxi_11_adaptive(QueryArgs args) {
@@ -195,7 +195,7 @@ inline PreparedStatement prepare_taxi_13_adaptive(QueryArgs args) {
 }
 inline PreparedStatement prepare_taxi_14_adaptive(QueryArgs args) {
   args.morph->setQueryName("taxi_q14");
-  return prepare_taxi_1_adaptive(args, 0.0, 1.74);
+  return prepare_taxi_1_adaptive(args, 0.0, 1.16);
 }
 
 PreparedStatement prepare_taxi_2_adaptive(QueryArgs &, double fare_amount_min,
@@ -214,7 +214,26 @@ inline PreparedStatement prepare_taxi_23_adaptive(QueryArgs args) {
 }
 inline PreparedStatement prepare_taxi_24_adaptive(QueryArgs args) {
   args.morph->setQueryName("taxi_q24");
-  return prepare_taxi_2_adaptive(args, 0.0, 9.3);
+  return prepare_taxi_2_adaptive(args, 0.0, 7.5);
+}
+
+enum class TaxiQueryType { Q31 = 31, Q32 = 32, Q33 = 33 };
+
+PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args, TaxiQueryType);
+
+inline PreparedStatement prepare_taxi_31_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q31");
+  return prepare_taxi_3_adaptive(args, TaxiQueryType::Q31);
+}
+
+inline PreparedStatement prepare_taxi_32_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q32");
+  return prepare_taxi_3_adaptive(args, TaxiQueryType::Q32);
+}
+
+inline PreparedStatement prepare_taxi_33_adaptive(QueryArgs args) {
+  args.morph->setQueryName("taxi_q33");
+  return prepare_taxi_3_adaptive(args, TaxiQueryType::Q33);
 }
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

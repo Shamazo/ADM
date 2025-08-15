@@ -37,14 +37,18 @@
 std::vector<std::pair<decltype(&prepare11_adaptive), std::string>>
 grouter_ssb_queries() {
   return {
-    {prepare_taxi_11_adaptive, "taxi_Q1.1"},
-          {prepare_taxi_12_adaptive, "taxi_Q1.2"},
-          {prepare_taxi_13_adaptive, "taxi_Q1.3"},
-          {prepare_taxi_14_adaptive, "taxi_Q1.4"},
-          {prepare_taxi_21_adaptive, "taxi_Q2.1"},
-          {prepare_taxi_22_adaptive, "taxi_Q2.2"},
-          {prepare_taxi_23_adaptive, "taxi_Q2.3"},
-          {prepare_taxi_24_adaptive, "taxi_Q2.4"}};
+      {prepare_taxi_31_adaptive, "taxi_Q3.1"},
+      {prepare_taxi_32_adaptive, "taxi_Q3.2"},
+      {prepare_taxi_33_adaptive, "taxi_Q3.3"},
+      {prepare_taxi_11_adaptive, "taxi_Q1.1"},
+      {prepare_taxi_12_adaptive, "taxi_Q1.2"},
+      //       {prepare_taxi_13_adaptive, "taxi_Q1.3"},
+      {prepare_taxi_14_adaptive, "taxi_Q1.4"},  // T1.3 in paper
+      {prepare_taxi_21_adaptive, "taxi_Q2.1"},
+      //       // {prepare_taxi_22_adaptive, "taxi_Q2.2"},
+      {prepare_taxi_23_adaptive, "taxi_Q2.3"},  // T2.2 in paper
+      {prepare_taxi_24_adaptive, "taxi_Q2.4"}   // T2.3 in paper
+  };
 }
 
 struct TaxiAdaptiveArgs {
@@ -129,22 +133,23 @@ std::string bench_adaptive_taxi(TaxiAdaptiveArgs args) {
       auto bench_res =
           benchmark_query(query_name, prep_query, args.num_iterations);
       for (auto& query_time : bench_res.per_query_times) {
-        result_string
-            << bench_res.label << "," << paths << "," << md_dirs.size() << ","
-            << query_time.count() << "," << std::boolalpha
-            << args.query_args.use_hyper_threads << ","
-            << (args.query_args.policy ==
-                        proteus::routing::GeneralizedRoutingPolicyV2::
-                            THROUGHPUT_BASED
-                    ? 0  // Sampling parameters removed in V2
-                    : 0)
-            << ","
-            << (args.query_args.policy ==
-                        proteus::routing::GeneralizedRoutingPolicyV2::
-                            THROUGHPUT_BASED
-                    ? 0  // Sampling parameters removed in V2
-                    : 0)
-            << "," << get_current_date_str() << "," << args << std::endl;
+        result_string << bench_res.label << "," << paths << ","
+                      << md_dirs.size() << "," << query_time.count() << ","
+                      << std::boolalpha << args.query_args.use_hyper_threads
+                      << ","
+                      << (args.query_args.policy ==
+                                  proteus::routing::GeneralizedRoutingPolicyV2::
+                                      THROUGHPUT_BASED
+                              ? 0  // Sampling parameters removed in V2
+                              : 0)
+                      << ","
+                      << (args.query_args.policy ==
+                                  proteus::routing::GeneralizedRoutingPolicyV2::
+                                      THROUGHPUT_BASED
+                              ? 0  // Sampling parameters removed in V2
+                              : 0)
+                      << "," << get_current_date_str() << "," << args
+                      << std::endl;
       }
       LOG(INFO) << bench_res.label
                 << " average time: " << bench_res.average_query_time.count();
@@ -153,5 +158,104 @@ std::string bench_adaptive_taxi(TaxiAdaptiveArgs args) {
 
   return result_string.str();
 }
+
+std::string bench_adaptive_taxi_random_sequence(TaxiAdaptiveArgs args) {
+  std::stringstream result_string;
+  result_string << "query,"
+                << "paths,"
+                << "num_drives,"
+                << "time_ms,"
+                << "using_hyperthreading,"
+                << "samples,"
+                << "skip_samples,"
+                << "date," << args.header() << std::endl;
+
+  CHECK(!args.compressed) << "todo";
+  const auto all_md_dirs = get_taxi_input_dirs_socket_one(args.server_number);
+
+  std::vector<PreparedStatement> statements;
+  statements.reserve(grouter_ssb_queries().size());
+
+  const int num_queries_to_execute = 100;
+  std::vector<int> random_query_idx(num_queries_to_execute);
+  std::random_device rd;
+  std::mt19937 gen(42);  // Seed with a fixed value for reproducibility
+  std::uniform_int_distribution<> dis(
+      0, grouter_ssb_queries().size() - 1);  // Range of random values
+  for (int& value : random_query_idx) {
+    value = dis(gen);
+  }
+
+  /// important, because the relations are all the same from the point of
+  /// view of the catalog we need to drop the catalog to ensure we use the
+  /// right plugin instance for each configurations of md files
+  CatalogParser::getInstance().clear();
+
+  std::string paths = "";
+
+  if (args.query_args.do_bloom_filter_build) {
+    paths += "_bf_build";
+  }
+  if (args.query_args.do_bloom_filter_pushdown) {
+    paths += "_bf_pushdown";
+  }
+  if (args.query_args.do_filter_pushdown) {
+    paths += "_filter_pushdown";
+  }
+  if (args.query_args.do_direct) {
+    paths += "_direct";
+  }
+  if (args.query_args.do_staging) {
+    paths += "_staging";
+  }
+
+  for (auto [query, query_name] : grouter_ssb_queries()) {
+    for (const auto& md_dirs : all_md_dirs) {
+      // Shaper is only used for the plan and to provide the SSB stats
+      // no slacks or affinitizers are currently used from the shaper
+      std::shared_ptr<proteus::CPUOnlyNVMeMorsel> shaper =
+          std::make_shared<proteus::CPUOnlyNVMeMorsel>(
+              md_dirs, "inputs/taxi", taxi::Query::getStats(), true, 4, 24, 16);
+
+      QueryArgs taxi_args = args.query_args;
+      taxi_args.morph = shaper;
+      taxi_args.check();
+      statements.emplace_back(query(taxi_args));
+    }
+  }
+  LOG(INFO) << "Prepared " << statements.size()
+            << " queries for random sequence execution. Will execute "
+            << num_queries_to_execute;
+  std::string input;
+  std::cout << "Blocking on input to start random sequence of queries. "
+            << "Press Enter to continue..." << std::endl;
+  std::getline(std::cin, input);
+
+  LOG(INFO) << "starting random sequence of queries";
+  std::stringstream query_string;
+  std::vector<std::chrono::milliseconds> times;
+  for (int idx : random_query_idx) {
+    auto& query = statements[idx];
+    time_block t{[&](auto tms) { times.emplace_back(tms); }};
+    LOG(INFO) << "Executing query: " << grouter_ssb_queries()[idx].second;
+    query_string << grouter_ssb_queries()[idx].second << ",";
+    query.execute();
+  }
+  LOG(INFO) << "ended random sequence of queries";
+  query_string << std::endl;
+  std::chrono::milliseconds total_time{0};
+  for (auto& time : times) {
+    result_string << time.count() << ",";
+    query_string << time.count() << ",";
+    total_time += time;
+  }
+  LOG(INFO) << "Random sequence of queries: \n" << query_string.str();
+  LOG(INFO) << "Total time for random sequence: " << total_time.count()
+            << " ms";
+  return result_string.str();
+
+}
+
+
 
 #endif  // TAXI_BENCHMARKS_HPP
