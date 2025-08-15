@@ -190,7 +190,7 @@ size_t toProteusTypeSize(const std::string& proteus_type) {
   } else if (proteus_type == "int") {
     return 4;
   } else if (proteus_type == "int64") {
-    return 4;
+    return 8;
   } else if (proteus_type == "datetime") {
     return 8;
   } else {
