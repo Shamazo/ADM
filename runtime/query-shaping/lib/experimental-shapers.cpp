@@ -211,6 +211,16 @@ std::unique_ptr<Affinitizer> CPUOnlySingleServer::getAffinitizer() {
   return std::make_unique<CpuNumaNodeAffinitizer>();
 }
 
+std::unique_ptr<Affinitizer> CPUOnlySingleServerSingleSocket::getAffinitizer() {
+  LOG(WARNING) << "Using CPUOnlySingleServerSingleSocket, using socket 0 only";
+  auto& topo = topology::getInstance();
+  std::vector<uint32_t> socket_0_ids;
+  for (const auto& node : topo.getCpuNumaNodesByPackageId(0)) {
+    socket_0_ids.push_back(node.get().id);
+  }
+  return std::make_unique<SpecificCpuNumaNodeAffinitizer>(socket_0_ids);
+}
+
 [[nodiscard]] RelBuilder GPUOnlyHalfFile::scan(
     const std::string& relName, std::initializer_list<std::string> relAttrs) {
   if (relName != "lineorder") {

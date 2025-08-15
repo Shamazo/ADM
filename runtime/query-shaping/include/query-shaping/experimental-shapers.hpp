@@ -141,6 +141,23 @@ class CPUOnlySingleServer : public proteus::InputPrefixQueryShaper {
   std::unique_ptr<Affinitizer> getAffinitizer() override;
 };
 
+class CPUOnlySingleServerSingleSocket : public proteus::CPUOnlySingleServer {
+  using proteus::CPUOnlySingleServer::CPUOnlySingleServer;
+
+ public:
+  DegreeOfParallelism getDOP() override {
+    auto &topo = topology::getInstance();
+    size_t numCores = 0;
+    for (const auto &n : topo.getCpuNumaNodesByPackageId(0)) {
+      numCores += n.get().local_cores.size();
+    }
+    return DegreeOfParallelism{numCores};
+  }
+
+ protected:
+  std::unique_ptr<Affinitizer> getAffinitizer() override;
+};
+
 class CPUOnlySingleServerMorsel : public CPUOnlySingleServer {
   using CPUOnlySingleServer::CPUOnlySingleServer;
 
