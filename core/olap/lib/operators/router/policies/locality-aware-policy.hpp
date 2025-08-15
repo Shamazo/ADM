@@ -78,48 +78,64 @@ class LocalityAwarePolicy : public RoutingPolicyV2 {
   // Statistics tracking - shared by all LocalityAware policies
   struct RoutingStats {
     // all hardcoded to 3 consumers and 8 NUMA nodes + 1 GPU
-    std::array<std::atomic<uint64_t>, 3> initial_consumer_attempts = {0, 0, 0};
-    std::array<std::atomic<uint64_t>, 3> successful_routes = {0, 0, 0};
-    std::array<std::atomic<uint64_t>, 27> queue_failures = {0};
-    std::array<std::atomic<uint64_t>, 3> consumer_selected_on_retry = {0, 0, 0};
-    std::atomic<uint64_t> total_calls = 0;
-    std::atomic<uint64_t> last_log_call = 0;
+    std::array<uint64_t, 3> initial_consumer_attempts = {0, 0, 0};
+    std::array<uint64_t, 3> successful_routes = {0, 0, 0};
+    std::array<uint64_t, 27> queue_failures = {0};
+    std::array<uint64_t, 27> queue_successes = {0};
+    std::array<uint64_t, 3> consumer_selected_on_retry = {0, 0, 0};
+    uint64_t total_calls = 0;
+    uint64_t last_log_call = 0;
 
     void reset() {
-      for (auto& v : initial_consumer_attempts) v.store(0);
-      for (auto& v : successful_routes) v.store(0);
-      for (auto& v : queue_failures) v.store(0);
-      for (auto& v : consumer_selected_on_retry) v.store(0);
-      total_calls.store(0);
-      last_log_call.store(0);
+      for (auto& v : initial_consumer_attempts) v = 0;
+      for (auto& v : successful_routes) v = 0;
+      for (auto& v : queue_failures) v = 0;
+      for (auto& v : queue_successes) v = 0;
+      for (auto& v : consumer_selected_on_retry) v = 0;
+      total_calls = 0;
+      last_log_call = 0;
     }
 
     void log_stats() const {
       LOG(INFO) << "=== Routing Stats ===";
-      LOG(INFO) << "Total routing calls: " << total_calls.load();
-      LOG(INFO) << "Initial attempts - Direct: "
-                << initial_consumer_attempts[0].load()
-                << ", Staging: " << initial_consumer_attempts[1].load()
-                << ", Pushdown: " << initial_consumer_attempts[2].load();
-      LOG(INFO) << "Successful routes - Direct: " << successful_routes[0].load()
-                << ", Staging: " << successful_routes[1].load()
-                << ", Pushdown: " << successful_routes[2].load();
+      LOG(INFO) << "Total routing calls: " << total_calls;
+      LOG(INFO) << "Initial attempts - Direct: " << initial_consumer_attempts[0]
+                << ", Staging: " << initial_consumer_attempts[1]
+                << ", Pushdown: " << initial_consumer_attempts[2];
+      LOG(INFO) << "Successful routes - Direct: " << successful_routes[0]
+                << ", Staging: " << successful_routes[1]
+                << ", Pushdown: " << successful_routes[2];
 
       LOG(INFO) << "Queue failures:";
-      LOG(INFO) << "  Direct(0-3): " << queue_failures[0].load() << ","
-                << queue_failures[1].load() << "," << queue_failures[2].load()
-                << "," << queue_failures[3].load();
-      LOG(INFO) << "  Staging(9-12): " << queue_failures[9].load() << ","
-                << queue_failures[10].load() << "," << queue_failures[11].load()
-                << "," << queue_failures[12].load();
-      LOG(INFO) << "  Pushdown(22-25): " << queue_failures[22].load() << ","
-                << queue_failures[23].load() << "," << queue_failures[24].load()
-                << "," << queue_failures[25].load();
+      LOG(INFO) << "  Direct(0-7): " << queue_failures[0] << ","
+                << queue_failures[1] << "," << queue_failures[2] << ","
+                << queue_failures[3] << "," << queue_failures[4] << ","
+                << queue_failures[5] << "," << queue_failures[6] << ","
+                << queue_failures[7];
+      LOG(INFO) << "  Staging(9-12): " << queue_failures[9] << ","
+                << queue_failures[10] << "," << queue_failures[11] << ","
+                << queue_failures[12] << "," << queue_failures[13];
+      LOG(INFO) << "  Pushdown(22-25): " << queue_failures[22] << ","
+                << queue_failures[23] << "," << queue_failures[24] << ","
+                << queue_failures[25] << "," << queue_failures[26];
+
+      LOG(INFO) << "Queue successes:";
+      LOG(INFO) << "  Direct(0-7): " << queue_successes[0] << ","
+                << queue_successes[1] << "," << queue_successes[2] << ","
+                << queue_successes[3] << "," << queue_successes[4] << ","
+                << queue_successes[5] << "," << queue_successes[6] << ","
+                << queue_successes[7];
+      LOG(INFO) << "  Staging(9-13): " << queue_successes[9] << ","
+                << queue_successes[10] << "," << queue_successes[11] << ","
+                << queue_successes[12] << "," << queue_successes[13];
+      LOG(INFO) << "  Pushdown(22-25): " << queue_successes[22] << ","
+                << queue_successes[23] << "," << queue_successes[24] << ","
+                << queue_successes[25] << "," << queue_successes[26];
 
       LOG(INFO) << "Retries selected - Direct: "
-                << consumer_selected_on_retry[0].load()
-                << ", Staging: " << consumer_selected_on_retry[1].load()
-                << ", Pushdown: " << consumer_selected_on_retry[2].load();
+                << consumer_selected_on_retry[0]
+                << ", Staging: " << consumer_selected_on_retry[1]
+                << ", Pushdown: " << consumer_selected_on_retry[2];
     }
   };
 
@@ -134,7 +150,7 @@ class LocalityAwarePolicy : public RoutingPolicyV2 {
   std::vector<std::vector<size_t>>
       consumer_cu_domains_;     // Accessible CUs per consumer
   size_t system_cu_count_ = 0;  // Total CUs in system
-  mutable std::atomic<uint64_t> random_state_{0};
+  mutable uint64_t random_state_{0};
   bool initialized_ = false;    // Track initialization state
   mutable RoutingStats stats_;  // Statistics tracking
   // LocalityAwareState* state_ptr =

@@ -79,7 +79,8 @@ class LocalityAwareBackpressureAwarePolicy : public LocalityAwarePolicy {
     if (retry_count == 0) {
       // PHASE 1: Random consumer selection for initial load balancing
 
-      uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val = random_state_;
+      random_state_ += 1;
       rand_val = hash_combine(rand_val);
       target_consumer = rand_val % consumer_affs_.size();
 
@@ -148,14 +149,14 @@ class LocalityAwareBackpressureAwarePolicy : public LocalityAwarePolicy {
         LOG(WARNING) << "All consumers congested, falling back to random "
                         "selection on retry: "
                      << retry_count;
-        uint64_t rand_val =
-            random_state_.fetch_add(1, std::memory_order_relaxed);
+        uint64_t rand_val = random_state_;
+        random_state_ += 1;
         rand_val = hash_combine(rand_val);
         target_consumer = rand_val % consumer_affs_.size();
       } else {
         // Select randomly from non-congested consumers
-        uint64_t rand_val =
-            random_state_.fetch_add(1, std::memory_order_relaxed);
+        uint64_t rand_val = random_state_;
+        random_state_ += 1;
         rand_val = hash_combine(rand_val);
         target_consumer =
             available_consumers[rand_val % available_consumers.size()];
@@ -170,8 +171,8 @@ class LocalityAwareBackpressureAwarePolicy : public LocalityAwarePolicy {
       CHECK(!cu_domain.empty())
           << "Consumer " << target_consumer << " has no accessible CUs";
 
-      uint64_t rand_val2 =
-          random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val2 = random_state_;
+      random_state_ += 1;
       rand_val2 = hash_combine(rand_val2);
       size_t random_idx = rand_val2 % cu_domain.size();
       absolute_cu_idx = cu_domain[random_idx];

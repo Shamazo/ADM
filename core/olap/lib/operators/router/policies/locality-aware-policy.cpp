@@ -61,6 +61,7 @@ void LocalityAwarePolicy::initializeState(void* state) {
 void LocalityAwarePolicy::cleanupState(void* state) {
   LOG(INFO) << "=== Final Routing Stats for Query ===";
   stats_.log_stats();
+  stats_.reset();
 }
 
 LocalityAwarePolicy::LocalityAwarePolicy(const PolicyConfigVariant& config)
@@ -129,7 +130,8 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
     // PHASE 1: Locality-aware routing (first attempt)
 
     // Random consumer selection for load balancing
-    uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+    uint64_t rand_val = random_state_;
+    random_state_ += 1;
     rand_val = hash_combine(rand_val);  // Simple hash for better distribution
     target_consumer = rand_val % consumer_affs_.size();
 
@@ -146,11 +148,12 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
 #ifndef NDEBUG
     // Find this CU in the consumer's accessible domain
     const auto& cu_domain = consumer_cu_domains_[target_consumer];
-    auto it = std::find(cu_domain.begin(), cu_domain.end(), detected_cu_idx);
-    DCHECK_NE(it, cu_domain.end()) << "affinitizer returned a CU "
+    auto it = std::find(cu_domain.begin(), cu_domain.end(), absolute_cu_idx);
+    DCHECK(it != cu_domain.end()) << "affinitizer returned a CU "
                                       "not in the consumer's accessible domain";
 #endif
-  } else {
+    // TODO create new random round robin policy without the last case
+  } else if (retry_count == 1) {
     // PHASE 2: Random selection from consumer's accessible CUs (retry)
 
     if (!failed_channels.empty()) {
@@ -159,7 +162,8 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
       target_consumer = failed_queue / system_cu_count_;
     } else {
       // Fallback: random consumer if no failed channels info
-      uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val = random_state_;
+      random_state_ += 1;
       rand_val = hash_combine(rand_val);
       target_consumer = rand_val % consumer_affs_.size();
     }
@@ -173,7 +177,30 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
         << "Consumer " << target_consumer << " has no accessible CUs";
 
     // Random selection within consumer's domain
-    uint64_t rand_val2 = random_state_.fetch_add(1, std::memory_order_relaxed);
+    uint64_t rand_val2 = random_state_;
+    random_state_ += 1;
+    rand_val2 = hash_combine(rand_val2);
+    size_t random_idx = rand_val2 % cu_domain.size();
+    absolute_cu_idx = cu_domain[random_idx];
+  } else {
+    // PHASE 3: Random selection (retry 2+)
+    // Random consumer
+    uint64_t rand_val = random_state_;
+    random_state_ += 1;
+    rand_val = hash_combine(rand_val);
+      target_consumer = rand_val % consumer_affs_.size();
+
+    // Track retry consumer selection
+    trackRetryConsumerSelection(target_consumer);
+
+    // Get the accessible CUs for this consumer
+    const auto& cu_domain = consumer_cu_domains_[target_consumer];
+    CHECK(!cu_domain.empty())
+        << "Consumer " << target_consumer << " has no accessible CUs";
+
+    // Random selection within consumer's domain
+    uint64_t rand_val2 = random_state_;
+    random_state_ += 1;
     rand_val2 = hash_combine(rand_val2);
     size_t random_idx = rand_val2 % cu_domain.size();
     absolute_cu_idx = cu_domain[random_idx];
@@ -188,30 +215,30 @@ RoutingDecision LocalityAwarePolicy::getTargetChannel(
 }
 
 void LocalityAwarePolicy::onChannelBackPressure(int channel) {
-  stats_.queue_failures[channel].fetch_add(1);
+  stats_.queue_failures[channel] += 1;
 }
 
 void LocalityAwarePolicy::onTupleRouted(int channel, bool success) {
   if (success) {
     int consumer_idx = channel / system_cu_count_;
-    stats_.successful_routes[consumer_idx].fetch_add(1);
+    stats_.successful_routes[consumer_idx] += 1;
+    stats_.queue_successes[channel] += 1;
   }
 }
 
 void LocalityAwarePolicy::trackInitialConsumerSelection(
     size_t consumer_idx) const {
-  stats_.initial_consumer_attempts[consumer_idx].fetch_add(1);
+  stats_.initial_consumer_attempts[consumer_idx] += 1;
 }
 
 void LocalityAwarePolicy::trackRetryConsumerSelection(
     size_t consumer_idx) const {
-  stats_.consumer_selected_on_retry[consumer_idx].fetch_add(1);
+  stats_.consumer_selected_on_retry[consumer_idx] += 1;
 }
 
 void LocalityAwarePolicy::logStatsIfNeeded() const {
-  uint64_t call_count = stats_.total_calls.fetch_add(1);
-  if (call_count > 0 && call_count % 1000 == 0 &&
-      stats_.last_log_call.exchange(call_count) != call_count) {
+  stats_.total_calls += 1;
+  if (stats_.total_calls % 6000 == 0) {
     stats_.log_stats();
   }
 }

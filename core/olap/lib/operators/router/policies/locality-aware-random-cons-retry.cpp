@@ -74,7 +74,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
       // PHASE 1: Locality-aware routing (first attempt) - same as base class
 
       // Random consumer selection for load balancing
-      uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val = random_state_;
+      random_state_ += 1;
       rand_val = hash_combine(rand_val);  // Simple hash for better distribution
       target_consumer = rand_val % consumer_affs_.size();
 
@@ -91,8 +92,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
 #ifndef NDEBUG
       // Find this CU in the consumer's accessible domain
       const auto& cu_domain = consumer_cu_domains_[target_consumer];
-      auto it = std::find(cu_domain.begin(), cu_domain.end(), detected_cu_idx);
-      DCHECK_NE(it, cu_domain.end())
+      auto it = std::find(cu_domain.begin(), cu_domain.end(), absolute_cu_idx);
+      DCHECK(it != cu_domain.end())
           << "affinitizer returned a CU "
              "not in the consumer's accessible domain";
 #endif
@@ -101,7 +102,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
       // Always use random consumer, completely ignore failed_channels, but try
       // to get a local channel
 
-      uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val = random_state_;
+      random_state_ += 1;
       rand_val = hash_combine(rand_val);
       target_consumer = rand_val % consumer_affs_.size();
 
@@ -115,8 +117,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
 #ifndef NDEBUG
       // Find this CU in the consumer's accessible domain
       const auto& cu_domain = consumer_cu_domains_[target_consumer];
-      auto it = std::find(cu_domain.begin(), cu_domain.end(), detected_cu_idx);
-      DCHECK_NE(it, cu_domain.end())
+      auto it = std::find(cu_domain.begin(), cu_domain.end(), absolute_cu_idx);
+      DCHECK(it != cu_domain.end())
           << "affinitizer returned a CU "
              "not in the consumer's accessible domain";
 #endif
@@ -125,7 +127,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
       // Always use random consumer, completely ignore failed_channels, use any
       // NUMA node
 
-      uint64_t rand_val = random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val = random_state_;
+      random_state_ += 1;
       rand_val = hash_combine(rand_val);
       target_consumer = rand_val % consumer_affs_.size();
 
@@ -138,8 +141,8 @@ class LocalityAwareRetryConsPolicy : public LocalityAwarePolicy {
           << "Consumer " << target_consumer << " has no accessible CUs";
 
       // Random selection within consumer's domain
-      uint64_t rand_val2 =
-          random_state_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t rand_val2 = random_state_;
+      random_state_ += 1;
       rand_val2 = hash_combine(rand_val2);
       size_t random_idx = rand_val2 % cu_domain.size();
       absolute_cu_idx = cu_domain[random_idx];

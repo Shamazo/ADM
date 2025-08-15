@@ -269,6 +269,8 @@ void HashRearrange::consume(OlapParallelContext *context,
   llvm::Metadata *Args[] = {n3};
   MDNode *n = MDNode::get(llvmContext, Args);
 
+  // uncomment this and the line adding the metadata to the load to enable
+  // non-temporal stores for packing
   //  MDNode *ntemp = MDNode::get(llvmContext,
   //  {llvm::ValueAsMetadata::get(context->createInt32(1))}); //awful
   //  performance
@@ -295,6 +297,8 @@ void HashRearrange::consume(OlapParallelContext *context,
     auto ld = dyn_cast<llvm::LoadInst>(el);
     assert(ld);
     ld->setMetadata(LLVMContext::MD_alias_scope, n);
+    // for non-temporal stores
+    // ld->setMetadata("nontemporal", ntemp);
 
     auto s = Builder->CreateStore(el, el_ptr);
     //    s->setMetadata(LLVMContext::MD_noalias, n);
