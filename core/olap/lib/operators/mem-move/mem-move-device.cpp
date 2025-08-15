@@ -361,6 +361,11 @@ void MemMoveDevice::produce_(OlapParallelContext *context) {
 
   auto pg =
       Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
+
+  if (dynamic_cast<NvmePlugin *>(pg.get()) != nullptr) {
+    nvme_plugin_ptr = std::dynamic_pointer_cast<NvmePlugin>(pg);
+  }
+
   auto oidType = pg->getOIDType()->getLLVMType(llvmContext);
 
   std::vector<llvm::Type *> tr_types;
@@ -707,10 +712,8 @@ void MemMoveDevice::open(Pipeline *pip) {
 #endif
   mmc->slack = slack;
   mmc->data_buffs = MemoryManager::mallocPinned(data_size * slack);
-  std::shared_ptr<Plugin> pg =
-      Catalog::getInstance().getPlugin(wantedFields[0]->getRelationName());
-  if (dynamic_cast<NvmePlugin *>(pg.get())) {
-    mmc->nvme_plugin = dynamic_cast<NvmePlugin *>(pg.get());
+  if (nvme_plugin_ptr.get() != nullptr) {
+    mmc->nvme_plugin = nvme_plugin_ptr.get();
     // if this a mem-move NVMe->CPU or nvme->GPU with staging in CPU, we need an
     // io_uring
     if (to_cpu | std::all_of(mmc->do_transfer.begin(), mmc->do_transfer.end(),

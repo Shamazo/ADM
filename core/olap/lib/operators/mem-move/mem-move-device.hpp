@@ -46,6 +46,7 @@ struct buff_pair {
 
 class MemMoveDevice : public experimental::UnaryOperator {
  public:
+  std::shared_ptr<NvmePlugin> nvme_plugin_ptr = nullptr;
   struct alignas(64) workunit {
     void *data;
     cudaEvent_t event;
@@ -85,7 +86,7 @@ class MemMoveDevice : public experimental::UnaryOperator {
     size_t cnt = 0;
     // The pinned data backing the workunits
     void *data_buffs;
-    std::unique_ptr<proteus::storage::IoUringThreadUnsafe> io_uring;
+    std::unique_ptr<proteus::storage::IoUringThreadUnsafe> io_uring = nullptr;
     NvmePlugin *nvme_plugin;  // TODO something neater
     std::vector<bool> do_transfer;
     uuids::uuid id;
