@@ -104,6 +104,15 @@ taxi::Query::getStats() {
                   "inputs/taxi/catalog.json exist and is it valid?";
   }
   // sf is not meaningful for taxi, but the shapers currently expect it
-  return {{"sf", [](auto&) { return 1.0; }},
-          {"yellow_tripdata", [row_hint](auto&) { return row_hint.value(); }}};
+  return {
+      {"sf", [](auto&) { return 1.0; }},
+      {
+          "yellow_tripdata",
+          [row_hint](auto&) { return row_hint.value(); },
+      },
+      {
+          "zone_lookup",
+          [](auto&) { return 265; },
+      },
+  };
 }

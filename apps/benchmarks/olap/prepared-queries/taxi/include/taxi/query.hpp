@@ -49,10 +49,10 @@ class Query {
     morph.setQueryName("taxi_q13");
     return prepare1(morph, 0.0, 0.69);
   }
-  // approx 50% selectivity on trip_distance
+  // approx 30% selectivity on trip_distance
   static PreparedStatement prepare14(proteus::QueryShaper &morph) {
     morph.setQueryName("taxi_q14");
-    return prepare1(morph, 0.0, 1.74);
+    return prepare1(morph, 0.0, 1.16);
   }
 
   static PreparedStatement prepare2(proteus::QueryShaper &morph,
@@ -73,10 +73,10 @@ class Query {
     morph.setQueryName("taxi_q23");
     return prepare2(morph, 0.0, 5.0);
   }
-  // approx 50% selectivity on fare_amount
+  // approx 35% selectivity on fare_amount
   static PreparedStatement prepare24(proteus::QueryShaper &morph) {
     morph.setQueryName("taxi_q24");
-    return prepare2(morph, 0.0, 9.3);
+    return prepare2(morph, 0.0, 7.5);
   }
 
   static std::map<std::string,
