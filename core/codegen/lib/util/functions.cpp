@@ -270,6 +270,12 @@ size_t hashStringC(char *toHash, size_t start, size_t end) {
   return result;
 }
 
+size_t hashStringObject(StringObject toHash) {
+  std::hash<std::string> hasher;
+  size_t result = hasher(toHash.start);
+  return result;
+}
+
 size_t hashString(string toHash) {
   std::hash<string> hasher;
   size_t result = hasher(toHash);
