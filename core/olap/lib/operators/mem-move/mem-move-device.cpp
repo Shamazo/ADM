@@ -204,10 +204,11 @@ buff_pair MemMoveDevice::MemMoveConf::push(proteus::managed_ptr src,
       return buff_pair::not_moved(std::move(src));  // block in correct device
     }
 
+    // non-null buff_numa means the buffer is in CPU memory
     const auto *buff_numa =
         topology::getInstance().getCpuNumaNodeAddressed(src.get());
     const auto &this_thread_cpu = affinity::get();
-    if (buff_numa->package_id == this_thread_cpu.package_id) {
+    if (buff_numa && buff_numa->package_id == this_thread_cpu.package_id) {
       // block in memory of the same CPU socket/package
       return buff_pair::not_moved(std::move(src));
     }
@@ -256,10 +257,12 @@ std::vector<buff_pair> MemMoveDevice::MemMoveConf::batch_push_nvme_to_gpu(
     // in this loop we do IO and set up buffers
     DCHECK(do_transfer[i]);
     DCHECK(page_io_info.is_compressed);
+    // LOG(INFO) << "Reading compressed block of size " << *page_io_info.size
+    //           << " from fd " << page_io_info.fd << " offset "
+    //           << *page_io_info.offset << " into GPU " << target_device;
     auto decomp_buff = BlockManager::h_get_buffer(target_device);
-    void *comp_buff = nullptr;
-    cudaMalloc(&comp_buff, *page_io_info.size);
-    //    DCHECK_EQ(((uintptr_t)comp_buff) % 4096, 0);
+    void *comp_buff = wu->compressed_buffers->at(0)[i];
+    DCHECK_EQ(((uintptr_t)comp_buff) % 4096, 0);
 
     auto decomp_span = std::span<char>(static_cast<char *>(decomp_buff.get()),
                                        BlockManager::block_size);
@@ -268,12 +271,22 @@ std::vector<buff_pair> MemMoveDevice::MemMoveConf::batch_push_nvme_to_gpu(
     block_compressed_buffers.emplace_back(comp_span);
     block_decompressed_buffers.emplace_back(decomp_span);
     block_chunk_sizes.emplace_back(page_io_info.chunk_sizes);
-    to_cuda_free.emplace_back(comp_buff);
     ssize_t bytes_read =
         cuFileRead(page_io_info.cufile_handle, comp_buff, *page_io_info.size,
                    *page_io_info.offset, 0);
 
-    CHECK_GT(bytes_read, 0) << "cuFileRead failed with: " << bytes_read;
+    std::string error_message = "Failed to cuFileRead: ";
+    if (bytes_read == -1) {
+      error_message += std::string(strerror(errno));
+    }
+    if (bytes_read < -1) {
+      error_message +=
+          std::string(cufileop_status_error(CUfileOpError(-bytes_read)));
+    }
+
+    CHECK_GT(bytes_read, 0)
+        << "cuFileRead failed with: " << bytes_read << "with " << error_message
+        << " **page_io_info.size.offset " << *page_io_info.size;
     buff_pairs.emplace_back(buff_pair::not_moved(std::move(decomp_buff)));
   }
 
@@ -284,9 +297,6 @@ std::vector<buff_pair> MemMoveDevice::MemMoveConf::batch_push_nvme_to_gpu(
         block_chunk_sizes, block_compressed_buffers, block_decompressed_buffers,
         wu->cufile_strm);
     CHECK_GE(res, 0) << "batch decompression failed";
-    for (auto ptr : to_cuda_free) {
-      gpu_run(cudaFreeAsync(ptr, wu->cufile_strm));
-    }
   }
   return buff_pairs;
 }
@@ -736,11 +746,23 @@ void MemMoveDevice::open(Pipeline *pip) {
     mmc->idle.push(wu + i);
 
     if (!to_cpu) {
+      wu[i].compressed_buffers = new std::vector<std::vector<void *>>{};
+      wu[i].compressed_buffers->reserve(topology::getInstance().getGpuCount());
+
       wu[i].decompressors = new std::vector<GpuDecompressor>{};
       wu[i].decompressors->reserve(topology::getInstance().getGpuCount());
+
       for (int j = 0; j < topology::getInstance().getGpuCount(); j++) {
-        wu[i].decompressors->emplace_back(16_K, wantedFields.size(), 2_M / 16_K,
-                                          j);
+        wu[i].decompressors->emplace_back(64_K, wantedFields.size(), 2_M / 16_K,
+                                          CompressionAlgorithm::LZ4, j);
+
+        wu[i].compressed_buffers->emplace_back();
+        for (int k = 0; k < wantedFields.size(); k++) {
+          wu[i].compressed_buffers->back().push_back(nullptr);
+          // compressed blocks can be slightly larger than standard 2MiB block
+          // size if it was uncompressible
+          cudaMalloc(&(wu[i].compressed_buffers->back().back()), 4_M);
+        }
       }
       //      CUfileError_t status = cuFileStreamRegister(
       //          wu[i].cufile_strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
@@ -817,6 +839,11 @@ void MemMoveDevice::close(Pipeline *pip) {
       //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
       //          << "failed to cuFileStreamDeregister status: "
       //          << cufileop_status_error(status.err);
+      for (auto device_buffs : *wu->compressed_buffers) {
+        for (void *buff : device_buffs) {
+          cudaFree(buff);
+        }
+      }
       delete wu->decompressors;
     }
     MemoryManager::freePinned(wu->bytes_read);
@@ -886,7 +913,6 @@ bool MemMoveDevice::MemMoveConf::getPropagated(MemMoveDevice::workunit **ret) {
     event_range<range_log_op::MEMMOVE_GET_PROPAGATED> er{id, {}, 0};
     // wait for GPU decompression if any
     cudaStreamSynchronize((*ret)->cufile_strm);
-    //    cudaStreamSynchronize(strm);
     // wait for io_uring operations if any
     while ((*ret)->complete != 0) {
       std::unique_lock<std::mutex> lock((*ret)->lock);

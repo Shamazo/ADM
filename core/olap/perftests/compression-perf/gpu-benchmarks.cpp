@@ -45,7 +45,7 @@ struct DecompressionResult {
 
   auto gpu_decompressor = GpuDecompressor(
       compressed_blocks.front().decompressed_chunk_size, block_batch_size,
-      compressed_blocks.front().chunk_sizes.size());
+      compressed_blocks.front().chunk_sizes.size(), CompressionAlgorithm::LZ4);
 
   std::cerr << "Block size: " << block_batch_size << std::endl;
 

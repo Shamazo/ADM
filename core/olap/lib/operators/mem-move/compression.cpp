@@ -36,15 +36,22 @@
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wdocumentation"
 
-#include <nvcomp.hpp>
+#include <nvcomp/gdeflate.h>
+
+#include <nvcomp/cascaded.hpp>
+#include <nvcomp/lz4.hpp>
 
 #pragma clang diagnostic pop
 
 GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
                                  size_t max_batch_block_count,
                                  size_t max_chunks_per_block,
+                                 CompressionAlgorithm comp_algo,
                                  int gpu_index_in_topo)
-    : m_max_decomp_chunk_size(max_decomp_chunk_size), last_batch_num_chunks(0) {
+    : m_max_decomp_chunk_size(max_decomp_chunk_size),
+      m_comp_algo(comp_algo),
+      last_batch_num_chunks(0),
+      m_stream(createNonBlockingStream()) {
   // ensure that we are allocating memory on the correct GPU
   int gpu_index = gpu_index_in_topo;
   if (gpu_index_in_topo == -1) {
@@ -52,8 +59,7 @@ GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
   }
   m_gpu_index_in_topo = gpu_index;
 
-  auto scope =
-      topology::getInstance().getGpus()[m_gpu_index_in_topo].set_on_scope();
+  set_device_on_scope d(topology::getInstance().getGpus()[m_gpu_index_in_topo]);
 
   const int max_batch_chunks = max_batch_block_count * max_chunks_per_block;
   m_host_compressed_ptrs = static_cast<void **>(
@@ -70,9 +76,27 @@ GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
   m_device_compressed_bytes = static_cast<size_t *>(
       MemoryManager::mallocGpu(sizeof(size_t) * max_batch_chunks));
 
+  nvcompStatus_t status;
   m_device_decomp_workspace_size = 0;
-  nvcompStatus_t status = nvcompBatchedLZ4DecompressGetTempSize(
-      max_batch_chunks, max_decomp_chunk_size, &m_device_decomp_workspace_size);
+  switch (m_comp_algo) {
+    case CompressionAlgorithm::LZ4:
+      status = nvcompBatchedLZ4DecompressGetTempSize(
+          max_batch_chunks, max_decomp_chunk_size,
+          &m_device_decomp_workspace_size);
+      break;
+    case CompressionAlgorithm::CASCADED:
+      status = nvcompBatchedCascadedDecompressGetTempSize(
+          max_batch_chunks, max_decomp_chunk_size,
+          &m_device_decomp_workspace_size);
+      break;
+    case CompressionAlgorithm::GDEFLATE:
+      status = nvcompBatchedGdeflateDecompressGetTempSize(
+          max_batch_chunks, max_decomp_chunk_size,
+          &m_device_decomp_workspace_size);
+      break;
+    default:
+      throw std::runtime_error("Unsupported compression algorithm");
+  }
   if (status != nvcompSuccess) {
     throw std::runtime_error(
         std::string("nvcompBatchedLZ4DecompressGetTempSize() failed with: ") +
@@ -157,8 +181,9 @@ void **GpuDecompressor::get_device_uncompressed_ptrs(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpy(m_device_uncompressed_ptrs, m_host_uncompressed_ptrs,
-                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
+  gpu_run(cudaMemcpyAsync(m_device_uncompressed_ptrs, m_host_uncompressed_ptrs,
+                          sizeof(void *) * batch_size, cudaMemcpyHostToDevice,
+                          stream));
 
   return m_device_uncompressed_ptrs;
 }
@@ -172,9 +197,9 @@ size_t *GpuDecompressor::get_device_uncompressed_chunk_sizes(
     m_host_uncompressed_chunk_sizes[i] = m_max_decomp_chunk_size;
   }
 
-  gpu_run(cudaMemcpy(m_device_uncompressed_chunk_sizes,
-                     m_host_uncompressed_chunk_sizes,
-                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
+  gpu_run(cudaMemcpyAsync(
+      m_device_uncompressed_chunk_sizes, m_host_uncompressed_chunk_sizes,
+      sizeof(void *) * batch_size, cudaMemcpyHostToDevice, stream));
 
   return m_device_uncompressed_chunk_sizes;
 }
@@ -192,8 +217,9 @@ size_t *GpuDecompressor::get_device_compressed_bytes(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpy(m_device_compressed_bytes, m_host_compressed_chunk_sizes,
-                     sizeof(size_t) * batch_size, cudaMemcpyHostToDevice));
+  gpu_run(cudaMemcpyAsync(
+      m_device_compressed_bytes, m_host_compressed_chunk_sizes,
+      sizeof(size_t) * batch_size, cudaMemcpyHostToDevice, stream));
 
   return m_device_compressed_bytes;
 }
@@ -215,8 +241,9 @@ void **GpuDecompressor::get_device_compressed_ptrs(
   }
   DCHECK_EQ(ix_chunk, batch_size);
 
-  gpu_run(cudaMemcpy(m_device_compressed_ptrs, m_host_compressed_ptrs,
-                     sizeof(void *) * batch_size, cudaMemcpyHostToDevice));
+  gpu_run(cudaMemcpyAsync(m_device_compressed_ptrs, m_host_compressed_ptrs,
+                          sizeof(void *) * batch_size, cudaMemcpyHostToDevice,
+                          stream));
 
   return m_device_compressed_ptrs;
 }
@@ -243,12 +270,37 @@ int GpuDecompressor::decompress_gpu(const size_t batch_size,
       get_device_uncompressed_chunk_sizes(batch_size, stream);
 
   // Run decompression
-  status = nvcompBatchedLZ4DecompressAsync(
-      device_compressed_ptrs, device_compressed_bytes,
-      device_uncompressed_bytes, m_device_actual_uncompressed_bytes, batch_size,
-      m_device_decomp_workspace, m_device_decomp_workspace_size,
-      device_uncompressed_ptrs, m_device_status_ptrs, stream);
-
+  switch (m_comp_algo) {
+    case CompressionAlgorithm::LZ4:
+      status = nvcompBatchedLZ4DecompressAsync(
+          device_compressed_ptrs, device_compressed_bytes,
+          device_uncompressed_bytes, m_device_actual_uncompressed_bytes,
+          batch_size, m_device_decomp_workspace, m_device_decomp_workspace_size,
+          device_uncompressed_ptrs, m_device_status_ptrs, stream);
+      break;
+    case CompressionAlgorithm::CASCADED:
+      status = nvcompBatchedCascadedDecompressAsync(
+          device_compressed_ptrs, device_compressed_bytes,
+          device_uncompressed_bytes, m_device_actual_uncompressed_bytes,
+          batch_size, m_device_decomp_workspace, m_device_decomp_workspace_size,
+          device_uncompressed_ptrs, m_device_status_ptrs, stream);
+      break;
+    case CompressionAlgorithm::GDEFLATE:
+      status = nvcompBatchedGdeflateDecompressAsync(
+          device_compressed_ptrs, device_compressed_bytes,
+          device_uncompressed_bytes, m_device_actual_uncompressed_bytes,
+          batch_size, m_device_decomp_workspace, m_device_decomp_workspace_size,
+          device_uncompressed_ptrs, m_device_status_ptrs, stream);
+      if (status != nvcompSuccess) {
+        LOG(ERROR) << "decompress_gpu failed on "
+                      "nvcompBatchedGdeflateDecompressAsync with "
+                   << magic_enum::enum_name(status);
+        return -status;
+      }
+      break;
+    default:
+      throw std::runtime_error("Unsupported compression algorithm");
+  }
   if (status != nvcompSuccess) {
     LOG(ERROR)
         << "decompress_gpu failed on nvcompBatchedLZ4DecompressAsync with "
@@ -299,6 +351,10 @@ int GpuDecompressor::decompress_gpu(const size_t batch_size,
     const std::vector<std::span<char>> &block_compressed_buffers,
     const std::vector<std::span<char>> &block_output_buffers,
     cudaStream_t stream) {
+  const bool synchronous = (stream == nullptr);
+  if (synchronous) {
+    stream = m_stream;
+  }
   DCHECK_EQ(block_compressed_buffers.size(), block_chunk_sizes.size());
   DCHECK_EQ(block_output_buffers.size(), block_chunk_sizes.size());
 
@@ -321,9 +377,13 @@ int GpuDecompressor::decompress_gpu(const size_t batch_size,
   size_t *device_compressed_bytes =
       get_device_compressed_bytes(block_chunk_sizes, batch_size, stream);
 
-  return decompress_gpu(batch_size, device_uncompressed_ptrs,
-                        device_compressed_ptrs, device_compressed_bytes,
-                        output_buffer_size, stream);
+  auto ret = decompress_gpu(batch_size, device_uncompressed_ptrs,
+                            device_compressed_ptrs, device_compressed_bytes,
+                            output_buffer_size, stream);
+  if (synchronous) {
+    cudaStreamSynchronize(m_stream);
+  }
+  return ret;
 }
 
 /* Assuming that compressed_buffer and output_buffer are GPU resident.  */

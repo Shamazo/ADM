@@ -59,6 +59,8 @@ class MemMoveDevice : public experimental::UnaryOperator {
     std::vector<GpuDecompressor> *decompressors;
     uint8_t index_in_wu;           // Index within bytes_read
     [[maybe_unused]] bool unused;  // FIXME: remove
+    std::vector<std::vector<void *>>
+        *compressed_buffers;  // pre-allocated buffers for compressed NVMe reads
   };
 
   /**

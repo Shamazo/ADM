@@ -40,6 +40,8 @@
 #include <span>
 #include <vector>
 
+enum class CompressionAlgorithm { LZ4, CASCADED, GDEFLATE };
+
 class GpuDecompressor {
  private:
   const size_t m_max_decomp_chunk_size;
@@ -58,12 +60,14 @@ class GpuDecompressor {
   size_t* m_host_uncompressed_chunk_sizes;
   size_t* m_device_uncompressed_chunk_sizes;
 
+  CompressionAlgorithm m_comp_algo;
   size_t last_batch_num_chunks;
   int m_gpu_index_in_topo;
 
  public:
   GpuDecompressor(size_t max_decomp_chunk_size, size_t max_batch_block_count,
-                  size_t max_chunks_per_block, int gpu_index_in_topo = -1);
+                  size_t max_chunks_per_block, CompressionAlgorithm comp_algo,
+                  int gpu_index_in_topo = -1);
   ~GpuDecompressor();
 
   /**
@@ -126,6 +130,7 @@ class GpuDecompressor {
                      void** device_compressed_ptrs,
                      size_t* device_compressed_bytes, size_t output_buffer_size,
                      cudaStream_t stream);
+  cudaStream_t m_stream;
 };
 
 /**
