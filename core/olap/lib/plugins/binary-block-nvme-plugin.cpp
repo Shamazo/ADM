@@ -622,7 +622,7 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     }
 
     // It is possible for a partition to be empty
-    if (block_sizes.empty()) {
+    if (!block_sizes.empty()) {
       max_compressed_block_size =
           *std::max_element(block_sizes.begin(), block_sizes.end());
     } else {
