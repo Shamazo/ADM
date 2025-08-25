@@ -313,7 +313,7 @@ void writeUncompressedChunksToFiles(
     metadata.SetObject();
     rapidjson::Document::AllocatorType& allocator = metadata.GetAllocator();
 
-    metadata.AddMember("data_format", "UNCOMPRESSED", allocator);
+    metadata.AddMember("compression_type", "uncompressed", allocator);
     metadata.AddMember("_comment", "generated with adm-partition-ssb",
                        allocator);
     metadata.AddMember("data_file",
@@ -484,7 +484,7 @@ void writeCompressedBlocksToFiles(
     metadata.SetObject();
     rapidjson::Document::AllocatorType& allocator = metadata.GetAllocator();
 
-    metadata.AddMember("data_format", "COMPRESSED", allocator);
+    metadata.AddMember("compression_type", "lz4", allocator);
     metadata.AddMember("_comment", "generated with adm-partition-ssb",
                        allocator);
     metadata.AddMember("data_file",
