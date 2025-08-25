@@ -722,6 +722,12 @@ void MemMoveDevice::open(Pipeline *pip) {
 #endif
   mmc->slack = slack;
   mmc->data_buffs = MemoryManager::mallocPinned(data_size * slack);
+
+  // defaults
+  size_t max_decomp_chunk_size = 64_K;
+  size_t max_chunks_per_block = 2_M / 16_K;
+  NvmePlugin::CompressionFormat_t compression_format =
+      NvmePlugin::CompressionFormat_t::LZ4;
   if (nvme_plugin_ptr.get() != nullptr) {
     mmc->nvme_plugin = nvme_plugin_ptr.get();
     // if this a mem-move NVMe->CPU or nvme->GPU with staging in CPU, we need an
@@ -730,6 +736,15 @@ void MemMoveDevice::open(Pipeline *pip) {
                              [](bool v) { return !v; })) {
       mmc->io_uring =
           std::make_unique<proteus::storage::IoUringThreadUnsafe>(32);
+    }
+    max_decomp_chunk_size = nvme_plugin_ptr->getMaxUncompressedChunkSize();
+    max_chunks_per_block = nvme_plugin_ptr->getMaxChunksPerBlock();
+    compression_format = nvme_plugin_ptr->getCompressionFormat(wantedFields[0]);
+    for (const auto &f : wantedFields) {
+      auto field_format = nvme_plugin_ptr->getCompressionFormat(f);
+      CHECK_EQ(field_format, compression_format)
+          << "All fields in a mem-move from NVMe must have the same "
+             "compression format";
     }
   } else {
     mmc->nvme_plugin = nullptr;
@@ -745,7 +760,8 @@ void MemMoveDevice::open(Pipeline *pip) {
     wu[i].cufile_strm = createNonBlockingStream();
     mmc->idle.push(wu + i);
 
-    if (!to_cpu) {
+    if (!to_cpu &&
+        compression_format != NvmePlugin::CompressionFormat_t::UNCOMPRESSED) {
       wu[i].compressed_buffers = new std::vector<std::vector<void *>>{};
       wu[i].compressed_buffers->reserve(topology::getInstance().getGpuCount());
 
@@ -753,8 +769,9 @@ void MemMoveDevice::open(Pipeline *pip) {
       wu[i].decompressors->reserve(topology::getInstance().getGpuCount());
 
       for (int j = 0; j < topology::getInstance().getGpuCount(); j++) {
-        wu[i].decompressors->emplace_back(64_K, wantedFields.size(), 2_M / 16_K,
-                                          CompressionAlgorithm::LZ4, j);
+        wu[i].decompressors->emplace_back(
+            max_decomp_chunk_size, wantedFields.size(), max_chunks_per_block,
+            compression_format, j);
 
         wu[i].compressed_buffers->emplace_back();
         for (int k = 0; k < wantedFields.size(); k++) {

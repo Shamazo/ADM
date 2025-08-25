@@ -46,7 +46,7 @@
 GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
                                  size_t max_batch_block_count,
                                  size_t max_chunks_per_block,
-                                 CompressionAlgorithm comp_algo,
+                                 NvmePlugin::CompressionFormat_t comp_algo,
                                  int gpu_index_in_topo)
     : m_max_decomp_chunk_size(max_decomp_chunk_size),
       m_comp_algo(comp_algo),
@@ -79,17 +79,17 @@ GpuDecompressor::GpuDecompressor(size_t max_decomp_chunk_size,
   nvcompStatus_t status;
   m_device_decomp_workspace_size = 0;
   switch (m_comp_algo) {
-    case CompressionAlgorithm::LZ4:
+    case NvmePlugin::CompressionFormat_t::LZ4:
       status = nvcompBatchedLZ4DecompressGetTempSize(
           max_batch_chunks, max_decomp_chunk_size,
           &m_device_decomp_workspace_size);
       break;
-    case CompressionAlgorithm::CASCADED:
+    case NvmePlugin::CompressionFormat_t::CASCADED:
       status = nvcompBatchedCascadedDecompressGetTempSize(
           max_batch_chunks, max_decomp_chunk_size,
           &m_device_decomp_workspace_size);
       break;
-    case CompressionAlgorithm::GDEFLATE:
+    case NvmePlugin::CompressionFormat_t::GDEFLATE:
       status = nvcompBatchedGdeflateDecompressGetTempSize(
           max_batch_chunks, max_decomp_chunk_size,
           &m_device_decomp_workspace_size);
@@ -271,21 +271,21 @@ int GpuDecompressor::decompress_gpu(const size_t batch_size,
 
   // Run decompression
   switch (m_comp_algo) {
-    case CompressionAlgorithm::LZ4:
+    case NvmePlugin::CompressionFormat_t::LZ4:
       status = nvcompBatchedLZ4DecompressAsync(
           device_compressed_ptrs, device_compressed_bytes,
           device_uncompressed_bytes, m_device_actual_uncompressed_bytes,
           batch_size, m_device_decomp_workspace, m_device_decomp_workspace_size,
           device_uncompressed_ptrs, m_device_status_ptrs, stream);
       break;
-    case CompressionAlgorithm::CASCADED:
+    case NvmePlugin::CompressionFormat_t::CASCADED:
       status = nvcompBatchedCascadedDecompressAsync(
           device_compressed_ptrs, device_compressed_bytes,
           device_uncompressed_bytes, m_device_actual_uncompressed_bytes,
           batch_size, m_device_decomp_workspace, m_device_decomp_workspace_size,
           device_uncompressed_ptrs, m_device_status_ptrs, stream);
       break;
-    case CompressionAlgorithm::GDEFLATE:
+    case NvmePlugin::CompressionFormat_t::GDEFLATE:
       status = nvcompBatchedGdeflateDecompressAsync(
           device_compressed_ptrs, device_compressed_bytes,
           device_uncompressed_bytes, m_device_actual_uncompressed_bytes,

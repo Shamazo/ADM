@@ -36,11 +36,12 @@
 #define nvcompStatus_t void
 #endif
 
+#include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <platform/topology/topology.hpp>
 #include <span>
 #include <vector>
 
-enum class CompressionAlgorithm { LZ4, CASCADED, GDEFLATE };
+// enum class CompressionAlgorithm { LZ4, CASCADED, GDEFLATE };
 
 class GpuDecompressor {
  private:
@@ -60,13 +61,14 @@ class GpuDecompressor {
   size_t* m_host_uncompressed_chunk_sizes;
   size_t* m_device_uncompressed_chunk_sizes;
 
-  CompressionAlgorithm m_comp_algo;
+  NvmePlugin::CompressionFormat_t m_comp_algo;
   size_t last_batch_num_chunks;
   int m_gpu_index_in_topo;
 
  public:
   GpuDecompressor(size_t max_decomp_chunk_size, size_t max_batch_block_count,
-                  size_t max_chunks_per_block, CompressionAlgorithm comp_algo,
+                  size_t max_chunks_per_block,
+                  NvmePlugin::CompressionFormat_t comp_algo,
                   int gpu_index_in_topo = -1);
   ~GpuDecompressor();
 

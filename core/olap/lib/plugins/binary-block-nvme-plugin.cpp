@@ -171,15 +171,25 @@ NvmePlugin::PageIOInfo NvmePlugin::getPageIoInfo(
 #endif
   const off_t *offset = &partMetaData.block_offsets[page_id.getBlockNo()];
   const size_t *size = &partMetaData.block_sizes[page_id.getBlockNo()];
-  if (partMetaData.data_format ==
-      NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED) {
+  if (partMetaData.data_format !=
+      NvmePlugin::CompressionFormat_t::UNCOMPRESSED) {
     auto chunk_sizes = partMetaData.chunk_sizes[page_id.getBlockNo()];
     return {
         fd,   partMetaData.cufile_handle,          offset, size, chunk_sizes,
-        true, partMetaData.decompressed_chunk_size};
+            true,
+            partMetaData.data_format,
+            partMetaData.decompressed_chunk_size};
   }
 
-  return {fd, partMetaData.cufile_handle, offset, size, {}, false, 0};
+  return {
+      fd,
+      partMetaData.cufile_handle,
+      offset,
+      size,
+      {},
+      partMetaData.data_format != NvmePlugin::CompressionFormat_t::UNCOMPRESSED,
+      partMetaData.data_format,
+      0};
 }
 
 std::pair<llvm::Value *, llvm::Value *> NvmePlugin::getPartitionSizes(
@@ -598,22 +608,39 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
   num_blocks = document["num_blocks"].GetUint64();
   CHECK_EQ(block_sizes.size(), num_blocks);
 
-  CHECK(document.HasMember("data_format"));
-  CHECK(document["data_format"].IsString());
-  auto maybe_data_format =
-      magic_enum::enum_cast<DataFormat_t>(document["data_format"].GetString());
-  CHECK(maybe_data_format.has_value());
-  data_format = maybe_data_format.value();
+  // CHECK(document.HasMember("data_format"));
+  // CHECK(document["data_format"].IsString());
+  // auto maybe_data_format =
+  //     magic_enum::enum_cast<CompressionFormat_t>(document["data_format"].GetString());
+  // CHECK(maybe_data_format.has_value());
+  // data_format = maybe_data_format.value();
 
-  if (data_format == DataFormat_t::COMPRESSED) {
+  CHECK(document.HasMember("compression_type"))
+      << "metadata file using legacy COMPRESSION value, please update metadata "
+         "with new compression_type field: "
+      << md_path;
+  CHECK(document["compression_type"].IsString());
+  auto maybe_compression_format = magic_enum::enum_cast<CompressionFormat_t>(
+      document["compression_type"].GetString(), magic_enum::case_insensitive);
+  CHECK(maybe_compression_format.has_value())
+      << "compression_type has invalid enum value: "
+      << document["compression_type"].GetString()
+      << " in metadata file: " << md_path;
+  data_format = maybe_compression_format.value();
+
+  if (data_format != CompressionFormat_t::UNCOMPRESSED) {
     CHECK(document.HasMember("chunk_sizes"));
     CHECK(document["chunk_sizes"].IsArray());
     auto chunk_sizes_json_array = document["chunk_sizes"].GetArray();
     chunk_sizes.reserve(chunk_sizes_json_array.Size());
+    max_chunks_in_block = 0;
     for (const auto &block_chunk_sizes_json : chunk_sizes_json_array) {
       CHECK(block_chunk_sizes_json.IsArray());
       std::vector<uint32_t> chunk_sizes_in_block;
       chunk_sizes_in_block.reserve(block_chunk_sizes_json.Size());
+      max_chunks_in_block =
+          std::max(max_chunks_in_block,
+                   static_cast<size_t>(block_chunk_sizes_json.Size()));
       for (const auto &chunk_size_json : block_chunk_sizes_json.GetArray()) {
         CHECK(chunk_size_json.IsUint());
         chunk_sizes_in_block.emplace_back(chunk_size_json.GetUint());
@@ -632,6 +659,10 @@ NvmePlugin::AttributePartMetaData::AttributePartMetaData(
     CHECK(document.HasMember("decompressed_chunk_size"));
     CHECK(document["decompressed_chunk_size"].IsInt());
     decompressed_chunk_size = document["decompressed_chunk_size"].GetInt();
+  } else {
+    max_chunks_in_block = 0;
+    decompressed_chunk_size = 0;
+    max_compressed_block_size = 0;
   }
   numa_node = fileNameToNumaNodeIndex(data_file_path);
   DLOG(INFO) << "opening data file: " << data_file_path << " for " << md_path;
@@ -678,6 +709,41 @@ uint64_t NvmePlugin::getRowGroupTupleCount(uint64_t partIdx,
   }
 #endif
   return m_attribute_metadata[0][partIdx].value_counts[blockIdx];
+}
+
+size_t NvmePlugin::getMaxChunksPerBlock() const {
+  size_t max_chunks = 0;
+  for (const auto &attr_meta : m_attribute_metadata) {
+    for (const auto &part_meta : attr_meta) {
+      max_chunks = std::max(max_chunks, part_meta.max_chunks_in_block);
+    }
+  }
+  return max_chunks;
+}
+
+size_t NvmePlugin::getMaxUncompressedChunkSize() const {
+  size_t max_chunk_size = 0;
+  for (const auto &attr_meta : m_attribute_metadata) {
+    for (const auto &part_meta : attr_meta) {
+      if (part_meta.data_format != CompressionFormat_t::UNCOMPRESSED) {
+        max_chunk_size =
+            std::max(max_chunk_size,
+                     static_cast<size_t>(part_meta.decompressed_chunk_size));
+      }
+    }
+  }
+  return max_chunk_size;
+}
+
+NvmePlugin::CompressionFormat_t NvmePlugin::getCompressionFormat(
+    const RecordAttribute *field) const {
+  for (const auto &attr : wantedFields) {
+    if (attr->getAttrName() == field->getAttrName()) {
+      size_t idx = &attr - &wantedFields[0];
+      return m_attribute_metadata[idx][0].data_format;
+    }
+  }
+  LOG(FATAL) << "field not found in plugin: " << field->getAttrName();
 }
 
 uint64_t getRowGroupTupleCount(uint64_t partIdx, uint64_t blockIdx,

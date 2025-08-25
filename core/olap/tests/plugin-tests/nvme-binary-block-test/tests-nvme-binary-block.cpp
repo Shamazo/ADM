@@ -27,6 +27,7 @@
 #include <codegen/expressions/expressionTypes.hpp>
 #include <cstring>
 #include <fstream>
+#include <magic_enum.hpp>
 #include <olap/operators/relbuilder-factory.hpp>
 #include <olap/operators/relbuilder.hpp>
 #include <olap/plan/query-result.hpp>
@@ -55,8 +56,7 @@ TEST(NvmePluginAttributePartMetaDataTest, from_file_small) {
   EXPECT_EQ(x.block_offsets.back(), 10485760);
   EXPECT_EQ(x.value_counts.front(), 524288);
   EXPECT_EQ(x.value_counts.back(), 378560);
-  EXPECT_EQ(x.data_format,
-            NvmePlugin::AttributePartMetaData::DataFormat_t::UNCOMPRESSED);
+  EXPECT_EQ(x.data_format, NvmePlugin::CompressionFormat_t::UNCOMPRESSED);
 }
 
 TEST(NvmePluginAttributePartMetaDataTest, from_file_small_compressed) {
@@ -73,8 +73,7 @@ TEST(NvmePluginAttributePartMetaDataTest, from_file_small_compressed) {
   EXPECT_EQ(x.chunk_sizes.front().front(), 10266);
   EXPECT_EQ(x.max_compressed_block_size, 10266);
   EXPECT_EQ(x.decompressed_chunk_size, 16384);
-  EXPECT_EQ(x.data_format,
-            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  EXPECT_EQ(x.data_format, NvmePlugin::CompressionFormat_t::LZ4);
 }
 
 TEST(PageId_t, ptr_tagging) {
@@ -142,8 +141,7 @@ TEST(DecompressionTest, decompress_datekey_gpu) {
       "inputs/nvme-plugin-tests/"
       "ssb100_compressed_date.csv.d_datekey.metadata.json";
   NvmePlugin::AttributePartMetaData partMetaData(md_path);
-  EXPECT_EQ(partMetaData.data_format,
-            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  EXPECT_EQ(partMetaData.data_format, NvmePlugin::CompressionFormat_t::LZ4);
   EXPECT_EQ(partMetaData.num_blocks, 1);
 
   auto read_size = partMetaData.block_sizes[0];
@@ -156,7 +154,7 @@ TEST(DecompressionTest, decompress_datekey_gpu) {
 
   auto gpu_decompressor = GpuDecompressor(partMetaData.decompressed_chunk_size,
                                           1, partMetaData.chunk_sizes[0].size(),
-                                          CompressionAlgorithm::LZ4);
+                                          NvmePlugin::CompressionFormat_t::LZ4);
 
   cudaStream_t stream = nullptr;
   gpu_run(cudaStreamCreate(&stream));
@@ -212,8 +210,7 @@ TEST(DecompressionTest, decompress_gpu_batch) {
       "/nvme14/nicholso/data/compressed_ssbm1000/"
       "supplier.csv.s_region_0_1.metadata.json";
   NvmePlugin::AttributePartMetaData partMetaData(md_path);
-  EXPECT_EQ(partMetaData.data_format,
-            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+  EXPECT_EQ(partMetaData.data_format, NvmePlugin::CompressionFormat_t::LZ4);
   const int batch_size = 2;
   EXPECT_GE(partMetaData.num_blocks, batch_size)
       << "not a hard correctness requirement, but this test is mean to test "
@@ -243,7 +240,7 @@ TEST(DecompressionTest, decompress_gpu_batch) {
   EXPECT_GT(chunks_per_block, 0);
   auto gpu_decompressor =
       GpuDecompressor(partMetaData.decompressed_chunk_size, batch_size,
-                      chunks_per_block, CompressionAlgorithm::LZ4);
+                      chunks_per_block, NvmePlugin::CompressionFormat_t::LZ4);
 
   cudaStream_t stream = createNonBlockingStream();
 
@@ -308,7 +305,7 @@ TEST(DecompressionTest, decompress_datekey) {
       "ssb100_compressed_date.csv.d_datekey.metadata.json";
   NvmePlugin::AttributePartMetaData partMetaData(md_path);
   EXPECT_EQ(partMetaData.data_format,
-            NvmePlugin::AttributePartMetaData::DataFormat_t::COMPRESSED);
+            NvmePlugin::CompressionFormat_t::LZ4);
   EXPECT_EQ(partMetaData.num_blocks, 1);
 
   auto read_size = partMetaData.block_sizes[0];
@@ -585,7 +582,10 @@ TEST_F(NvmePluginTest, getPageIoInfoUsingMetadata) {
   // expected size
   EXPECT_EQ(*page_io_info.offset, expected_offset);
   EXPECT_EQ(*page_io_info.size, expected_size);
-  EXPECT_EQ(page_io_info.is_compressed, false);
+  EXPECT_EQ(page_io_info.compression_format,
+            NvmePlugin::CompressionFormat_t::UNCOMPRESSED);
+  EXPECT_EQ(page_io_info.is_compressed, false)
+      << magic_enum::enum_name(page_io_info.compression_format);
 }
 
 TEST_F(NvmePluginTest, scan_and_move_one_col_one_part) {

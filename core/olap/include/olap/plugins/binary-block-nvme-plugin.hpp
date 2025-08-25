@@ -42,7 +42,7 @@ extern "C" void *getNvmePageIdPtr(NvmePlugin *pg, uint8_t attribute_no,
 class NvmePlugin : public BinaryBlockPlugin {
  public:
   static constexpr auto type = "nvme-block";
-
+  enum CompressionFormat_t { UNCOMPRESSED, LZ4, CASCADED, GDEFLATE };
   struct PageId_t {
     static constexpr uint8_t cpu_numa_mask = 0b01111111;
     static constexpr uint8_t page_id_bit_in_numa = 0b10000000;
@@ -102,7 +102,6 @@ class NvmePlugin : public BinaryBlockPlugin {
   static_assert(sizeof(PageId_t) == sizeof(void *));
 
   struct AttributePartMetaData {
-    enum DataFormat_t { COMPRESSED, UNCOMPRESSED };
 
     explicit AttributePartMetaData(const std::filesystem::path &md_path);
     ~AttributePartMetaData();
@@ -119,9 +118,12 @@ class NvmePlugin : public BinaryBlockPlugin {
     int decompressed_chunk_size;    /// the size of each chunk after
                                     /// decompression. The last chunk in a block
                                     /// may be smaller.
+    size_t max_chunks_in_block;     /// the maximum number of chunks in any
+                                    /// block. Note calculated and not stored in
+                                    /// ondisk metadata
     int max_compressed_block_size;  /// the maximum compressed block size. Note
                                     /// calculated and not stored in metadata
-    DataFormat_t data_format;
+    CompressionFormat_t data_format;
     int numa_node;
   };
 
@@ -144,6 +146,7 @@ class NvmePlugin : public BinaryBlockPlugin {
     const size_t *size;   /// same as above
     const std::vector<uint32_t> chunk_sizes;
     const bool is_compressed;
+    const CompressionFormat_t compression_format;
     const int decompressed_chunk_size;
   };
   /**
@@ -154,6 +157,28 @@ class NvmePlugin : public BinaryBlockPlugin {
    * of the page.
    */
   [[nodiscard]] PageIOInfo getPageIoInfo(const PageId_t &page_id) const;
+
+  /**
+   * @note Currently only valid if at least one attribute is compressed
+   * @return Maximum number of chunks in any block across all attributes
+   */
+  [[nodiscard]] size_t getMaxChunksPerBlock() const;
+
+  /**
+   * @note Currently only valid if at least one attribute is compressed
+   * @return Largest possible size in bytes of an uncompressed chunk across all
+   * blocks in all attributes
+   */
+  [[nodiscard]] size_t getMaxUncompressedChunkSize() const;
+
+  /**
+   * @note Currently assumes that an attribute is stored with a single
+   * compression format
+   * @param field The field to get the compression format for
+   * @return Compression format of the given field
+   */
+  [[nodiscard]] NvmePlugin::CompressionFormat_t getCompressionFormat(
+      const RecordAttribute *field) const;
 
  protected:
   llvm::Value *getDataPointersForFile(OlapParallelContext *context, size_t i,

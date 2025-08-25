@@ -66,8 +66,8 @@ class CompressedFile {
         m_data(m_file_md.data_file_path, loc),
         m_data_span(static_cast<const char*>(m_data.getData()),
                     m_data.getFileSize()) {
-    CHECK_EQ(m_file_md.data_format,
-             NvmePlugin::AttributePartMetaData::COMPRESSED)
+    CHECK_NE(m_file_md.data_format,
+             NvmePlugin::CompressionFormat_t::UNCOMPRESSED)
         << "Metadata does not describe a compressed file";
     LOG(INFO) << "File: " << md_path << " has " << m_file_md.num_blocks
               << " blocks";

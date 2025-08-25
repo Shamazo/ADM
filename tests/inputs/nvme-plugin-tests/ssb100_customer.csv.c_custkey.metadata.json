@@ -1,5 +1,6 @@
 {
   "data_format": "UNCOMPRESSED",
+  "compression_type": "uncompressed",
   "_comment": "We expect the standard ssbm100 data to be linked as usual for tests",
   "data_file": "../ssbm100/customer.csv.c_custkey",
   "num_blocks": 6,

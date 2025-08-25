@@ -1,5 +1,6 @@
 {
   "data_format": "COMPRESSED",
+  "compression_type": "lz4",
   "_comment": "generated with adm-partition-ssb",
   "data_file": "ssb100_compressed_date.csv.d_datekey",
   "num_blocks": 1,
