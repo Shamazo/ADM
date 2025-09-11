@@ -629,7 +629,8 @@ class BenchmarkRunner:
                     outfile.write(''.join(line for line in f if line.strip()))
         self.slack_thread.send_file(f"combined results", combined_results_path)
 
-def setup_benchmarks() -> List[BenchmarkConfig]:
+
+def setup_adm_benchmarks() -> List[BenchmarkConfig]:
     """Create list of benchmark configurations."""
     return [
 
@@ -969,6 +970,27 @@ def setup_benchmarks() -> List[BenchmarkConfig]:
     ]
 
 
+def setup_formats_benchmarks() -> List[BenchmarkConfig]:
+    ret = []
+    for num_drives in [1, 2, 4, 8]:
+        for format in ["lz4", "uncompressed"]:
+            ret.append(
+                BenchmarkConfig(
+                    binary="./format_benchmarks",
+                    shortname="ssb_GPU_pushdown",
+                    args=f"--bench_ssb_gpu_pushdown --num_drives={num_drives} --compression_type={format}",
+                    shortname_with_args=f"ssb_gpu_pushdown_{format}_{num_drives}_drive"
+                )
+            )
+            ret.append(
+                BenchmarkConfig(
+                    binary="./format_benchmarks",
+                    shortname="ssb_GPU_staging",
+                    args=f"--bench_ssb_gpu_staging --num_drives={num_drives} --compression_type={format}",
+                    shortname_with_args=f"ssb_gpu_staging_{format}_{num_drives}_drive"
+                )
+            )
+    return ret
 def main():
     parser = argparse.ArgumentParser(description="Benchmark runner script")
     parser.add_argument("-a", "--profile-amd", action="store_true", help="Enable AMD profiling")
@@ -1000,7 +1022,7 @@ def main():
     parser.add_argument("--num-iterations", type=int, default=5, help="Number of iterations to run each benchmark")
 
     args = parser.parse_args()
-    benchmarks = setup_benchmarks()
+    benchmarks = setup_adm_benchmarks()
     runner = BenchmarkRunner(args, benchmarks)
     os.chdir(args.bin_dir)
 

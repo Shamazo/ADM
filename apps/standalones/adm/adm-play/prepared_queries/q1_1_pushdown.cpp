@@ -26,8 +26,9 @@
 
 constexpr auto query = "ssb100_Q1_1_pushdown";
 
-PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
-                                     bool move_after_pushdown) {
+PreparedStatement prepare11_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph, bool move_after_pushdown,
+    bool do_pushdown) {
   morph.setQueryName(query);
 
   auto rel2337 = morph.scan("date", {"d_datekey", "d_year"});
@@ -38,8 +39,8 @@ PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
   return morph
       .parallel(
           rel, {rel2337},
-          [&morph, &move_after_pushdown](RelBuilder probe,
-                                         std::vector<RelBuilder> build) {
+          [&morph, &move_after_pushdown, &do_pushdown](
+              RelBuilder probe, std::vector<RelBuilder> build) {
             auto rel2337_d =
                 build.at(0)
                     .unpack()
@@ -52,8 +53,9 @@ PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
                       return {(arg["d_datekey"])};
                     });
 
-            auto filtered_probe =
-                probe.unpack()
+            RelBuilder filtered_probe = [do_pushdown, &probe, &morph] {
+              if (do_pushdown) {
+                return probe.unpack()
                     .filter([&](const auto &arg) -> expression_t {
                       return expressions::hint(
                           ge(arg["lo_discount"], 1) &
@@ -62,13 +64,22 @@ PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
                           expressions::Selectivity(0.5 * 3.0 / 11));
                     })
                     .pack()
+                    // router to convert DOP to main compute dop, e.g. num GPUs
                     .router(morph.getDOP(), morph.getSlack(),
                             RoutingPolicy::LOCAL, morph.getDevice(),
                             morph.getAffinitizer());
-            if (move_after_pushdown || morph.getDevice() == DeviceType::GPU) {
+              } else {
+                return probe.router(morph.getDOP(), morph.getSlack(),
+                                    RoutingPolicy::LOCAL, morph.getDevice(),
+                                    morph.getAffinitizer());
+              }
+            }();
+
+            if (move_after_pushdown) {
               filtered_probe =
                   filtered_probe.memmove(morph.getSlack(), morph.getDevice());
             }
+
             if (morph.getDevice() == DeviceType::GPU) {
               filtered_probe = filtered_probe.to_gpu();
             }

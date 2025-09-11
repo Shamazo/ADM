@@ -136,3 +136,54 @@ target_link_libraries(taxi-adm
 )
 
 configure_proteus_experiment(taxi-adm)
+
+add_executable(format-benchmarks
+  formats-main.cpp
+  prepared_queries/taxi-q1.cpp
+  prepared_queries/taxi-q2.cpp
+  prepared_queries/taxi-q3.cpp
+  util.cpp
+  prepared_queries/prepared-scans.cpp
+  prepared_queries/prepared-scan-sum-micro.cpp
+  prepared_queries/q1_1_pushdown.cpp
+  prepared_queries/q1_2_pushdown.cpp
+  prepared_queries/q1_3_pushdown.cpp
+  prepared_queries/q2_1_pushdown.cpp
+  prepared_queries/q2_2_pushdown.cpp
+  prepared_queries/q2_3_pushdown.cpp
+  prepared_queries/q3_1_pushdown.cpp
+  prepared_queries/q3_2_pushdown.cpp
+  prepared_queries/q3_3_pushdown.cpp
+  prepared_queries/q3_4_pushdown.cpp
+  prepared_queries/q4_1_pushdown.cpp
+  prepared_queries/q4_2_pushdown.cpp
+  prepared_queries/q4_3_pushdown.cpp
+  prepared_queries/q1_1_adaptive.cpp
+  prepared_queries/q1_2_adaptive.cpp
+  prepared_queries/q1_3_adaptive.cpp
+  prepared_queries/q2_1_adaptive.cpp
+  prepared_queries/q2_2_adaptive.cpp
+  prepared_queries/q2_3_adaptive.cpp
+  prepared_queries/q3_1_adaptive.cpp
+  prepared_queries/q3_2_adaptive.cpp
+  prepared_queries/q3_3_adaptive.cpp
+  prepared_queries/q3_4_adaptive.cpp
+  prepared_queries/q4_1_adaptive.cpp
+  prepared_queries/q4_2_adaptive.cpp
+  prepared_queries/q4_3_adaptive.cpp
+)
+
+# Depending on the olap libraries
+target_link_libraries(format-benchmarks
+  jemalloc
+  codegen::olap_flags
+  proteus::olap
+  proteus::storage
+  proteus::platform
+  queries::taxi
+  queries::ssb
+  magic_enum::magic_enum
+  ${CMAKE_DL_LIBS}
+)
+
+configure_proteus_experiment(format-benchmarks)

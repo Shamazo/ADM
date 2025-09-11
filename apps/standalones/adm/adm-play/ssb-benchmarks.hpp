@@ -41,6 +41,7 @@ standard_ssb_queries() {
       {ssb::Query::prepare43, "ssb_Q4.3"}};
 }
 
+[[deprecated]]
 std::string bench_queries_nvme_vary_bw(
     int sf, int server_number,
     std::vector<std::pair<decltype(&ssb::Query::prepare11), std::string>>
@@ -59,9 +60,11 @@ std::string bench_queries_nvme_vary_bw(
                 << "scan_memmove_slack,"
                 << "shaper" << std::endl;
 
-  const auto all_md_dirs = compressed
-                               ? get_input_dirs_compressed(sf, server_number)
-                               : get_input_dirs(sf, server_number);
+  // const auto all_md_dirs = compressed
+  //                              ? get_input_dirs_compressed(sf, server_number)
+  //                              : get_input_dirs(sf, server_number);
+  const auto all_md_dirs =
+      get_input_dir_socket_one(sf, server_number,1, NvmePlugin::UNCOMPRESSED);
 
   for (const auto& md_dirs : all_md_dirs) {
     for (auto [query_prep_func, query_name] : queries) {
@@ -74,7 +77,7 @@ std::string bench_queries_nvme_vary_bw(
         case Shaper::NVMECPU:
           shaper = std::make_unique<proteus::CPUOnlyNVMeMorsel>(
               md_dirs, "inputs/ssbm100", ssb::Query::getStats(sf), true,
-              scan_memmove_slack, scan_router_slack, 16);
+              scan_memmove_slack, scan_router_slack, 16, std::nullopt, std::vector<uint32_t>{4,5,6,7});
           break;
         case Shaper::NVMEGPU:
           shaper = std::make_unique<proteus::GPUOnlyNVMe>(
@@ -210,59 +213,6 @@ std::string bench_pushdown_queries_nvme_vary_bw(
   return result_string.str();
 }
 
-std::string bench_ssb_q1_gpu_pushdown_vary_bw(int sf, int server_number,
-                                              int num_iterations = 5,
-                                              int scan_router_slack = 2,
-                                              int scan_memmove_slack = 4,
-                                              bool compressed = false) {
-  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
-  std::vector<
-      std::pair<std::function<decltype(ssb::Query::prepare11)>, std::string>>
-      q1_queries = {{[](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, true);
-                     },
-                     "ssb_Q1.1_pushdown"},
-                    {[](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, true);
-                     },
-                     "ssb_Q1.2_pushdown"},
-                    {[](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, true);
-                     },
-                     "ssb_Q1.3_pushdown"}};
-  constexpr int num_sockets = 1;
-  return bench_pushdown_queries_nvme_vary_bw(
-      sf, server_number, q1_queries, Shaper::NVMEGPUPUSHDOWN, num_iterations,
-      scan_router_slack, scan_memmove_slack, compressed, num_sockets);
-}
-
-std::string bench_ssb_q1_cpu_socket_pushdown_vary_bw(
-    int sf, int server_number, int num_iterations = 5,
-    int scan_router_slack = 2, int scan_memmove_slack = 4,
-    bool compressed = false, std::optional<size_t> pushdown_dop = std::nullopt,
-    bool move_after_pushdown = false) {
-  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
-  std::vector<
-      std::pair<std::function<decltype(ssb::Query::prepare11)>, std::string>>
-      q1_queries = {{[move_after_pushdown](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, move_after_pushdown);
-                     },
-                     "ssb_Q1.1_pushdown"},
-                    {[move_after_pushdown](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, move_after_pushdown);
-                     },
-                     "ssb_Q1.2_pushdown"},
-                    {[move_after_pushdown](proteus::QueryShaper& morph) {
-                       return prepare11_pushdown(morph, move_after_pushdown);
-                     },
-                     "ssb_Q1.3_pushdown"}};
-
-  constexpr int num_sockets = 1;
-  return bench_pushdown_queries_nvme_vary_bw(
-      sf, server_number, q1_queries, Shaper::NVMESOCKETPUSHDOWN, num_iterations,
-      scan_router_slack, scan_memmove_slack, compressed, num_sockets,
-      pushdown_dop);
-}
 
 /**
  * Data on socket 0, all compute on socket 1. The mem-move moves data directly

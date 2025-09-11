@@ -24,6 +24,7 @@
 
 #include "util.hpp"
 
+#include <magic_enum.hpp>
 #include <numeric>
 #include <platform/util/profiling.hpp>
 #include <utility>
@@ -150,6 +151,26 @@ void check_vector_paths(const std::vector<std::string>& paths) {
     for (const auto& path : paths) {
       CHECK(std::filesystem::exists(path)) << "path not found " << path;
     }
+  }
+}
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one(
+    const int sf, const int server_number, int num_drives,
+    NvmePlugin::CompressionFormat_t compression_type) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  CHECK_EQ(server_number, 49) << "currently only setup for diascld49";
+  switch (compression_type) {
+    case NvmePlugin::CompressionFormat_t::UNCOMPRESSED:
+      return get_input_dir_socket_one(sf, server_number, num_drives);
+    // case CompressionType::CASCADED:
+    //   return get_input_dir_cascaded_64k(sf, server_number, num_drives);
+    case NvmePlugin::CompressionFormat_t::LZ4:
+      return get_input_dir_socket_one_lz4_64k(sf, server_number, num_drives);
+    // case CompressionType::GDEFLATE:GDEFLATE
+    //   return get_input_dir_gdeflate_64k(sf, server_number, num_drives);
+    default:
+      LOG(FATAL) << "compression type not implemented"
+                 << magic_enum::enum_name(compression_type);
   }
 }
 
@@ -556,6 +577,163 @@ std::vector<std::vector<std::string>> get_input_dirs_socket_one(
       };
       check_vector_paths(twelve_drives);
       return {twelve_drives};
+    }
+  }
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one(
+    int sf, int server_number, int num_drives) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  if (server_number == 49) {
+    if (sf == 100) {
+      LOG(FATAL) << "no sf100 on diascld49 yet";
+    }
+
+    if (sf == 1000) {
+      std::vector<std::string> drives;
+      switch (num_drives) {
+        case 1: {
+          drives = {"/nvme16/nicholso/data/sbm1000"};  // node 4;
+          break;
+        }
+        case 8: {
+          drives = {
+            "/nvme16/nicholso/data/sbm1000_0_8",  // node 4
+            "/nvme19/nicholso/data/sbm1000_1_8",  // node 4
+            "/nvme28/nicholso/data/sbm1000_2_8",  // node 6
+            "/nvme27/nicholso/data/sbm1000_3_8",  // node 7
+            "/nvme28/nicholso/data/sbm1000_4_8",  // node 6
+            "/nvme20/nicholso/data/sbm1000_5_8",  // node 5
+            "/nvme21/nicholso/data/sbm1000_6_8",  // node 5
+            "/nvme24/nicholso/data/sbm1000_7_8"   // node 7
+        };
+          break;
+        }
+        case 12: {
+          drives = {
+            "/nvme16/nicholso/data/sbm1000_0_12",   // node 4
+            "/nvme22/nicholso/data/sbm1000_1_12",   // node 5
+            "/nvme29/nicholso/data/sbm1000_2_12",   // node 6
+            "/nvme24/nicholso/data/sbm1000_3_12",   // node 7
+            "/nvme18/nicholso/data/sbm1000_4_12",   // node 4
+            "/nvme23/nicholso/data/sbm1000_5_12",   // node 5
+            "/nvme30/nicholso/data/sbm1000_6_12",   // node 6
+            "/nvme20/nicholso/data/sbm1000_7_12",   // node 5
+            "/nvme19/nicholso/data/sbm1000_8_12",   // node 4
+            "/nvme28/nicholso/data/sbm1000_9_12",   // node 6
+            "/nvme26/nicholso/data/sbm1000_10_12",  // node 7
+            "/nvme27/nicholso/data/sbm1000_11_12"   // node 7
+        };
+          break;
+        }
+        default:
+          LOG(FATAL) << "num_drives not supported: " << num_drives;
+      }
+
+      check_vector_paths(drives);
+      return {drives};
+    }
+  }
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one_lz4_64k(int sf,
+                                                                 int server_number,
+                                                                 int num_drives) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+
+  if (server_number == 49) {
+    if (sf == 100) {
+      LOG(FATAL) << "not sf100 on diascld49";
+    }
+
+    if (sf == 1000) {
+      std::vector<std::string> drives;
+
+      switch (num_drives) {
+        case 1: {
+          drives = {
+              "/nvme21/nicholso/data/compressed_lz4_64k_ssbm1000" // node 5
+          };
+          break;
+        }
+        case 2: {
+          drives = {
+              "/nvme18/nicholso/data/compressed_lz4_64k_ssbm1000_0_2", // node 5
+              "/nvme23/nicholso/data/compressed_lz4_64k_ssbm1000_1_2", // node 4
+          };
+          break;
+        }
+        case 4: {
+          drives = {
+              "/nvme18/nicholso/data/compressed_lz4_64k_ssbm1000_0_4", // node 4
+              "/nvme23/nicholso/data/compressed_lz4_64k_ssbm1000_1_4", // node 5
+              "/nvme28/nicholso/data/compressed_lz4_64k_ssbm1000_2_4", // node 6
+              "/nvme25/nicholso/data/compressed_lz4_64k_ssbm1000_3_4" // node 7
+          };
+          break;
+        }
+
+        case 8: {
+          drives = {
+              "/nvme16/nicholso/data/compressed_lz4_64k_ssbm1000_0_8", // node 4 nvme 16
+              "/nvme22/nicholso/data/compressed_lz4_64k_ssbm1000_1_8", // node 5 nvme 22
+              "/nvme26/nicholso/data/compressed_lz4_64k_ssbm1000_2_8", // node 7 nvme 26
+              "/nvme29/nicholso/data/compressed_lz4_64k_ssbm1000_3_8", // node 6 nvme 29
+              "/nvme18/nicholso/data/compressed_lz4_64k_ssbm1000_4_8", // node 4 nvme 18
+              "/nvme21/nicholso/data/compressed_lz4_64k_ssbm1000_5_8", // node 5 nvme 21
+              "/nvme28/nicholso/data/compressed_lz4_64k_ssbm1000_6_8", // node 6 nvme 28
+              "/nvme27/nicholso/data/compressed_lz4_64k_ssbm1000_7_8" // node 7 nvme 27
+          };
+
+          break;
+        }
+        default:
+          LOG(FATAL) << "num_drives not supported: " << num_drives;
+      }
+
+      check_vector_paths(drives);
+      return {drives};
+    }
+  }
+  LOG(FATAL) << "not set up for this server: " << server_number;
+}
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one_lz4(
+    int sf, int server_number, int num_drives) {
+  CHECK(sf == 100 || sf == 1000) << "sf is not 100 or 1000";
+  if (server_number == 49) {
+    if (sf == 100) {
+      LOG(FATAL) << "no sf100 on diascld49 yet";
+    }
+
+    if (sf == 1000) {
+      std::vector<std::string> drives;
+      switch (num_drives) {
+        case 12: {
+          drives = {
+            "/nvme16/nicholso/data/compressed_ssbm1000_0_12",   // node 4
+            "/nvme22/nicholso/data/compressed_ssbm1000_1_12",   // node 5
+            "/nvme29/nicholso/data/compressed_ssbm1000_2_12",   // node 6
+            "/nvme24/nicholso/data/compressed_ssbm1000_3_12",   // node 7
+            "/nvme18/nicholso/data/compressed_ssbm1000_4_12",   // node 4
+            "/nvme23/nicholso/data/compressed_ssbm1000_5_12",   // node 5
+            "/nvme30/nicholso/data/compressed_ssbm1000_6_12",   // node 6
+            "/nvme20/nicholso/data/compressed_ssbm1000_7_12",   // node 5
+            "/nvme19/nicholso/data/compressed_ssbm1000_8_12",   // node 4
+            "/nvme28/nicholso/data/compressed_ssbm1000_9_12",   // node 6
+            "/nvme26/nicholso/data/compressed_ssbm1000_10_12",  // node 7
+            "/nvme27/nicholso/data/compressed_ssbm1000_11_12"   // node 7
+        };
+          break;
+        }
+        default:
+          LOG(FATAL) << "num_drives not supported: " << num_drives;
+      }
+
+      check_vector_paths(drives);
+      return {drives};
     }
   }
   LOG(FATAL) << "not set up for this server: " << server_number;

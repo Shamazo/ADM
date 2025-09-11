@@ -114,12 +114,48 @@ PreparedStatement scan_six_columns(proteus::QueryShaper &morph,
  * move after the filter push down. i.e. move the packed output blocks after the
  * filter from the pushdown CPU socket to the comput CPU socket.
  */
-PreparedStatement prepare11_pushdown(proteus::QueryShaper &morph,
-                                     bool move_after_pushdown = false);
-PreparedStatement prepare12_pushdown(proteus::QueryShaper &morph,
-                                     bool move_after_pushdown = false);
-PreparedStatement prepare13_pushdown(proteus::QueryShaper &morph,
-                                     bool move_after_pushdown = false);
+PreparedStatement prepare11_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare12_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare13_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+
+PreparedStatement prepare21_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare22_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare23_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+
+PreparedStatement prepare31_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare32_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare33_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare34_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+
+PreparedStatement prepare41_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare42_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
+PreparedStatement prepare43_pushdown(
+    proteus::GPUOnlyNVMeProbeFilterPushdown &morph,
+    bool move_after_pushdown = true, bool do_pushdown = true);
 
 struct QueryArgs {
   std::shared_ptr<proteus::CPUOnlyNVMeMorsel> morph = nullptr;
@@ -235,5 +271,30 @@ inline PreparedStatement prepare_taxi_33_adaptive(QueryArgs args) {
   args.morph->setQueryName("taxi_q33");
   return prepare_taxi_3_adaptive(args, TaxiQueryType::Q33);
 }
+
+struct GPUQueryArgs {
+  std::shared_ptr<proteus::CPUOnlyNVMeMorsel> morph = nullptr;
+  DegreeOfParallelism pushdown_dop = DegreeOfParallelism{4};
+  int scan_slack = 24;
+  proteus::routing::GeneralizedRoutingPolicyV2 policy =
+      proteus::routing::GeneralizedRoutingPolicyV2::LOCALITY_AWARE;
+  std::vector<uint32_t> pushdown_numa_nodes = {};
+  bool do_direct = true;
+  bool do_staging = false;
+  bool do_filter_pushdown = false;
+  bool do_bloom_filter_build = false;
+  bool do_bloom_filter_pushdown = false;
+  size_t bloom_filter_size = 256_K;  // in bits
+  bool use_hyper_threads = false;
+  inline void check() {
+    CHECK_NE(morph, nullptr);
+    if (do_filter_pushdown) {
+      CHECK_GT(pushdown_dop, 0);
+      CHECK_GT(pushdown_numa_nodes.size(), 0);
+    }
+    CHECK_EQ(do_bloom_filter_pushdown, do_bloom_filter_build);
+    CHECK_GT(scan_slack, 0);
+  }
+};
 
 #endif  // PROTEUS_ADM_PREPARED_QUERIES_HPP

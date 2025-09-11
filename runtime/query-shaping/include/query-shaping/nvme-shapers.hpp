@@ -161,7 +161,14 @@ class CPUOnlyNVMeMorsel : public proteus::InputPrefixQueryShaper {
 
 class GPUOnlyNVMe : public proteus::CPUOnlyNVMeMorsel {
   using proteus::CPUOnlyNVMeMorsel::CPUOnlyNVMeMorsel;
+public:
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
+  [[nodiscard]] DegreeOfParallelism getDOP() override {
+    return DegreeOfParallelism{
+      (getDevice() == DeviceType::CPU)
+          ? static_cast<size_t>(topology::getInstance().getCoreCount())
+          : topology::getInstance().getGpuCount()};
+  }
 
   std::unique_ptr<Affinitizer> getAffinitizer() override {
     if (numa_nodes.has_value()) {
@@ -197,9 +204,23 @@ class GPUOnlyNVMe : public proteus::CPUOnlyNVMeMorsel {
 
     return rel;
   }
+
+  RelBuilder distribute_build(RelBuilder input) override {
+    auto rel = input.router(
+        DegreeOfParallelism(topology::getInstance().getGpuCount() * 12), 2,
+        RoutingPolicy::LOCAL, DeviceType::CPU, getAffinitizer());
+
+    if (doMove()) rel = rel.memmove(4, getDevice());
+    rel = rel.router(getDOP(), 8, RoutingPolicy::LOCAL, DeviceType::CPU,
+                     getAffinitizer());
+
+    if (getDevice() == DeviceType::GPU) rel = rel.to_gpu();
+
+    return rel;
+  }
 };
 
-class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
+class GPUOnlyNVMeProbeFilterPushdown : public proteus::GPUOnlyNVMe {
  public:
   GPUOnlyNVMeProbeFilterPushdown(std::vector<std::string> input_dirs,
                                  const std::string &catalog_path,
@@ -207,12 +228,15 @@ class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
                                  bool allowMoves, size_t scan_memmove_slack,
                                  size_t scan_router_slack, size_t slack,
                                  DegreeOfParallelism pushdown_dop,
-                                 std::vector<uint32_t> pushdown_numa_nodes)
-      : CPUOnlyNVMeMorsel(std::move(input_dirs), catalog_path, input_sizes,
+                                 std::vector<uint32_t> pushdown_numa_nodes,
+                                 size_t bloom_filter_size = 256_K  // in bits. It is up to the user to insert bloomfilters in the plan
+                                  )
+      : GPUOnlyNVMe(std::move(input_dirs), catalog_path, input_sizes,
                           allowMoves, scan_memmove_slack, scan_router_slack,
                           slack),
         pushdown_dop(pushdown_dop),
-        pushdown_numa_nodes(std::move(pushdown_numa_nodes)) {}
+        pushdown_numa_nodes(std::move(pushdown_numa_nodes)),
+        bloom_filter_size(bloom_filter_size){}
 
   [[nodiscard]] DeviceType getDevice() override { return DeviceType::GPU; }
 
@@ -221,23 +245,13 @@ class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
         pushdown_numa_nodes);
   }
 
-  DegreeOfParallelism getDOP() override {
-    size_t num_compute_cores = 0;
-    for (const auto compute_node_id : pushdown_numa_nodes) {
-      num_compute_cores += topology::getInstance()
-                               .getCpuNumaNodeById(compute_node_id)
-                               .local_cores.size();
-    }
-    return DegreeOfParallelism{num_compute_cores};
-  }
-
   /**
    * For probe filter pushdown.
    * Scan and filter happens on the CPU
    * Expected that the caller packs and moves the data to the GPU
    */
   RelBuilder distribute_probe(RelBuilder input) override {
-    auto rel = input.router(DegreeOfParallelism(pushdown_dop),
+    auto rel = input.router(pushdown_dop,
                             scan_router_slack, RoutingPolicy::LOCAL,
                             DeviceType::CPU, getPushdownAffinitizer());
 
@@ -246,9 +260,10 @@ class GPUOnlyNVMeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {
     return rel;
   }
 
+  const size_t bloom_filter_size;
+  const std::vector<uint32_t> pushdown_numa_nodes;
  protected:
   const DegreeOfParallelism pushdown_dop;
-  const std::vector<uint32_t> pushdown_numa_nodes;
 };
 
 class CPUOnlyNvmeProbeFilterPushdown : public proteus::CPUOnlyNVMeMorsel {

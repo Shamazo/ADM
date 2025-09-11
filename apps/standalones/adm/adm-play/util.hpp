@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <olap/plan/prepared-statement.hpp>
+#include <olap/plugins/binary-block-nvme-plugin.hpp>
 #include <platform/util/glog.hpp>
 #include <query-shaping/query-shaper.hpp>
 #include <string>
@@ -64,11 +65,24 @@ std::vector<std::vector<std::string>> get_input_dirs_compressed(
 
 std::vector<std::vector<std::string>> get_input_dirs(int sf, int server_number);
 
+std::vector<std::vector<std::string>> get_input_dir_socket_one(
+    const int sf, const int server_number, int num_drives,
+    NvmePlugin::CompressionFormat_t compression_type);
+
 std::vector<std::vector<std::string>> get_input_dirs_socket_zero(
     int sf, int server_number);
 
 std::vector<std::vector<std::string>> get_input_dirs_socket_one(
     int sf, int server_number);
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one(
+    int sf, int server_number, int num_drives);
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one_lz4(
+    int sf, int server_number, int num_drives);
+
+std::vector<std::vector<std::string>> get_input_dir_socket_one_lz4_64k(
+    int sf, int server_number, int num_drives);
 
 std::vector<std::vector<std::string>> get_taxi_input_dirs_socket_one(int server_number);
 

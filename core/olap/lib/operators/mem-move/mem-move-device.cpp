@@ -781,15 +781,9 @@ void MemMoveDevice::open(Pipeline *pip) {
           cudaMalloc(&(wu[i].compressed_buffers->back().back()), 4_M);
         }
       }
-      //      CUfileError_t status = cuFileStreamRegister(
-      //          wu[i].cufile_strm, CU_FILE_STREAM_PAGE_ALIGNED_INPUTS |
-      //                                 CU_FILE_STREAM_FIXED_BUF_OFFSET |
-      //                                 CU_FILE_STREAM_FIXED_FILE_OFFSET |
-      //                                 CU_FILE_STREAM_FIXED_FILE_SIZE);
-      //
-      //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
-      //          << "Failed to cuFileStreamRegister status: "
-      //          << cufileop_status_error(status.err);
+    } else {
+      wu[i].compressed_buffers = nullptr;
+      wu[i].decompressors = nullptr;
     }
   }
   // nvtxRangePushA("memmove::open2");
@@ -851,13 +845,11 @@ void MemMoveDevice::close(Pipeline *pip) {
   for (size_t i = 0; i < slack; ++i) {
     workunit *wu = mmc->idle.pop_unsafe();
     syncAndDestroyStream(wu->cufile_strm);
-    if (!to_cpu) {
-      //      CUfileError_t status = cuFileStreamDeregister(wu->cufile_strm);
-      //      CHECK_EQ(status.err, CU_FILE_SUCCESS)
-      //          << "failed to cuFileStreamDeregister status: "
-      //          << cufileop_status_error(status.err);
+    if (!to_cpu && (wu->compressed_buffers != nullptr)) {
+     DCHECK(wu->compressed_buffers) << "wu->compressed_buffers is null";
       for (auto device_buffs : *wu->compressed_buffers) {
         for (void *buff : device_buffs) {
+          DCHECK(buff != nullptr) << "buff is null";
           cudaFree(buff);
         }
       }
