@@ -285,13 +285,16 @@ void LocalityAwareThroughputBasedPolicy::handleBatchCompletion(
     
   } else {  // Monitoring phase
     // Update known throughput
-    state->known_throughput_tps[state->active_consumer] = new_throughput;
+    LOG(INFO) << "Adaptive Throughput Policy: Consumer " << state->active_consumer
+                << " observed performance" << std::fixed << std::setprecision(2)
+                << new_throughput << " TPS";
+    state->known_throughput_tps[state->active_consumer] = std::max(new_throughput, state->known_throughput_tps[state->active_consumer]);
     if (new_throughput > state->active_consumer_best_throughput_tps) {
       // Performance improved
       state->active_consumer_best_throughput_tps = new_throughput;
-      LOG(INFO) << "Adaptive Throughput Policy: Consumer " << state->active_consumer
-                << " performance improved to " << std::fixed << std::setprecision(2)
-                << new_throughput << " TPS";
+      // LOG(INFO) << "Adaptive Throughput Policy: Consumer " << state->active_consumer
+      //           << " performance improved to " << std::fixed << std::setprecision(2)
+      //           << new_throughput << " TPS";
     } else if (new_throughput < state->active_consumer_best_throughput_tps * 
                (1.0 - state->degradation_threshold)) {
       // Performance degraded - trigger re-evaluation
@@ -299,14 +302,21 @@ void LocalityAwareThroughputBasedPolicy::handleBatchCompletion(
                 << std::fixed << std::setprecision(2)
                 << state->active_consumer_best_throughput_tps << " to "
                 << new_throughput << " TPS for consumer #" << state->active_consumer;
-      const int best_consumer = findBestConsumerFromKnownThroughputs(state, num_consumers);
-      if (best_consumer != state->active_consumer) {
-        LOG(INFO) << "Switching to consumer #" << best_consumer
-          << " with previous " << std::fixed << std::setprecision(2)
-          << state->known_throughput_tps[best_consumer] << " TPS";
-        state->active_consumer = best_consumer;
-        state->phase_transitions++;
-      }
+
+      state->current_phase = AdaptiveThroughputState::Phase::InitialEvaluation;
+      state->evaluation_target_consumer = 2;
+      state->active_consumer = 2;
+      state->re_evaluations++;
+      state->phase_transitions++;
+
+      // const int best_consumer = findBestConsumerFromKnownThroughputs(state, num_consumers);
+      // if (best_consumer != state->active_consumer) {
+      //   LOG(INFO) << "Switching to consumer #" << best_consumer
+      //     << " with previous " << std::fixed << std::setprecision(2)
+      //     << state->known_throughput_tps[best_consumer] << " TPS";
+      //   state->active_consumer = best_consumer;
+      //   state->phase_transitions++;
+      // }
 
 
       // bool exist_better_consumer = false;

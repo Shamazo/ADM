@@ -135,9 +135,9 @@ struct AdaptiveThroughputBasedConfig : PolicyConfig {
 
   // Configurable parameters with defaults
   uint64_t evaluation_batch_size = 350;
-  uint64_t monitoring_batch_size = 500;
-  double degradation_threshold = 0.2;
-  double switch_improvement_threshold = 0.1;
+  uint64_t monitoring_batch_size = 300;
+  double degradation_threshold = 0.15;
+  double switch_improvement_threshold = 0.1; // TODO remove, unused
   uint64_t sub_batch_size = 5;  // Record measurements every N tuples
   double decay_factor =
       0.99;  // Exponential decay factor (higher = slower decay)
