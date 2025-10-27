@@ -1,3 +1,4 @@
-## RADaFlow
-This repo contains artifacts for our VLDB submission. RADaFLow is a fork of [Proteus](https://github.com/epfl-dias/proteus).
-More cleanup and documentation to come post submission....
+## A-Scan
+This repo contains artifacts for our ICDE submission. 
+`apps/standalones/adm/adm-play` is the main directory of benchmarks. 
+`apps/standalones/adm/adm-play/bench_runner.py` is a wrapper python script to run all benchmarks and collect results.
