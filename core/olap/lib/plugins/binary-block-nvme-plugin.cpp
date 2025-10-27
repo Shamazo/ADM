@@ -87,10 +87,15 @@ NvmePlugin::NvmePlugin(
                         getAttributeVector(whichFields), false) {
   Nparts = whichFields.front().second.size();
   for (const auto &field : whichFields) {
+    std::string paths = "";
+    for (const auto &p : field.second) {
+      paths += p.string() + ", ";
+    }
     CHECK_EQ(field.second.size(), Nparts)
         << "All attributes must have the same number of partitions. This field "
            "attribute: "
-        << field.first->getAttrName();
+        << field.first->getAttrName() << " paths: " << paths;
+
   }
 
   // TODO fix m_attribute_metadata move / copy constructors
