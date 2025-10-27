@@ -82,10 +82,11 @@ std::vector<std::filesystem::path> CPUOnlyNVMeMorsel::getMdForAttribute(
   std::vector<std::filesystem::path> md_paths;
   //     for each input dir, find all associated metadata files for this
   //     attribute
+  std::regex pattern(attr + R"(_\d+)");
   for (const auto &dir : input_dirs) {
     auto dir_files = getSortedDirectoryFiles(dir);
     for (const auto &entry : dir_files) {
-      if (entry.string().find(attr + "_") != std::string::npos &&
+      if (std::regex_search(entry.string(), pattern) &&
           entry.string().find("metadata.json") != std::string::npos) {
         md_paths.push_back(entry);
       }
