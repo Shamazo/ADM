@@ -294,6 +294,7 @@ std::vector<std::vector<char>> splitFileIntoBlocks(fs::path filePath,
  * @param base_file_Name The base file name to write to. The file name will be
  * appended with _i_numFiles where i is the index of the file and numFiles is
  * the total number of files
+ * @note this used to do sequential chunking, now does round robin
  */
 void writeUncompressedChunksToFiles(
     const std::vector<std::vector<char>>& blocks,
@@ -301,9 +302,25 @@ void writeUncompressedChunksToFiles(
     const std::string& base_file_Name, size_t type_size) {
   // ceiling division
   const int numFiles = output_directories.size();
-  const int blocksPerFile = (blocks.size() + numFiles - 1) / numFiles;
+  const int blocksPerFile = (blocks.size() + numFiles - 1) / numFiles;  // ceiling = 458
+  const int blocksInLastFile = blocks.size() - blocksPerFile * (numFiles - 1);  // 5487 - 458*11 = 449
+
+  // this is a rather gross way to "round robin" across files, but ensure the same number of blocks per file as sequential chunking and ensure that the last file gets the last block like sequential chunking
+  // it is this way because I added a synthetic column to a dataset and didn't want to repartition everything.
+  // really it should be just plain round robin
+  const int phase1Rounds = blocksInLastFile - 1;  // 448
+  const int phase1End = phase1Rounds * numFiles;  // 5376
+  const int phase2Rounds = blocksPerFile - blocksInLastFile;  // 9
+  const int phase2End = phase1End + phase2Rounds * (numFiles - 1);  // 5475
+
 
   for (int i = 0; i < numFiles; ++i) {
+    const int blocksThisFile = (i == numFiles - 1) ? blocksInLastFile : blocksPerFile;
+
+    LOG(INFO) << "writing " << blocksThisFile
+              << " blocks to file in directory: "
+              << output_directories[i].string();
+
     const fs::path filePath =
         output_directories[i] / (base_file_Name + "_" + std::to_string(i) +
                                  "_" + std::to_string(numFiles));
@@ -326,9 +343,40 @@ void writeUncompressedChunksToFiles(
     rapidjson::Value value_counts(rapidjson::kArrayType);
 
     size_t offset = 0;
-    for (int j = 0; j < blocksPerFile && i * blocksPerFile + j < blocks.size();
-         ++j) {
-      const auto& block = blocks[i * blocksPerFile + j];
+    // round robin
+    for (int j = 0; j < blocksThisFile; ++j) {
+      int blockIndex;
+      // if (j < blocksInLastFile) {
+      //   // Phase 1: Round-robin across ALL files until last file is full
+      //   blockIndex = j * numFiles + i;
+      // } else {
+      //   // Phase 2: Round-robin across first (numFiles-1) files only
+      //   const int phase2_j = j - blocksInLastFile;
+      //   blockIndex = blocksInLastFile * numFiles + phase2_j * (numFiles - 1) + i;
+      // }
+      if (j < phase1Rounds) {
+        // Phase 1: Round-robin all 12 files for 448 rounds → blocks 0-5375
+        blockIndex = j * numFiles + i;
+      } else if (i < numFiles - 1 && j < blocksPerFile - 1) {
+        // Phase 2: Round-robin files 0-10 for 9 rounds → blocks 5376-5474
+        const int phase2_j = j - phase1Rounds;
+        blockIndex = phase1End + phase2_j * (numFiles - 1) + i;
+      } else {
+        // Phase 3: Assign blocks 5475-5486 (one to each file) → file 11 gets block 5486
+        blockIndex = phase2End + i;
+      }
+      CHECK_LT(blockIndex, blocks.size())
+          << "block index out of range. blockIndex: " << blockIndex
+          << " blocks.size(): " << blocks.size()
+          << " j: " << j << " numFiles: " << numFiles << " i (file): " << i;
+      const auto& block = blocks[blockIndex];
+    // sequential chunking, e.g.
+    //   File 0 gets blocks: 0, 1, 2, ..., blocksPerFile-1
+    //   File 1 gets blocks: blocksPerFile, blocksPerFile+1, ..., 2*blocksPerFile-1
+    //   File 2 gets blocks: 2*blocksPerFile, 2*blocksPerFile+1, ..., 3*blocksPerFile-1
+    // for (int j = 0; j < blocksPerFile && i * blocksPerFile + j < blocks.size();
+    //      ++j) {
+    //   const auto& block = blocks[i * blocksPerFile + j];
       file.write(block.data(), block.size());
 
       metadata["num_blocks"] = j + 1;
@@ -350,7 +398,8 @@ void writeUncompressedChunksToFiles(
 
       offset += block.size();
     }
-
+    LOG(INFO) << "wrote " << metadata["num_blocks"].GetUint()
+              << " blocks to file: " << filePath.string();
     metadata.AddMember("block_sizes", block_sizes, allocator);
     metadata.AddMember("block_offsets", block_offsets, allocator);
     metadata.AddMember("value_counts", value_counts, allocator);
