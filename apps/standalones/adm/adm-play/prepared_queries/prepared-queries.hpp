@@ -253,7 +253,7 @@ inline PreparedStatement prepare_taxi_24_adaptive(QueryArgs args) {
   return prepare_taxi_2_adaptive(args, 0.0, 7.5);
 }
 
-enum class TaxiQueryType { Q31 = 31, Q32 = 32, Q33 = 33 };
+enum class TaxiQueryType { Q31 = 31, Q32 = 32, Q33 = 33, Q32_synth_cols, Q33_synth_cols};
 
 PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args, TaxiQueryType);
 
@@ -270,6 +270,16 @@ inline PreparedStatement prepare_taxi_32_adaptive(QueryArgs args) {
 inline PreparedStatement prepare_taxi_33_adaptive(QueryArgs args) {
   args.morph->setQueryName("taxi_q33");
   return prepare_taxi_3_adaptive(args, TaxiQueryType::Q33);
+}
+
+inline PreparedStatement prepare_taxi_32_adaptive_synthetic_sel(QueryArgs args) {
+  args.morph->setQueryName("taxi_q32_synthetic_sel");
+  return prepare_taxi_3_adaptive(args, TaxiQueryType::Q32_synth_cols);
+}
+
+inline PreparedStatement prepare_taxi_33_adaptive_synthetic_sel(QueryArgs args) {
+  args.morph->setQueryName("taxi_q33_synthetic_sel");
+  return prepare_taxi_3_adaptive(args, TaxiQueryType::Q33_synth_cols);
 }
 
 struct GPUQueryArgs {

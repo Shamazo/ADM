@@ -40,6 +40,8 @@ grouter_ssb_queries() {
       {prepare_taxi_31_adaptive, "taxi_Q3.1"},
       {prepare_taxi_32_adaptive, "taxi_Q3.2"},
       {prepare_taxi_33_adaptive, "taxi_Q3.3"},
+{prepare_taxi_32_adaptive_synthetic_sel, "taxi_Q3.2_synthetic_sel"},
+// {prepare_taxi_33_adaptive_synthetic_sel, "taxi_Q3.3_synthetic_sel"},
       {prepare_taxi_11_adaptive, "taxi_Q1.1"},
       {prepare_taxi_12_adaptive, "taxi_Q1.2"},
       //       {prepare_taxi_13_adaptive, "taxi_Q1.3"},

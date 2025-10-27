@@ -35,11 +35,21 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
           .local_cores.size() /
       (args.use_hyper_threads ? 1 : 2);
 
-  auto scan = args.morph->scan(
-      "yellow_tripdata",
-      {"trip_distance", "fare_amount", "tip_amount", "total_amount", "mta_tax",
-       "DOLocationID", "tpep_dropoff_datetime", "tpep_pickup_datetime",
-       "payment_type"});
+  const std::string DOLocationID = query_variant == TaxiQueryType::Q33_synth_cols ||
+                                   query_variant == TaxiQueryType::Q32_synth_cols
+                                ? "DOLocationID_synthetic"
+                                : "DOLocationID";
+  const std::string payment_type = query_variant == TaxiQueryType::Q33_synth_cols ||
+                                   query_variant == TaxiQueryType::Q32_synth_cols
+                                 ? "payment_type_synthetic"
+                                 : "payment_type";
+
+  auto scan =  args.morph->scan(
+    "yellow_tripdata",
+    {"trip_distance", "fare_amount", "tip_amount", "total_amount", "mta_tax",
+    DOLocationID, "tpep_dropoff_datetime", "tpep_pickup_datetime",
+    payment_type});
+
   // "LaGuardia Airport"
   // "Newark Airport"
 
@@ -61,6 +71,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             .project([&](const auto &arg) -> std::vector<expression_t> {
               return {arg["l_LocationID"]};
             });
+      case TaxiQueryType::Q32_synth_cols:
       case TaxiQueryType::Q32:
         return args.morph->scan("zone_lookup", {"l_LocationID", "l_Zone"})
             .router(DegreeOfParallelism{compute_dop}, args.morph->getSlack(),
@@ -79,6 +90,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             .project([&](const auto &arg) -> std::vector<expression_t> {
               return {arg["l_LocationID"]};
             });
+      case TaxiQueryType::Q33_synth_cols:
       case TaxiQueryType::Q33:
         return args.morph->scan("zone_lookup", {"l_LocationID", "l_borough"})
             .router(DegreeOfParallelism{compute_dop}, args.morph->getSlack(),
@@ -89,7 +101,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             .unpack()
             .filter([&](const auto &arg) -> expression_t {
               return expressions::hint(eq(arg["l_borough"], "\"Brooklyn\""),
-                                       expressions::Selectivity{1.0 / 5.0});
+                                       expressions::Selectivity{1.0 / 4.0});
             })
             .project([&](const auto &arg) -> std::vector<expression_t> {
               return {arg["l_LocationID"]};
@@ -106,7 +118,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
   // int64_t jfk_loc_id = 132;
   // int64_t lga_loc_id = 138;
   const size_t mm_slack = 96 / compute_dop;
-  const int64_t payment_type = 1;  // 1 = card, 2 = cash
+  const int64_t payment_type_eq = 1;  // 1 = card, 2 = cash
 
   std::optional<RelBuilder> zone_join = std::nullopt;
 
@@ -119,7 +131,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             .memmove(mm_slack, DeviceType::CPU)
             .unpack()
             .filter([&](const auto &arg) -> expression_t {
-              return eq(arg["payment_type"], payment_type);
+              return eq(arg[payment_type], payment_type_eq);
             })
             .filter([&](const auto &arg) -> expression_t {
               return gt(arg["trip_distance"], 0.0);
@@ -131,7 +143,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                   (arg["$2"]).as("tmp", "tip_amount"),
                   (arg["$3"]).as("tmp", "total_amount"),
                   (arg["$4"]).as("tmp", "mta_tax"),
-                  (arg["$5"]).as("tmp", "DOLocationID"),
+                  (arg["$5"]).as("tmp", DOLocationID),
                   (arg["$6"]).as("tmp", "tpep_dropoff_datetime"),
                   (arg["$7"]).as("tmp", "tpep_pickup_datetime"),
                   // 1-5 miles
@@ -163,7 +175,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                   return build_arg["l_LocationID"];
                 },
                 [&](const auto &probe_arg) -> expression_t {
-                  return probe_arg["DOLocationID"];
+                  return probe_arg[DOLocationID];
                 });
     paths.emplace_back(
         zone_join.value()
@@ -208,7 +220,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                                          false, false, false})
               .unpack()
               .filter([&](const auto &arg) -> expression_t {
-                return eq(arg["payment_type"], payment_type);
+                return eq(arg[payment_type], payment_type_eq);
               })
               .filter([&](const auto &arg) -> expression_t {
                 return gt(arg["trip_distance"], 0.0);
@@ -220,7 +232,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                     (arg["$2"]).as("tmp", "tip_amount"),
                     (arg["$3"]).as("tmp", "total_amount"),
                     (arg["$4"]).as("tmp", "mta_tax"),
-                    (arg["$5"]).as("tmp", "DOLocationID"),
+                    (arg["$5"]).as("tmp", DOLocationID),
                     (arg["$6"]).as("tmp", "tpep_dropoff_datetime"),
                     (arg["$7"]).as("tmp", "tpep_pickup_datetime"),
                     // 1-5 miles
@@ -249,7 +261,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
               })
               .probeJoin(zone_join.value(),
                          [&](const auto &probe_arg) -> expression_t {
-                           return probe_arg["DOLocationID"];
+                           return probe_arg[DOLocationID];
                          })
               .groupby(
                   [&](const auto &arg) -> std::vector<expression_t> {
@@ -290,7 +302,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                                          false, false, false})
               .unpack()
               .filter([&](const auto &arg) -> expression_t {
-                return eq(arg["payment_type"], payment_type);
+                return eq(arg[payment_type], payment_type_eq);
               })
               .filter([&](const auto &arg) -> expression_t {
                 return gt(arg["trip_distance"], 0.0);
@@ -302,7 +314,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                     (arg["$2"]).as("tmp", "tip_amount"),
                     (arg["$3"]).as("tmp", "total_amount"),
                     (arg["$4"]).as("tmp", "mta_tax"),
-                    (arg["$5"]).as("tmp", "DOLocationID"),
+                    (arg["$5"]).as("tmp", DOLocationID),
                     (arg["$6"]).as("tmp", "tpep_dropoff_datetime"),
                     (arg["$7"]).as("tmp", "tpep_pickup_datetime"),
                     // 1-5 miles
@@ -335,7 +347,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                     return build_arg["l_LocationID"];
                   },
                   [&](const auto &probe_arg) -> expression_t {
-                    return probe_arg["DOLocationID"];
+                    return probe_arg[DOLocationID];
                   });
       paths.emplace_back(
           zone_join.value()
@@ -380,7 +392,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             .memmove(pd_mm_slack, DeviceType::CPU)
             .unpack()
             .filter([&](const auto &arg) -> expression_t {
-              return eq(arg["payment_type"], payment_type);
+              return eq(arg[payment_type], payment_type_eq);
             })
             .filter([&](const auto &arg) -> expression_t {
               return gt(arg["trip_distance"], 0.0);
@@ -392,7 +404,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
                   (arg["$2"]).as("tmp", "tip_amount"),
                   (arg["$3"]).as("tmp", "total_amount"),
                   (arg["$4"]).as("tmp", "mta_tax"),
-                  (arg["$5"]).as("tmp", "DOLocationID"),
+                  (arg["$5"]).as("tmp", DOLocationID),
                   (arg["$6"]).as("tmp", "tpep_dropoff_datetime"),
                   (arg["$7"]).as("tmp", "tpep_pickup_datetime"),
                   // 1-5 miles
@@ -431,7 +443,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
           pd_move_to_compute
               .probeJoin(zone_join.value(),
                          [&](const auto &probe_arg) -> expression_t {
-                           return probe_arg["DOLocationID"];
+                           return probe_arg[DOLocationID];
                          })
               .groupby(
                   [&](const auto &arg) -> std::vector<expression_t> {
@@ -468,7 +480,7 @@ PreparedStatement prepare_taxi_3_adaptive(QueryArgs &args,
             return build_arg["l_LocationID"];
           },
           [&](const auto &probe_arg) -> expression_t {
-            return probe_arg["DOLocationID"];
+            return probe_arg[DOLocationID];
           });
       paths.emplace_back(
           zone_join.value()
